@@ -426,15 +426,26 @@ Status: In progress on 2026-07-12.
   - Applied the full reviewed migration set through CRM schema/RLS.
   - Seeded baseline catalogue data only: roles, permissions, products, plans, CRM plan features, and role-permission joins.
   - Enabled the Supabase Auth custom access-token hook against `public.auth_hook_add_tenant_claim`.
+  - Created production Vercel projects for Admin Portal and Customer Portal from `main` at `a1f4d68`.
+  - Configured public production Supabase/browser environment variables on both Vercel production projects.
+  - Added `admin.torrevie.com` and `app.torrevie.com` to the matching Vercel production projects.
 - Verification:
   - Production migration history includes platform foundation, auth hook, admin tenant lifecycle grants, provisioning grants, subscription grants, and CRM schema/RLS.
   - Baseline catalogue counts: 11 roles, 24 permissions, 5 products, 15 plans, 9 plan features, and 77 role-permission joins.
   - RLS is enabled on the checked platform and CRM public tables.
   - Direct hook smoke test returned successfully for a synthetic event without creating production tenant or user data.
+  - PR #15 Platform Gate CI passed on run `29167487280`.
+  - Admin production Vercel deployment `dpl_DwYJgRu5x83ccmcitkoe8nzR9S1P` is `READY`.
+  - Customer production Vercel deployment `dpl_PiChzcSPJmmVAMNPQJMCA5YqwvvE` is `READY`.
+  - Admin production `/login` returns HTTP 200 at the Vercel URL.
+  - Customer production `/en` returns HTTP 200 at the Vercel URL.
+  - Fresh Vercel production runtime error scans for both projects returned no errors after the env redeploys.
 - Remaining:
-  - Create/configure production Vercel deployments for Admin Portal and Customer Portal.
-  - Set production Supabase environment variables directly in Vercel, with service-role values kept server-only.
-  - Configure DNS records for `admin.torrevie.com` and `app.torrevie.com` once the production Vercel targets exist.
+  - Set `SUPABASE_SERVICE_ROLE_KEY` directly in the Admin Portal production Vercel project, scoped server-only. This value was not read or handled by Codex.
+  - Configure Cloudflare DNS records required by Vercel:
+    - `admin.torrevie.com`: CNAME `admin` to `ec1d49f965f4edb6.vercel-dns-017.com.`, proxy disabled.
+    - `app.torrevie.com`: CNAME `app` to `5ce3c2ebe9f1006e.vercel-dns-017.com.`, proxy disabled.
+  - Re-check both Vercel domains after DNS propagation.
 
 ## Open Questions
 
