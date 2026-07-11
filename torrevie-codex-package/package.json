@@ -1,0 +1,26 @@
+{
+  "name": "torrevie-platform",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Torrevie SaaS Platform monorepo.",
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier . --check",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"No tests defined yet for WP-1\"",
+    "test:isolation": "echo \"Tenant-isolation suite starts in WP-10\"",
+    "build": "echo \"No build targets defined yet for WP-1\"",
+    "dev": "echo \"Application dev servers start in later work packages\"",
+    "supabase:start": "echo \"Supabase local stack is configured in WP-2\"",
+    "supabase:migrate": "echo \"Supabase migrations start in WP-3\"",
+    "supabase:seed": "echo \"Supabase seed data starts in WP-4\""
+  },
+  "devDependencies": {
+    "@eslint/js": "9.31.0",
+    "eslint": "9.31.0",
+    "prettier": "3.6.2",
+    "typescript": "5.8.3",
+    "typescript-eslint": "8.37.0"
+  }
+}
