@@ -39,6 +39,52 @@ Status: Completed on 2026-07-11.
   - `pnpm typecheck`
 - Acceptance: local stack starts and the smoke test connects to the local database.
 
+## WP-3: Platform schema migration set 1
+
+Status: Completed on 2026-07-11.
+
+- Branch: `codex/wp-1-repository-scaffold`
+- Scope: `tenants`, `tenant_settings`, `users`, `tenant_memberships`, and `user_profiles`.
+- Approved adjustment: included `files` in the same foundation migration because `user_profiles.avatar_file_id` references `files(id)`.
+- Verification:
+  - `pnpm supabase:reset`
+  - Schema sanity query confirmed the expected foundation tables exist.
+
+## WP-4: Roles and permissions schema
+
+Status: Completed on 2026-07-11.
+
+- Scope: `roles`, `permissions`, `role_permissions`, and `user_role_assignments`.
+- Seed data: role and permission keys from `RBAC_MATRIX.md` are inserted by `supabase/seed.sql`.
+- Verification:
+  - `pnpm supabase:reset`
+  - `pnpm test:isolation`
+
+## WP-5: Subscription schema
+
+Status: Completed on 2026-07-11.
+
+- Scope: `products`, `plans`, `plan_features`, `subscriptions`, and `subscription_entitlements`.
+- Seed data: initial product catalogue and starter/growth/enterprise plans are inserted by `supabase/seed.sql`.
+- Verification:
+  - `pnpm supabase:reset`
+  - `pnpm test:isolation`
+
+## WP-6: RLS policy set for platform tables
+
+Status: Completed on 2026-07-11.
+
+- Scope: RLS helper functions, explicit policies, grants, and isolation tests for tenant-scoped platform tables.
+- Approved adjustment: included `audit_events`, `provisioning_jobs`, and `provisioning_steps` in the foundation migration because WP-6 requires their RLS policies.
+- Verification:
+  - `pnpm supabase:reset`
+  - `pnpm test:isolation`
+  - `pnpm exec supabase db lint --local`
+  - `pnpm exec supabase db advisors --local`
+  - `pnpm lint`
+  - `pnpm typecheck`
+- Acceptance: Tenant A cannot read, insert, update, or delete Tenant B rows in the tested tenant-scoped tables.
+
 ## Open Questions
 
 - None.

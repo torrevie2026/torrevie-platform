@@ -19,7 +19,8 @@ export default tseslint.config(
       ecmaVersion: "latest",
       sourceType: "module",
       globals: {
-        console: "readonly"
+        console: "readonly",
+        process: "readonly"
       }
     },
     rules: {

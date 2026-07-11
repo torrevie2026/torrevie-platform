@@ -9,14 +9,15 @@
     "format": "prettier . --check",
     "typecheck": "tsc --noEmit",
     "test": "echo \"No tests defined yet for WP-1\"",
-    "test:isolation": "echo \"Tenant-isolation suite starts in WP-10\"",
+    "test:isolation": "node scripts/run-sql-tests.mjs",
     "build": "echo \"No build targets defined yet for WP-1\"",
     "dev": "echo \"Application dev servers start in later work packages\"",
     "supabase:start": "supabase start",
     "supabase:status": "supabase status",
     "supabase:smoke": "node scripts/supabase-smoke.mjs",
-    "supabase:migrate": "echo \"Supabase migrations start in WP-3\"",
-    "supabase:seed": "echo \"Supabase seed data starts in WP-4\""
+    "supabase:migrate": "supabase migration up --local",
+    "supabase:reset": "supabase db reset --local",
+    "supabase:seed": "supabase db reset --local"
   },
   "devDependencies": {
     "@eslint/js": "9.31.0",
