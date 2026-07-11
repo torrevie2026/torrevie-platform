@@ -396,7 +396,7 @@ Status: Completed on 2026-07-11.
 
 ## WP-23: End-to-end staging validation
 
-Status: Partially validated on 2026-07-11; blocked for full browser acceptance.
+Status: Partially validated on 2026-07-11; blocked on the admin staging service-role environment variable.
 
 - Scope:
   - Added `scripts/staging-validation.sql` as a rollback-only hosted staging validation script.
@@ -404,14 +404,15 @@ Status: Partially validated on 2026-07-11; blocked for full browser acceptance.
 - Verification:
   - Hosted staging SQL validation passed for tenant lifecycle, provisioning retry/success state, CRM Growth subscription assignment, entitlement materialization, CRM account/contact/opportunity creation, opportunity stage movement, tenant-isolation visibility, and representative audit events.
   - Customer staging URL renders the localized portal shell.
-  - Admin staging URL renders the sign-in page.
+  - Hosted Supabase Auth custom access-token hook is enabled for `public.auth_hook_add_tenant_claim`.
+  - Synthetic admin Auth user signs in through Admin Portal staging and receives a platform-scoped JWT; `/` renders the Admin Portal shell with `Platform access`.
+  - Synthetic customer Auth user signs in through Customer Portal staging and `/session` shows tenant `00000000-0000-4000-8000-000000023912` with `role_scope=customer`.
+  - Customer Portal staging `/en/crm` renders the CRM pipeline with CRM Growth entitlement under the synthetic customer session.
+  - Admin staging `/tenants` fails with server digest `2101949868`; Vercel runtime logs confirm `Supabase admin environment variables are not configured.`
 - Blockers:
-  - Full browser-driven admin validation cannot complete until the server-only `SUPABASE_SERVICE_ROLE_KEY` is configured in the Vercel admin staging project.
-  - Full Supabase Auth login validation cannot complete until hosted staging has known synthetic Auth test users and the custom access-token hook is confirmed enabled in the Supabase Auth dashboard.
+  - Full browser-driven admin mutation validation cannot complete until the server-only `SUPABASE_SERVICE_ROLE_KEY` is configured in the Vercel admin staging project and the project is redeployed.
   - Production provisioning in WP-24 remains a checkpoint and must not start until WP-23 full acceptance is cleared.
 
 ## Open Questions
 
-- Set `SUPABASE_SERVICE_ROLE_KEY` in Vercel for `torrevie-admin-portal-staging` without exposing the value through Codex.
-- Confirm the hosted Supabase custom access-token hook is enabled for staging.
-- Create known synthetic staging Auth users for admin and customer browser login validation.
+- Set `SUPABASE_SERVICE_ROLE_KEY` in Vercel for `torrevie-admin-portal-staging` without exposing the value through Codex, then redeploy and rerun the admin tenant lifecycle, provisioning, and subscription browser checks.
