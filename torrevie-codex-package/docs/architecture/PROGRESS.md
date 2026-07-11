@@ -85,6 +85,25 @@ Status: Completed on 2026-07-11.
   - `pnpm typecheck`
 - Acceptance: Tenant A cannot read, insert, update, or delete Tenant B rows in the tested tenant-scoped tables.
 
+## WP-7: Auth integration
+
+Status: Completed on 2026-07-11.
+
+- Scope: minimal `apps/customer-portal` login/session flow and `packages/auth` JWT claim utilities.
+- Approved adjustment: added a forward migration and local Supabase Auth hook config because the custom access token hook cannot be implemented solely inside app/package code.
+- Notes:
+  - Local Next build uses `next build --webpack` because Turbopack hit Windows path-length limits in this deep OneDrive workspace.
+  - The custom access-token hook injects `tenant_id` and `role_scope` from the active tenant membership at token issuance.
+- Verification:
+  - `pnpm test:auth`
+  - `pnpm test:isolation`
+  - `pnpm exec supabase db lint --local`
+  - `pnpm exec supabase db advisors --local`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+- Acceptance: local Supabase Auth sign-in issues a JWT containing the expected tenant claim for a test user with an active tenant membership.
+
 ## Open Questions
 
 - None.

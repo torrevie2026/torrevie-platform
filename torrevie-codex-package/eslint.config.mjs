@@ -4,7 +4,7 @@ import tseslint from "typescript-eslint";
 export default tseslint.config(
   {
     ignores: [
-      ".next/**",
+      "**/.next/**",
       "coverage/**",
       "dist/**",
       "node_modules/**",
@@ -19,7 +19,9 @@ export default tseslint.config(
       ecmaVersion: "latest",
       sourceType: "module",
       globals: {
+        Buffer: "readonly",
         console: "readonly",
+        fetch: "readonly",
         process: "readonly"
       }
     },
