@@ -314,6 +314,27 @@ Status: Completed on 2026-07-11.
   - Browser check at `http://127.0.0.1:3117/en/crm` and `http://127.0.0.1:3117/ar/crm`
 - Acceptance: a seeded tenant flow can create an account, contact, and opportunity, move the opportunity through the CRM pipeline, and render the pipeline surface in English and Arabic without horizontal overflow.
 
+## WP-19: Audit logging integration
+
+Status: Completed on 2026-07-11.
+
+- Scope: CRM audit writes plus verification of the existing tenant lifecycle, provisioning, subscription, and customer-administration audit paths.
+- Notes:
+  - CRM pipeline initialization, account creation, contact creation, opportunity creation, and opportunity stage movement write `audit_events` rows synchronously inside tenant context.
+  - CRM audit metadata is limited to operational identifiers and summary fields; full customer records are not logged.
+- Verification:
+  - `pnpm test:crm`
+  - `pnpm test:tenant-lifecycle`
+  - `pnpm test:provisioning`
+  - `pnpm test:subscriptions`
+  - `pnpm test:customer-admin`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm test:isolation`
+  - `pnpm test`
+- Acceptance: every mutation path introduced through WP-18 has a representative audit assertion, including CRM opportunity stage movement.
+
 ## Open Questions
 
 - None.

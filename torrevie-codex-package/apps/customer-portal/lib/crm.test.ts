@@ -122,7 +122,9 @@ async function main() {
     const stages = await ensureDefaultCrmPipeline(client, actor);
     assert.equal(stages.length, 2);
     assert.equal(client.hasSql("insert into public.pipeline_stages"), true);
+    assert.equal(client.hasSql("insert into public.audit_events"), true);
     assert.equal(client.valuesContain(actor.tenantId), true);
+    assert.equal(client.valuesContain("crm.pipeline.initialized"), true);
   }
 
   {
@@ -139,7 +141,11 @@ async function main() {
     assert.equal(client.hasSql("insert into public.accounts"), true);
     assert.equal(client.hasSql("insert into public.contacts"), true);
     assert.equal(client.hasSql("insert into public.opportunities"), true);
+    assert.equal(client.hasSql("insert into public.audit_events"), true);
     assert.equal(client.valuesContain("maya@example.test"), true);
+    assert.equal(client.valuesContain("crm.account.created"), true);
+    assert.equal(client.valuesContain("crm.contact.created"), true);
+    assert.equal(client.valuesContain("crm.opportunity.created"), true);
   }
 
   {
@@ -153,6 +159,7 @@ async function main() {
     assert.equal(moved.pipelineStageId, "00000000-0000-4000-8000-000000005002");
     assert.equal(moved.version, 2);
     assert.equal(client.hasSql("version = version + 1"), true);
+    assert.equal(client.valuesContain("crm.opportunity.stage_moved"), true);
   }
 
   {
