@@ -21,7 +21,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -136,6 +137,82 @@ h1 {
   margin: 0;
 }
 
+.panel {
+  background: var(--torrevie-white);
+  border: 1px solid #e2e6ec;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.panel h2 {
+  font-size: 20px;
+  margin: 0 0 16px;
+}
+
+.tenant-form,
+.tenant-edit {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tenant-form label,
+.tenant-edit label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.tenant-form input,
+.tenant-form select,
+.tenant-edit input,
+.tenant-edit select {
+  border: 1px solid #e2e6ec;
+  border-radius: 6px;
+  min-height: 40px;
+  padding: 0 10px;
+}
+
+.tenant-form button,
+.tenant-edit button,
+.tenant-actions button {
+  background: var(--torrevie-teal);
+  border: 0;
+  border-radius: 6px;
+  color: var(--torrevie-white);
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.tenant-list {
+  display: grid;
+  gap: 16px;
+}
+
+.tenant-row {
+  border-top: 1px solid #e2e6ec;
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+}
+
+.tenant-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tenant-actions button {
+  background: var(--torrevie-steel-blue);
+}
+
+.empty {
+  color: var(--torrevie-black);
+  margin: 0;
+}
+
 .login-shell {
   display: grid;
   min-height: 100vh;
@@ -209,6 +286,11 @@ h1 {
   }
 
   .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tenant-form,
+  .tenant-edit {
     grid-template-columns: 1fr;
   }
 }
