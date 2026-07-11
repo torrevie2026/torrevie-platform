@@ -140,6 +140,21 @@ Status: Completed on 2026-07-11.
   - `pnpm build`
 - Acceptance: unit tests cover every initial role against representative permissions from `RBAC_MATRIX.md`.
 
+## WP-10: Tenant-isolation test suite, formalized and CI-gating
+
+Status: Implemented on 2026-07-11; checkpoint pending branch-protection confirmation.
+
+- Scope: GitHub Actions platform gate now runs install, lint, typecheck, local Supabase start/reset, `pnpm test:isolation`, package/app tests, and build.
+- Safety gate: `pnpm test:isolation` is explicitly named as the tenant isolation gate in CI and must be configured as a required branch-protection check before Phase D starts.
+- Verification:
+  - `pnpm supabase:reset`
+  - `pnpm test:isolation`
+  - `pnpm test`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+- Checkpoint: confirm GitHub branch protection requires the `Platform Gate` workflow/check for pull requests that touch tables, policies, or routes before continuing to WP-11.
+
 ## Open Questions
 
-- None.
+- WP-10 checkpoint: branch protection for the `Platform Gate` check must be confirmed before Phase D begins.
