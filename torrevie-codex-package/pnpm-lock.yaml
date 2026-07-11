@@ -74,6 +74,12 @@ importers:
       '@torrevie/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@torrevie/localization':
+        specifier: workspace:*
+        version: link:../../packages/localization
+      '@torrevie/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       next:
         specifier: 16.2.10
         version: 16.2.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -90,6 +96,8 @@ importers:
         specifier: 2.110.2
         version: 2.110.2
 
+  packages/localization: {}
+
   packages/permissions: {}
 
   packages/provisioning:
@@ -99,6 +107,8 @@ importers:
         version: 2.110.2
 
   packages/tenant-context: {}
+
+  packages/ui: {}
 
 packages:
 

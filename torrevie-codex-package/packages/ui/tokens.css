@@ -1,0 +1,21 @@
+:root {
+  --torrevie-navy: #162449;
+  --torrevie-white: #ffffff;
+  --torrevie-black: #0a0a0a;
+  --torrevie-teal: #0d9488;
+  --torrevie-steel-blue: #4a6fa5;
+  --torrevie-light-grey: #f2f4f7;
+  --color-bg-primary: var(--torrevie-white);
+  --color-bg-surface: var(--torrevie-light-grey);
+  --color-bg-inverse: var(--torrevie-navy);
+  --color-text-primary: var(--torrevie-navy);
+  --color-text-inverse: var(--torrevie-white);
+  --color-text-muted: #5b6472;
+  --color-accent: var(--torrevie-teal);
+  --color-accent-secondary: var(--torrevie-steel-blue);
+  --color-border: #e2e6ec;
+  --color-status-success: #1a7f5a;
+  --color-status-warning: #b8860b;
+  --color-status-error: #b3261e;
+  --font-family-base: var(--font-inter), system-ui, sans-serif;
+}

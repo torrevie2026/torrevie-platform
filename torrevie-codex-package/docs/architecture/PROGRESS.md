@@ -231,6 +231,27 @@ Status: Completed on 2026-07-11.
   - `pnpm test`
 - Acceptance: assigning CRM Growth to a tenant creates entitlement rows and permission resolution allows CRM access for that tenant.
 
+## WP-15: Customer Portal shell with localization
+
+Status: Completed on 2026-07-11.
+
+- Scope: Customer Portal localized shell, shared localization package, shared UI brand tokens, approved logo asset, and RTL smoke checks.
+- Notes:
+  - `/en` and `/ar` render the same shell with locale-specific copy and direction.
+  - Customer Portal CSS uses logical properties so shared layout behavior works in LTR and RTL.
+  - Shared UI tokens are built from `docs/brand/BRAND_FOR_CODEX.md`.
+- Dependency justification: added `@torrevie/localization` and `@torrevie/ui` to `apps/customer-portal` for message catalogues and shared brand tokens.
+- Verification:
+  - `pnpm test:localization`
+  - `pnpm test:customer-portal-shell`
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm build`
+  - `pnpm test:isolation`
+  - `pnpm test`
+  - Browser check at `http://127.0.0.1:3115/en` and `http://127.0.0.1:3115/ar`
+- Acceptance: English renders LTR, Arabic renders RTL, the approved logo loads, and neither locale has horizontal overflow.
+
 ## Open Questions
 
 - None.
