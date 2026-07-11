@@ -1,0 +1,14 @@
+{
+  "name": "@torrevie/observability",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./next": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck:local": "tsc --noEmit",
+    "test:local": "tsx src/index.test.ts"
+  }
+}
