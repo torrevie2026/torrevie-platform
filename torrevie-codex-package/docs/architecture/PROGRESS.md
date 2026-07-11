@@ -142,7 +142,7 @@ Status: Completed on 2026-07-11.
 
 ## WP-10: Tenant-isolation test suite, formalized and CI-gating
 
-Status: Implemented on 2026-07-11; checkpoint pending branch-protection confirmation.
+Status: Completed on 2026-07-11.
 
 - Scope: GitHub Actions platform gate now runs install, lint, typecheck, local Supabase start/reset, `pnpm test:isolation`, package/app tests, and build.
 - Safety gate: `pnpm test:isolation` is explicitly named as the tenant isolation gate in CI and must be configured as a required branch-protection check before Phase D starts.
@@ -153,8 +153,26 @@ Status: Implemented on 2026-07-11; checkpoint pending branch-protection confirma
   - `pnpm lint`
   - `pnpm typecheck`
   - `pnpm build`
-- Checkpoint: confirm GitHub branch protection requires the `Platform Gate` workflow/check for pull requests that touch tables, policies, or routes before continuing to WP-11.
+- Checkpoint: GitHub branch protection for `main` requires pull requests, one approval, and the `Platform Gate` status check before merge.
+
+## WP-11: Admin Portal shell
+
+Status: Completed on 2026-07-11.
+
+- Scope: `apps/admin-portal` shell with server-side role-scope guard and focused authorization tests.
+- Notes:
+  - The shell renders only for platform-scoped sessions issued by the Supabase access-token hook.
+  - Exact Torrevie staff role access is covered by the admin access helper; all customer roles are denied.
+- Verification:
+  - `pnpm test:admin-portal`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm supabase:reset`
+  - `pnpm test:isolation`
+  - `pnpm test`
+- Acceptance: customer roles cannot access the admin portal authorization boundary; platform-scoped staff sessions can render the shell.
 
 ## Open Questions
 
-- WP-10 checkpoint: branch protection for the `Platform Gate` check must be confirmed before Phase D begins.
+- None.
