@@ -96,7 +96,17 @@ export async function ensureDefaultCrmPipeline(
       );
     }
 
-    return listPipelineStagesInContext(client);
+    const stages = await listPipelineStagesInContext(client);
+    await writeCrmAuditEvent(client, actor, {
+      action: "crm.pipeline.initialized",
+      targetType: "pipeline",
+      targetId: stages[0]?.id ?? null,
+      metadata: {
+        stage_count: String(stages.length)
+      }
+    });
+
+    return stages;
   });
 }
 
@@ -172,6 +182,14 @@ export async function createCrmVerticalSlice(
       [account.name, account.industry, actor.userId]
     );
     const accountId = requireSingleId(accountResult.rows, "account");
+    await writeCrmAuditEvent(client, actor, {
+      action: "crm.account.created",
+      targetType: "account",
+      targetId: accountId,
+      metadata: {
+        source: "crm_vertical_slice"
+      }
+    });
 
     const contactResult = await client.query<{ id: string }>(
       `
@@ -192,6 +210,14 @@ export async function createCrmVerticalSlice(
       [accountId, contact.firstName, contact.lastName, contact.email, contact.phone, actor.userId]
     );
     const contactId = requireSingleId(contactResult.rows, "contact");
+    await writeCrmAuditEvent(client, actor, {
+      action: "crm.contact.created",
+      targetType: "contact",
+      targetId: contactId,
+      metadata: {
+        source: "crm_vertical_slice"
+      }
+    });
 
     const opportunityResult = await client.query<{ id: string }>(
       `
@@ -221,6 +247,16 @@ export async function createCrmVerticalSlice(
       ]
     );
     const opportunityId = requireSingleId(opportunityResult.rows, "opportunity");
+    await writeCrmAuditEvent(client, actor, {
+      action: "crm.opportunity.created",
+      targetType: "opportunity",
+      targetId: opportunityId,
+      metadata: {
+        pipeline_stage_id: pipelineStageId,
+        currency: opportunity.currency ?? "AED",
+        source: "crm_vertical_slice"
+      }
+    });
 
     return {
       accountId,
@@ -277,12 +313,41 @@ export async function moveOpportunityToStage(
       throw new Error("Opportunity could not be moved.");
     }
 
+    await writeCrmAuditEvent(client, actor, {
+      action: "crm.opportunity.stage_moved",
+      targetType: "opportunity",
+      targetId: updated.id,
+      metadata: {
+        pipeline_stage_id: updated.pipeline_stage_id,
+        version: String(updated.version)
+      }
+    });
+
     return {
       opportunityId: updated.id,
       pipelineStageId: updated.pipeline_stage_id,
       version: updated.version
     };
   });
+}
+
+async function writeCrmAuditEvent(
+  client: TenantQueryClient,
+  actor: CrmActorContext,
+  event: {
+    action: string;
+    targetType: string;
+    targetId: string | null;
+    metadata?: Record<string, string>;
+  }
+) {
+  await client.query(
+    `
+      insert into public.audit_events (tenant_id, actor_user_id, action, target_type, target_id, metadata)
+      values (public.current_tenant_id(), $1, $2, $3, $4, $5::jsonb)
+    `,
+    [actor.userId, event.action, event.targetType, event.targetId, JSON.stringify(event.metadata ?? {})]
+  );
 }
 
 function assertCrmPermission(

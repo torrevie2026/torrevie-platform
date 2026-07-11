@@ -41,11 +41,32 @@ set pipeline_stage_id = '00000000-0000-4000-8000-000000018202',
     updated_by = '00000000-0000-4000-8000-000000018001'
 where id = '00000000-0000-4000-8000-000000018501';
 
+insert into public.audit_events (tenant_id, actor_user_id, action, target_type, target_id, metadata)
+values (
+  public.current_tenant_id(),
+  '00000000-0000-4000-8000-000000018001',
+  'crm.opportunity.stage_moved',
+  'opportunity',
+  '00000000-0000-4000-8000-000000018501',
+  '{"pipeline_stage_id":"00000000-0000-4000-8000-000000018202","version":"2"}'::jsonb
+);
+
 do $$
 declare
+  audit_count integer;
   moved_count integer;
   visible_count integer;
 begin
+  select count(*) into audit_count
+  from public.audit_events
+  where tenant_id = public.current_tenant_id()
+    and action = 'crm.opportunity.stage_moved'
+    and target_id = '00000000-0000-4000-8000-000000018501';
+
+  if audit_count <> 1 then
+    raise exception 'CRM vertical smoke expected one opportunity move audit event, received %', audit_count;
+  end if;
+
   select count(*) into moved_count
   from public.opportunities
   where id = '00000000-0000-4000-8000-000000018501'
