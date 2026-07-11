@@ -1,0 +1,92 @@
+:root {
+  --torrevie-navy: #162449;
+  --torrevie-white: #ffffff;
+  --torrevie-black: #0a0a0a;
+  --torrevie-teal: #0d9488;
+  --torrevie-steel-blue: #4a6fa5;
+  --torrevie-light-grey: #f2f4f7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--torrevie-light-grey);
+  color: var(--torrevie-navy);
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+.login-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
+.login-panel {
+  width: min(100%, 400px);
+  border: 1px solid #e2e6ec;
+  border-radius: 8px;
+  background: var(--torrevie-white);
+  padding: 32px;
+}
+
+.brand {
+  margin: 0 0 24px;
+  color: var(--torrevie-teal);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.login-panel h1 {
+  margin: 0 0 24px;
+  font-size: 28px;
+}
+
+.login-panel form {
+  display: grid;
+  gap: 16px;
+}
+
+.login-panel label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.login-panel input {
+  min-height: 44px;
+  border: 1px solid #e2e6ec;
+  border-radius: 6px;
+  padding: 0 12px;
+}
+
+.login-panel button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--torrevie-teal);
+  color: var(--torrevie-white);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.error {
+  border-left: 4px solid #b3261e;
+  background: var(--torrevie-light-grey);
+  margin: 0 0 16px;
+  padding: 12px;
+}

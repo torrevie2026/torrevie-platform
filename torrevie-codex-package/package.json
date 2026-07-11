@@ -1,0 +1,37 @@
+{
+  "name": "torrevie-platform",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Torrevie SaaS Platform monorepo.",
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier . --check",
+    "typecheck": "pnpm -r --if-present typecheck:local",
+    "test": "pnpm test:auth && pnpm test:tenant-context && pnpm test:permissions",
+    "test:auth": "node scripts/auth-claim-smoke.mjs",
+    "test:tenant-context": "tsx packages/tenant-context/src/index.test.ts && tsx scripts/tenant-context-smoke.ts",
+    "test:permissions": "tsx packages/permissions/src/index.test.ts",
+    "test:isolation": "node scripts/run-sql-tests.mjs",
+    "build": "pnpm -r --if-present build",
+    "dev": "pnpm --filter @torrevie/customer-portal dev",
+    "supabase:start": "supabase start",
+    "supabase:status": "supabase status",
+    "supabase:smoke": "node scripts/supabase-smoke.mjs",
+    "supabase:migrate": "supabase migration up --local",
+    "supabase:reset": "supabase db reset --local",
+    "supabase:seed": "supabase db reset --local"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.31.0",
+    "@types/node": "24.0.15",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "eslint": "9.31.0",
+    "prettier": "3.6.2",
+    "supabase": "2.109.1",
+    "tsx": "4.23.0",
+    "typescript": "5.8.3",
+    "typescript-eslint": "8.37.0"
+  }
+}
