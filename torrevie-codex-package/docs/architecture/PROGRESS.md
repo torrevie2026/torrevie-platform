@@ -22,6 +22,23 @@ Status: Completed on 2026-07-11.
   - `pnpm typecheck`
 - Acceptance: fresh install and lint succeed on the scaffold.
 
+## WP-2: Local Supabase setup
+
+Status: Completed on 2026-07-11.
+
+- Branch: `codex/wp-1-repository-scaffold`
+- Scope: Supabase CLI local config and a local database smoke test.
+- Notes:
+  - Supabase CLI is pinned as a root dev dependency.
+  - Docker Desktop was started locally to run the stack.
+- Verification:
+  - `pnpm exec supabase init`
+  - `pnpm exec supabase start`
+  - `pnpm supabase:smoke`
+  - `pnpm lint`
+  - `pnpm typecheck`
+- Acceptance: local stack starts and the smoke test connects to the local database.
+
 ## Open Questions
 
 - None.

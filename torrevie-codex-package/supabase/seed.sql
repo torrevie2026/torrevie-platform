@@ -1,0 +1,1 @@
+-- Seed data is introduced in WP-4. This placeholder keeps local resets quiet until then.

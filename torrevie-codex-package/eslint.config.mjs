@@ -17,7 +17,10 @@ export default tseslint.config(
     files: ["**/*.{js,mjs,cjs,ts,tsx}"],
     languageOptions: {
       ecmaVersion: "latest",
-      sourceType: "module"
+      sourceType: "module",
+      globals: {
+        console: "readonly"
+      }
     },
     rules: {
       "@typescript-eslint/no-explicit-any": "error"
