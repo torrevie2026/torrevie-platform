@@ -396,7 +396,7 @@ Status: Completed on 2026-07-11.
 
 ## WP-23: End-to-end staging validation
 
-Status: Partially validated on 2026-07-11; blocked on the admin staging service-role environment variable.
+Status: Completed on 2026-07-11.
 
 - Scope:
   - Added `scripts/staging-validation.sql` as a rollback-only hosted staging validation script.
@@ -408,11 +408,13 @@ Status: Partially validated on 2026-07-11; blocked on the admin staging service-
   - Synthetic admin Auth user signs in through Admin Portal staging and receives a platform-scoped JWT; `/` renders the Admin Portal shell with `Platform access`.
   - Synthetic customer Auth user signs in through Customer Portal staging and `/session` shows tenant `00000000-0000-4000-8000-000000023912` with `role_scope=customer`.
   - Customer Portal staging `/en/crm` renders the CRM pipeline with CRM Growth entitlement under the synthetic customer session.
-  - Admin staging `/tenants` fails with server digest `2101949868`; Vercel runtime logs confirm `Supabase admin environment variables are not configured.`
-- Blockers:
-  - Full browser-driven admin mutation validation cannot complete until the server-only `SUPABASE_SERVICE_ROLE_KEY` is configured in the Vercel admin staging project and the project is redeployed.
+  - Admin staging production redeploy `dpl_2GiQwMUJDSDYDHw9x68sEWs4ge13` is live behind `https://torrevie-admin-portal-staging.vercel.app`.
+  - Admin Portal browser validation created `WP23 Browser Tenant 015648`, suspended and reactivated it, started a provisioning job that succeeded all steps, and assigned CRM Growth.
+  - Hosted database confirmation for `wp23-browser-015648` shows tenant status `active`, provisioning succeeded, CRM Growth assigned, 3 entitlements, and representative audit events for tenant lifecycle, provisioning, and subscription assignment.
+  - Vercel runtime error scan for admin deployment `dpl_2GiQwMUJDSDYDHw9x68sEWs4ge13` returned no errors after validation.
+- Checkpoint:
   - Production provisioning in WP-24 remains a checkpoint and must not start until WP-23 full acceptance is cleared.
 
 ## Open Questions
 
-- Set `SUPABASE_SERVICE_ROLE_KEY` in Vercel for `torrevie-admin-portal-staging` without exposing the value through Codex, then redeploy and rerun the admin tenant lifecycle, provisioning, and subscription browser checks.
+- WP-24 production provisioning can start after PR review and the WP-23 staging validation branch is merged.
