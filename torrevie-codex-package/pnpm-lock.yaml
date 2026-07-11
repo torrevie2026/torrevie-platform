@@ -53,6 +53,9 @@ importers:
       '@torrevie/permissions':
         specifier: workspace:*
         version: link:../../packages/permissions
+      '@torrevie/provisioning':
+        specifier: workspace:*
+        version: link:../../packages/provisioning
       next:
         specifier: 16.2.10
         version: 16.2.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -88,6 +91,12 @@ importers:
         version: 2.110.2
 
   packages/permissions: {}
+
+  packages/provisioning:
+    dependencies:
+      '@supabase/supabase-js':
+        specifier: 2.110.2
+        version: 2.110.2
 
   packages/tenant-context: {}
 

@@ -24,7 +24,7 @@ export default async function AdminHomePage() {
         <nav>
           <a href="/">Overview</a>
           <a href="/tenants">Tenants</a>
-          <a href="/">Provisioning</a>
+          <a href="/provisioning">Provisioning</a>
           <a href="/">Subscriptions</a>
           <a href="/">Audit</a>
         </nav>
@@ -50,8 +50,8 @@ export default async function AdminHomePage() {
           </article>
           <article>
             <span>Next Slice</span>
-            <strong>Tenant lifecycle</strong>
-            <p>Feature routes will land after the shell authorization boundary.</p>
+            <strong>Provisioning</strong>
+            <p>Retryable onboarding jobs track every tenant setup step.</p>
           </article>
         </section>
       </section>

@@ -192,6 +192,26 @@ Status: Completed on 2026-07-11.
   - `pnpm test`
 - Acceptance: platform staff can manage tenant lifecycle through the Admin Portal server actions, and lifecycle writes create synchronous audit events.
 
+## WP-13: Provisioning pipeline
+
+Status: Completed on 2026-07-11.
+
+- Scope: `packages/provisioning`, Admin Portal provisioning status page, start-job and retry-step server actions, and service-role grants for provisioning tables.
+- Notes:
+  - Provisioning jobs use explicit ordered steps and keep each step independently retryable.
+  - Admin Portal visibility shows job status, step status, attempts, errors, and retry controls for failed steps.
+  - Provisioning state transitions write `audit_events` rows synchronously.
+- Dependency justification: added `@supabase/supabase-js` to `packages/provisioning` for the Supabase-backed provisioning store.
+- Verification:
+  - `pnpm test:provisioning`
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm build`
+  - `pnpm supabase:reset`
+  - `pnpm test:isolation`
+  - `pnpm test`
+- Acceptance: a failed provisioning step can be retried without re-running already succeeded steps, and provisioning status is visible in the Admin Portal.
+
 ## Open Questions
 
 - None.

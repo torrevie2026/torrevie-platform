@@ -213,6 +213,125 @@ h1 {
   margin: 0;
 }
 
+.provisioning-form {
+  align-items: end;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(220px, 420px) auto;
+}
+
+.provisioning-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.provisioning-form select {
+  border: 1px solid #e2e6ec;
+  border-radius: 6px;
+  min-height: 40px;
+  padding: 0 10px;
+}
+
+.provisioning-form button,
+.step-actions button {
+  background: var(--torrevie-teal);
+  border: 0;
+  border-radius: 6px;
+  color: var(--torrevie-white);
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.provisioning-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.provisioning-list {
+  display: grid;
+  gap: 16px;
+}
+
+.provisioning-job {
+  border-top: 1px solid #e2e6ec;
+  display: grid;
+  gap: 14px;
+  padding-top: 16px;
+}
+
+.provisioning-job header,
+.provisioning-steps li {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.provisioning-job header div,
+.provisioning-steps div {
+  display: grid;
+  gap: 4px;
+}
+
+.provisioning-job span,
+.provisioning-steps span {
+  color: var(--torrevie-black);
+  font-size: 13px;
+}
+
+.provisioning-steps {
+  display: grid;
+  gap: 10px;
+  list-style-position: inside;
+  margin: 0;
+  padding: 0;
+}
+
+.provisioning-steps li {
+  background: var(--torrevie-light-grey);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.step-actions {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.status-badge {
+  border-radius: 999px;
+  color: var(--torrevie-navy);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  justify-content: center;
+  min-width: 88px;
+  padding: 6px 10px;
+  text-transform: uppercase;
+}
+
+.status-badge-pending {
+  background: #e2e6ec;
+}
+
+.status-badge-running {
+  background: #d7e2f2;
+}
+
+.status-badge-succeeded {
+  background: #d8f3ef;
+}
+
+.status-badge-failed {
+  background: #f8d8d8;
+}
+
 .login-shell {
   display: grid;
   min-height: 100vh;
@@ -290,7 +409,14 @@ h1 {
   }
 
   .tenant-form,
-  .tenant-edit {
+  .tenant-edit,
+  .provisioning-form {
     grid-template-columns: 1fr;
+  }
+
+  .provisioning-job header,
+  .provisioning-steps li {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
