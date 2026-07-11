@@ -173,6 +173,25 @@ Status: Completed on 2026-07-11.
   - `pnpm test`
 - Acceptance: customer roles cannot access the admin portal authorization boundary; platform-scoped staff sessions can render the shell.
 
+## WP-12: Tenant lifecycle
+
+Status: Completed on 2026-07-11.
+
+- Scope: Admin Portal tenant create, edit, suspend, reactivate, and archive actions.
+- Notes:
+  - Tenant lifecycle mutations are server-side only and require a platform-scoped session before using the server-only Supabase service-role client.
+  - Every tenant lifecycle mutation writes an `audit_events` row synchronously.
+- Dependency justification: added `@supabase/supabase-js` to `apps/admin-portal` for the server-only lifecycle client.
+- Verification:
+  - `pnpm supabase:reset`
+  - `pnpm test:tenant-lifecycle`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm test:isolation`
+  - `pnpm test`
+- Acceptance: platform staff can manage tenant lifecycle through the Admin Portal server actions, and lifecycle writes create synchronous audit events.
+
 ## Open Questions
 
 - None.

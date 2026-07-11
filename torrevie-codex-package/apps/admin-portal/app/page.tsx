@@ -23,7 +23,7 @@ export default async function AdminHomePage() {
         <p className="brand">Torrevie</p>
         <nav>
           <a href="/">Overview</a>
-          <a href="/">Tenants</a>
+          <a href="/tenants">Tenants</a>
           <a href="/">Provisioning</a>
           <a href="/">Subscriptions</a>
           <a href="/">Audit</a>
