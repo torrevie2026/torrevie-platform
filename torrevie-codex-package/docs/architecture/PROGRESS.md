@@ -373,6 +373,45 @@ Status: Completed on 2026-07-11.
   - `pnpm test`
 - Acceptance: every pull request is gated by lint, typecheck, the unit/smoke test suite, tenant isolation, and build in the documented CI/CD order.
 
+## WP-22: Staging environment provisioning
+
+Status: Completed on 2026-07-11.
+
+- Supabase staging project: `ybafzzgadjnxbidyxzws`.
+- Vercel customer staging project: `torrevie-customer-portal-staging`.
+- Vercel admin staging project: `torrevie-admin-portal-staging`.
+- Scope:
+  - Applied the full migration set through CRM schema/RLS to hosted Supabase staging.
+  - Seeded baseline catalogue data plus synthetic Alpha/Beta staging tenants.
+  - Created Vercel staging deployments for both portals from `main` at `ca1aba4`.
+  - Configured public Supabase browser environment variables on both Vercel staging projects.
+- Verification:
+  - Hosted Supabase table/RLS sanity checks confirmed Tenant Alpha cannot read Tenant Beta CRM data.
+  - Customer staging renders at `https://torrevie-customer-portal-staging.vercel.app/en`.
+  - Admin staging renders the sign-in page at `https://torrevie-admin-portal-staging.vercel.app/login`.
+  - Fresh Vercel runtime error scans for both redeployed staging projects returned no errors.
+- Notes:
+  - The Admin Portal still needs `SUPABASE_SERVICE_ROLE_KEY` set directly in Vercel before admin mutation routes can run against staging.
+  - The hosted Supabase Auth access-token hook setting still needs dashboard confirmation before browser login can be treated as validated.
+
+## WP-23: End-to-end staging validation
+
+Status: Partially validated on 2026-07-11; blocked for full browser acceptance.
+
+- Scope:
+  - Added `scripts/staging-validation.sql` as a rollback-only hosted staging validation script.
+  - Ran the script against Supabase staging project `ybafzzgadjnxbidyxzws`.
+- Verification:
+  - Hosted staging SQL validation passed for tenant lifecycle, provisioning retry/success state, CRM Growth subscription assignment, entitlement materialization, CRM account/contact/opportunity creation, opportunity stage movement, tenant-isolation visibility, and representative audit events.
+  - Customer staging URL renders the localized portal shell.
+  - Admin staging URL renders the sign-in page.
+- Blockers:
+  - Full browser-driven admin validation cannot complete until the server-only `SUPABASE_SERVICE_ROLE_KEY` is configured in the Vercel admin staging project.
+  - Full Supabase Auth login validation cannot complete until hosted staging has known synthetic Auth test users and the custom access-token hook is confirmed enabled in the Supabase Auth dashboard.
+  - Production provisioning in WP-24 remains a checkpoint and must not start until WP-23 full acceptance is cleared.
+
 ## Open Questions
 
-- None.
+- Set `SUPABASE_SERVICE_ROLE_KEY` in Vercel for `torrevie-admin-portal-staging` without exposing the value through Codex.
+- Confirm the hosted Supabase custom access-token hook is enabled for staging.
+- Create known synthetic staging Auth users for admin and customer browser login validation.
