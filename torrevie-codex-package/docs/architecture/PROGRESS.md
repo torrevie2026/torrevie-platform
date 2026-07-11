@@ -123,6 +123,23 @@ Status: Completed on 2026-07-11.
   - `pnpm build`
 - Acceptance: unit tests cover tenant membership resolution and transaction behavior; integration smoke test confirms RLS sees the expected tenant when `app.current_tenant_id` is set in a transaction.
 
+## WP-9: Permissions package
+
+Status: Completed on 2026-07-11.
+
+- Scope: `packages/permissions`, initial RBAC matrix, product entitlement checks, support-session narrowing, integration-service scopes, and ownership narrowing for representative product permissions.
+- Notes:
+  - The package is server-side only by convention and has no UI enforcement responsibilities.
+  - Torrevie staff customer-tenant actions require a support session unless they are platform-level permissions.
+- Verification:
+  - `pnpm test:permissions`
+  - `pnpm test`
+  - `pnpm test:isolation`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+- Acceptance: unit tests cover every initial role against representative permissions from `RBAC_MATRIX.md`.
+
 ## Open Questions
 
 - None.

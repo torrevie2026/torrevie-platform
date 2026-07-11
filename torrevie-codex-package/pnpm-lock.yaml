@@ -63,6 +63,8 @@ importers:
         specifier: 2.110.2
         version: 2.110.2
 
+  packages/permissions: {}
+
   packages/tenant-context: {}
 
 packages:
