@@ -354,6 +354,25 @@ Status: Completed on 2026-07-11.
   - `pnpm test`
 - Acceptance: a sample error is captured with its correlation ID, tenant ID, user ID, digest, and sanitized metadata.
 
+## WP-21: CI pipeline
+
+Status: Completed on 2026-07-11.
+
+- Scope: GitHub Actions Platform Gate workflow and a CI contract smoke test.
+- Notes:
+  - The Platform Gate runs on every pull request and push to `main`, with manual dispatch available for recovery checks.
+  - The gate follows the HLD flow: install, lint, typecheck, local Supabase start/reset, unit and smoke tests, tenant-isolation gate, build, then Supabase shutdown.
+  - Workflow permissions are read-only by default, and concurrency cancels superseded runs on the same branch/ref.
+  - `scripts/ci-pipeline-smoke.mjs` pins the required workflow commands and order so later edits cannot silently drop the release-blocking gates.
+- Verification:
+  - `pnpm test:ci-pipeline`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm test:isolation`
+  - `pnpm test`
+- Acceptance: every pull request is gated by lint, typecheck, the unit/smoke test suite, tenant isolation, and build in the documented CI/CD order.
+
 ## Open Questions
 
 - None.
