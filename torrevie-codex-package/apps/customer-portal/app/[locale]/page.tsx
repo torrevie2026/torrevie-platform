@@ -33,7 +33,7 @@ export default async function CustomerPortalShell({
         </a>
         <nav>
           <a href={`/${locale}`}>{t.nav.overview}</a>
-          <a href={`/${locale}`}>{t.nav.crm}</a>
+          <a href={`/${locale}/crm`}>{t.nav.crm}</a>
           <a href={`/${locale}`}>{t.nav.fsm}</a>
           <a href={`/${locale}`}>{t.nav.tex}</a>
           <a href={`/${locale}`}>{t.nav.cme}</a>
