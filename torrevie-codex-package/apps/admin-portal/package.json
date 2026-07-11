@@ -12,6 +12,7 @@
     "@supabase/ssr": "0.12.0",
     "@supabase/supabase-js": "2.110.2",
     "@torrevie/auth": "workspace:*",
+    "@torrevie/observability": "workspace:*",
     "@torrevie/permissions": "workspace:*",
     "@torrevie/provisioning": "workspace:*",
     "next": "16.2.10",

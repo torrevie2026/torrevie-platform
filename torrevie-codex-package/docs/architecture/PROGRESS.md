@@ -335,6 +335,25 @@ Status: Completed on 2026-07-11.
   - `pnpm test`
 - Acceptance: every mutation path introduced through WP-18 has a representative audit assertion, including CRM opportunity stage movement.
 
+## WP-20: Observability foundation
+
+Status: Completed on 2026-07-11.
+
+- Scope: shared observability package, structured request logging, correlation IDs, and server error capture hooks for both Next.js apps.
+- Notes:
+  - `packages/observability` emits JSON records with app, event, level, timestamp, correlation ID, request path, method, and tenant/user IDs when supplied by trusted upstream headers.
+  - Both `apps/admin-portal` and `apps/customer-portal` use Next.js `proxy.ts` request hooks to set `x-correlation-id` and log request start/end records.
+  - Both apps use Next.js `instrumentation.ts` and `onRequestError` to capture server errors with route context.
+  - Sensitive keys such as authorization headers, cookies, passwords, tokens, API keys, and service-role keys are redacted before emission.
+- Verification:
+  - `pnpm test:observability`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm test:isolation`
+  - `pnpm test`
+- Acceptance: a sample error is captured with its correlation ID, tenant ID, user ID, digest, and sanitized metadata.
+
 ## Open Questions
 
 - None.

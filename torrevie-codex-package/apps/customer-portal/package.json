@@ -12,6 +12,7 @@
     "@supabase/ssr": "0.12.0",
     "@torrevie/auth": "workspace:*",
     "@torrevie/localization": "workspace:*",
+    "@torrevie/observability": "workspace:*",
     "@torrevie/permissions": "workspace:*",
     "@torrevie/tenant-context": "workspace:*",
     "@torrevie/ui": "workspace:*",
