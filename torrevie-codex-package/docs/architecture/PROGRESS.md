@@ -415,6 +415,27 @@ Status: Completed on 2026-07-11.
 - Checkpoint:
   - Production provisioning in WP-24 remains a checkpoint and must not start until WP-23 full acceptance is cleared.
 
+## WP-24: Production environment provisioning
+
+Status: In progress on 2026-07-12.
+
+- Supabase production project: `rhntonxblbhxsvdpmius` (`torrevie-production`) in `torrevie2026's Org`.
+- Supabase production URL: `https://rhntonxblbhxsvdpmius.supabase.co`.
+- Scope completed:
+  - Created the hosted Supabase production project in `eu-west-2`, mirroring staging.
+  - Applied the full reviewed migration set through CRM schema/RLS.
+  - Seeded baseline catalogue data only: roles, permissions, products, plans, CRM plan features, and role-permission joins.
+  - Enabled the Supabase Auth custom access-token hook against `public.auth_hook_add_tenant_claim`.
+- Verification:
+  - Production migration history includes platform foundation, auth hook, admin tenant lifecycle grants, provisioning grants, subscription grants, and CRM schema/RLS.
+  - Baseline catalogue counts: 11 roles, 24 permissions, 5 products, 15 plans, 9 plan features, and 77 role-permission joins.
+  - RLS is enabled on the checked platform and CRM public tables.
+  - Direct hook smoke test returned successfully for a synthetic event without creating production tenant or user data.
+- Remaining:
+  - Create/configure production Vercel deployments for Admin Portal and Customer Portal.
+  - Set production Supabase environment variables directly in Vercel, with service-role values kept server-only.
+  - Configure DNS records for `admin.torrevie.com` and `app.torrevie.com` once the production Vercel targets exist.
+
 ## Open Questions
 
-- WP-24 production provisioning can start after PR review and the WP-23 staging validation branch is merged.
+- WP-24 production Vercel project creation and DNS access remain pending.
