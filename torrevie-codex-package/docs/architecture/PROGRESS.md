@@ -274,6 +274,25 @@ Status: Completed on 2026-07-11.
   - Browser check at `http://127.0.0.1:3116/en/admin/users` and `http://127.0.0.1:3116/ar/admin/users`
 - Acceptance: a customer administrator has a tenant-scoped user and role management surface, non-admin roles are denied in server-side tests, and the isolation suite proves the feature cannot read or mutate another tenant's membership or role rows.
 
+## WP-17: CRM schema and RLS
+
+Status: Completed on 2026-07-11.
+
+- Scope: CRM `accounts`, `contacts`, `pipeline_stages`, `opportunities`, and `activities` tables, tenant-aware relationships, indexes, triggers, grants, and RLS policies.
+- Notes:
+  - Every CRM table is tenant-scoped and has the required select, insert, update, and delete RLS policies.
+  - CRM relationship foreign keys include `tenant_id` to prevent cross-tenant references even if a record id is guessed.
+  - Contacts enforce per-tenant email uniqueness only when email is present.
+- Verification:
+  - `pnpm supabase:reset`
+  - `pnpm test:isolation`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm test`
+  - Schema smoke query confirming four RLS policies on each CRM table
+- Acceptance: the CRM schema applies from a clean reset, and tenant-isolation tests prove Tenant A cannot select, insert, update, or delete Tenant B CRM rows.
+
 ## Open Questions
 
 - None.
