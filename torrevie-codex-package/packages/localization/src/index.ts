@@ -12,6 +12,7 @@ export type CustomerPortalMessages = {
     tex: string;
     cme: string;
     lqs: string;
+    admin: string;
     settings: string;
   };
   shell: {
@@ -39,6 +40,25 @@ export type CustomerPortalMessages = {
     title: string;
     empty: string;
   };
+  adminUsers: {
+    eyebrow: string;
+    title: string;
+    subtitle: string;
+    requiredRole: string;
+    tenantScope: string;
+    rlsContext: string;
+    inviteUser: string;
+    email: string;
+    displayName: string;
+    displayNamePlaceholder: string;
+    role: string;
+    invite: string;
+    tenantUsers: string;
+    user: string;
+    status: string;
+    action: string;
+    update: string;
+  };
 };
 
 export const messages = {
@@ -52,6 +72,7 @@ export const messages = {
       tex: "TEX",
       cme: "CME",
       lqs: "LQS",
+      admin: "Users",
       settings: "Settings"
     },
     shell: {
@@ -78,6 +99,25 @@ export const messages = {
     activity: {
       title: "Today",
       empty: "No activity yet. New product work will appear here as modules come online."
+    },
+    adminUsers: {
+      eyebrow: "Tenant administration",
+      title: "Users and roles",
+      subtitle: "Invite users, update tenant membership status, and assign customer-scoped roles.",
+      requiredRole: "Required role",
+      tenantScope: "Tenant scope",
+      rlsContext: "RLS context",
+      inviteUser: "Invite user",
+      email: "Email",
+      displayName: "Display name",
+      displayNamePlaceholder: "Full name",
+      role: "Role",
+      invite: "Invite",
+      tenantUsers: "Tenant users",
+      user: "User",
+      status: "Status",
+      action: "Action",
+      update: "Update"
     }
   },
   ar: {
@@ -90,6 +130,7 @@ export const messages = {
       tex: "السفر والمصاريف",
       cme: "تسويق المحتوى",
       lqs: "تأهيل العملاء",
+      admin: "المستخدمون",
       settings: "الإعدادات"
     },
     shell: {
@@ -116,6 +157,25 @@ export const messages = {
     activity: {
       title: "اليوم",
       empty: "لا يوجد نشاط بعد. سيظهر عمل المنتجات هنا عند تفعيل الوحدات."
+    },
+    adminUsers: {
+      eyebrow: "إدارة المستأجر",
+      title: "المستخدمون والأدوار",
+      subtitle: "دعوة المستخدمين وتحديث حالة العضوية وتعيين أدوار العملاء.",
+      requiredRole: "الدور المطلوب",
+      tenantScope: "نطاق المستأجر",
+      rlsContext: "سياق أمان الصفوف",
+      inviteUser: "دعوة مستخدم",
+      email: "البريد الإلكتروني",
+      displayName: "اسم العرض",
+      displayNamePlaceholder: "الاسم الكامل",
+      role: "الدور",
+      invite: "دعوة",
+      tenantUsers: "مستخدمو المستأجر",
+      user: "المستخدم",
+      status: "الحالة",
+      action: "الإجراء",
+      update: "تحديث"
     }
   }
 } satisfies Record<Locale, CustomerPortalMessages>;

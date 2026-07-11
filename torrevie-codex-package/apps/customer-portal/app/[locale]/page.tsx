@@ -38,6 +38,7 @@ export default async function CustomerPortalShell({
           <a href={`/${locale}`}>{t.nav.tex}</a>
           <a href={`/${locale}`}>{t.nav.cme}</a>
           <a href={`/${locale}`}>{t.nav.lqs}</a>
+          <a href={`/${locale}/admin/users`}>{t.nav.admin}</a>
           <a href={`/${locale}`}>{t.nav.settings}</a>
         </nav>
       </aside>
