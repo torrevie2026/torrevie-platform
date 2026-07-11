@@ -252,6 +252,28 @@ Status: Completed on 2026-07-11.
   - Browser check at `http://127.0.0.1:3115/en` and `http://127.0.0.1:3115/ar`
 - Acceptance: English renders LTR, Arabic renders RTL, the approved logo loads, and neither locale has horizontal overflow.
 
+## WP-16: Customer administration screens
+
+Status: Completed on 2026-07-11.
+
+- Scope: Customer Portal user administration route, customer-admin domain actions, localized copy, and feature-specific tenant-isolation coverage.
+- Notes:
+  - Customer administration requires a customer tenant context and server-side `tenant.user.invite`, `tenant.user.manage`, and `tenant.role.assign` permission checks.
+  - Customer administrators can assign only customer-scoped roles; platform and integration roles are rejected before any database call.
+  - Tenant membership and role assignment writes run inside `packages/tenant-context` so `app.current_tenant_id` is set before RLS-scoped queries.
+- Dependency justification: added `@torrevie/permissions` and `@torrevie/tenant-context` to `apps/customer-portal` for server-side authorization and tenant-scoped data access.
+- Verification:
+  - `pnpm test:customer-admin`
+  - `pnpm test:customer-portal-shell`
+  - `pnpm test:localization`
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm build`
+  - `pnpm test:isolation`
+  - `pnpm test`
+  - Browser check at `http://127.0.0.1:3116/en/admin/users` and `http://127.0.0.1:3116/ar/admin/users`
+- Acceptance: a customer administrator has a tenant-scoped user and role management surface, non-admin roles are denied in server-side tests, and the isolation suite proves the feature cannot read or mutate another tenant's membership or role rows.
+
 ## Open Questions
 
 - None.

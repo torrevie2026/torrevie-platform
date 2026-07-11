@@ -77,6 +77,12 @@ importers:
       '@torrevie/localization':
         specifier: workspace:*
         version: link:../../packages/localization
+      '@torrevie/permissions':
+        specifier: workspace:*
+        version: link:../../packages/permissions
+      '@torrevie/tenant-context':
+        specifier: workspace:*
+        version: link:../../packages/tenant-context
       '@torrevie/ui':
         specifier: workspace:*
         version: link:../../packages/ui

@@ -72,7 +72,8 @@ a {
   padding-inline: 12px;
 }
 
-.customer-sidebar nav a:first-child {
+.customer-sidebar nav a:first-child,
+.customer-sidebar nav a[aria-current="page"] {
   background: var(--color-bg-surface);
   border-inline-start: 3px solid var(--color-accent);
 }
@@ -149,6 +150,105 @@ a {
 .module-card p,
 .activity-panel p {
   color: var(--color-text-muted);
+}
+
+.admin-layout {
+  align-items: start;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+}
+
+.admin-panel {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.admin-panel h2 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.admin-panel label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.admin-panel input,
+.admin-panel select {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  min-block-size: 44px;
+  padding-block: 0;
+  padding-inline: 12px;
+}
+
+.admin-panel button {
+  background: var(--color-accent);
+  border: 0;
+  border-radius: 6px;
+  color: var(--color-text-inverse);
+  cursor: pointer;
+  font-weight: 700;
+  min-block-size: 40px;
+  padding-inline: 14px;
+}
+
+.member-panel {
+  overflow-x: auto;
+}
+
+.member-table {
+  display: grid;
+  min-inline-size: 640px;
+}
+
+.member-row {
+  align-items: center;
+  border-block-start: 1px solid var(--color-border);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(220px, 2fr) minmax(96px, 1fr) minmax(150px, 1fr) minmax(96px, auto);
+  min-block-size: 64px;
+  padding-block: 10px;
+}
+
+.member-row-head {
+  border-block-start: 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  min-block-size: 36px;
+  text-transform: uppercase;
+}
+
+.member-row strong,
+.member-row small {
+  display: block;
+}
+
+.member-row small {
+  color: var(--color-text-muted);
+  margin-block-start: 4px;
+}
+
+.member-row mark {
+  background: var(--color-bg-surface);
+  border-radius: 999px;
+  color: var(--color-accent-secondary);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  padding-block: 5px;
+  padding-inline: 9px;
+  text-transform: uppercase;
 }
 
 .metric-grid strong {
@@ -281,7 +381,8 @@ a {
 @media (max-width: 860px) {
   .customer-shell,
   .metric-grid,
-  .module-grid {
+  .module-grid,
+  .admin-layout {
     grid-template-columns: 1fr;
   }
 
