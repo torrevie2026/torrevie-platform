@@ -59,6 +59,29 @@ export type CustomerPortalMessages = {
     action: string;
     update: string;
   };
+  crmSlice: {
+    eyebrow: string;
+    title: string;
+    subtitle: string;
+    entitlement: string;
+    owner: string;
+    flow: string;
+    flowValue: string;
+    metricsLabel: string;
+    accounts: string;
+    contacts: string;
+    opportunities: string;
+    workspaceLabel: string;
+    createOpportunity: string;
+    accountName: string;
+    contactName: string;
+    opportunityName: string;
+    amount: string;
+    stage: string;
+    create: string;
+    pipeline: string;
+    emptyStage: string;
+  };
 };
 
 export const messages = {
@@ -118,6 +141,29 @@ export const messages = {
       status: "Status",
       action: "Action",
       update: "Update"
+    },
+    crmSlice: {
+      eyebrow: "CRM",
+      title: "Pipeline",
+      subtitle: "Create an account, add a contact, and move an opportunity through one tenant-scoped pipeline.",
+      entitlement: "Entitlement",
+      owner: "Owner",
+      flow: "Flow",
+      flowValue: "Account to opportunity",
+      metricsLabel: "CRM metrics",
+      accounts: "Accounts",
+      contacts: "Contacts",
+      opportunities: "Opportunities",
+      workspaceLabel: "CRM workspace",
+      createOpportunity: "Create opportunity",
+      accountName: "Account name",
+      contactName: "Contact name",
+      opportunityName: "Opportunity name",
+      amount: "Amount",
+      stage: "Stage",
+      create: "Create",
+      pipeline: "Pipeline",
+      emptyStage: "No opportunities"
     }
   },
   ar: {
@@ -176,6 +222,29 @@ export const messages = {
       status: "الحالة",
       action: "الإجراء",
       update: "تحديث"
+    },
+    crmSlice: {
+      eyebrow: "إدارة العملاء",
+      title: "خط المبيعات",
+      subtitle: "إنشاء حساب وإضافة جهة اتصال وتحريك فرصة ضمن خط مبيعات خاص بالمستأجر.",
+      entitlement: "الاشتراك",
+      owner: "المالك",
+      flow: "التدفق",
+      flowValue: "من الحساب إلى الفرصة",
+      metricsLabel: "مؤشرات إدارة العملاء",
+      accounts: "الحسابات",
+      contacts: "جهات الاتصال",
+      opportunities: "الفرص",
+      workspaceLabel: "مساحة إدارة العملاء",
+      createOpportunity: "إنشاء فرصة",
+      accountName: "اسم الحساب",
+      contactName: "اسم جهة الاتصال",
+      opportunityName: "اسم الفرصة",
+      amount: "المبلغ",
+      stage: "المرحلة",
+      create: "إنشاء",
+      pipeline: "خط المبيعات",
+      emptyStage: "لا توجد فرص"
     }
   }
 } satisfies Record<Locale, CustomerPortalMessages>;

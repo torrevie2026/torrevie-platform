@@ -293,6 +293,27 @@ Status: Completed on 2026-07-11.
   - Schema smoke query confirming four RLS policies on each CRM table
 - Acceptance: the CRM schema applies from a clean reset, and tenant-isolation tests prove Tenant A cannot select, insert, update, or delete Tenant B CRM rows.
 
+## WP-18: CRM vertical slice UI
+
+Status: Completed on 2026-07-11.
+
+- Scope: Customer Portal CRM route, tenant-context-aware CRM account/contact/opportunity/pipeline actions, localized CRM copy, and vertical slice smoke tests.
+- Notes:
+  - CRM domain actions enforce server-side permissions and CRM entitlement checks before tenant-scoped database work.
+  - The smoke test creates an account, contact, and opportunity, then moves the opportunity to the next pipeline stage under local tenant RLS.
+  - `/en/crm` and `/ar/crm` render the first pipeline view, with `/crm` redirecting to the English locale.
+- Verification:
+  - `pnpm test:crm`
+  - `pnpm test:customer-portal-shell`
+  - `pnpm test:localization`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+  - `pnpm test`
+  - `pnpm test:isolation`
+  - Browser check at `http://127.0.0.1:3117/en/crm` and `http://127.0.0.1:3117/ar/crm`
+- Acceptance: a seeded tenant flow can create an account, contact, and opportunity, move the opportunity through the CRM pipeline, and render the pipeline surface in English and Arabic without horizontal overflow.
+
 ## Open Questions
 
 - None.
