@@ -212,6 +212,25 @@ Status: Completed on 2026-07-11.
   - `pnpm test`
 - Acceptance: a failed provisioning step can be retried without re-running already succeeded steps, and provisioning status is visible in the Admin Portal.
 
+## WP-14: Subscription management in the Admin Portal
+
+Status: Completed on 2026-07-11.
+
+- Scope: Admin Portal subscription assignment page, server action for assigning product plans to tenants, plan-derived entitlement materialization, CRM plan feature seed data, and service-role grants for subscription management tables.
+- Notes:
+  - Plan assignment derives the product from the selected plan server-side, then upserts one tenant subscription per product.
+  - Subscription entitlements are rebuilt from `plan_features` whenever a plan is assigned.
+  - Every subscription assignment writes an `audit_events` row synchronously.
+- Verification:
+  - `pnpm supabase:reset`
+  - `pnpm test:subscriptions`
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm build`
+  - `pnpm test:isolation`
+  - `pnpm test`
+- Acceptance: assigning CRM Growth to a tenant creates entitlement rows and permission resolution allows CRM access for that tenant.
+
 ## Open Questions
 
 - None.

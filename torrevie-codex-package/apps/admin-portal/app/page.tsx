@@ -25,7 +25,7 @@ export default async function AdminHomePage() {
           <a href="/">Overview</a>
           <a href="/tenants">Tenants</a>
           <a href="/provisioning">Provisioning</a>
-          <a href="/">Subscriptions</a>
+          <a href="/subscriptions">Subscriptions</a>
           <a href="/">Audit</a>
         </nav>
       </aside>
