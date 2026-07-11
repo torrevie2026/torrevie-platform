@@ -332,6 +332,67 @@ h1 {
   background: #f8d8d8;
 }
 
+.subscription-form {
+  align-items: end;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.subscription-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.subscription-form input,
+.subscription-form select {
+  border: 1px solid #e2e6ec;
+  border-radius: 6px;
+  min-height: 40px;
+  padding: 0 10px;
+}
+
+.subscription-form button {
+  background: var(--torrevie-teal);
+  border: 0;
+  border-radius: 6px;
+  color: var(--torrevie-white);
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.subscription-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.subscription-list {
+  display: grid;
+  gap: 12px;
+}
+
+.subscription-row {
+  align-items: center;
+  border-top: 1px solid #e2e6ec;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 120px);
+  padding-top: 14px;
+}
+
+.subscription-row div {
+  display: grid;
+  gap: 4px;
+}
+
+.subscription-row span {
+  color: var(--torrevie-black);
+  font-size: 13px;
+}
+
 .login-shell {
   display: grid;
   min-height: 100vh;
@@ -410,7 +471,9 @@ h1 {
 
   .tenant-form,
   .tenant-edit,
-  .provisioning-form {
+  .provisioning-form,
+  .subscription-form,
+  .subscription-row {
     grid-template-columns: 1fr;
   }
 

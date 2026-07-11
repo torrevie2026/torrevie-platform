@@ -60,6 +60,31 @@ cross join (
 ) as plan_keys(key, label)
 on conflict (product_id, key) do update set label = excluded.label;
 
+insert into public.plan_features (plan_id, feature_key, limit_value)
+select plans.id, features.feature_key, features.limit_value
+from public.plans
+join public.products on products.id = plans.product_id
+join (
+  values
+    ('starter', 'crm.accounts.limit', 250),
+    ('starter', 'crm.pipeline.enabled', null),
+    ('growth', 'crm.accounts.limit', 2500),
+    ('growth', 'crm.pipeline.enabled', null),
+    ('growth', 'crm.quotes.enabled', null),
+    ('enterprise', 'crm.accounts.limit', null),
+    ('enterprise', 'crm.pipeline.enabled', null),
+    ('enterprise', 'crm.quotes.enabled', null),
+    ('enterprise', 'crm.priority_support.enabled', null)
+) as features(plan_key, feature_key, limit_value)
+  on features.plan_key = plans.key
+where products.key = 'crm'
+  and not exists (
+    select 1
+    from public.plan_features existing
+    where existing.plan_id = plans.id
+      and existing.feature_key = features.feature_key
+  );
+
 insert into public.role_permissions (role_id, permission_id)
 select roles.id, permissions.id
 from public.roles
