@@ -1,4 +1,5 @@
 import { execFileSync, execSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 
 const projectId = "torrevie-codex-package";
 const containerName = `supabase_db_${projectId}`;
@@ -10,7 +11,7 @@ const status = JSON.parse(statusJson);
 
 const email = `auth-smoke-${Date.now()}@example.test`;
 const password = "TestingPassword123!";
-const tenantId = "10000000-0000-0000-0000-000000000701";
+const tenantId = randomUUID();
 
 async function authFetch(path, body) {
   const response = await fetch(`${status.API_URL}${path}`, {

@@ -104,6 +104,25 @@ Status: Completed on 2026-07-11.
   - `pnpm build`
 - Acceptance: local Supabase Auth sign-in issues a JWT containing the expected tenant claim for a test user with an active tenant membership.
 
+## WP-8: Tenant-context package
+
+Status: Completed on 2026-07-11.
+
+- Scope: `packages/tenant-context`, tenant membership resolution, and the transaction helper that sets `app.current_tenant_id`.
+- Dependency justification: added root dev dependency `tsx` so TypeScript package tests can run directly before a full test framework is introduced.
+- Notes:
+  - `packages/tenant-context` defines the only package API that sets `app.current_tenant_id`.
+  - Server-side database clients are represented by a minimal query interface until `packages/database` is implemented.
+- Verification:
+  - `pnpm test:tenant-context`
+  - `pnpm test`
+  - `pnpm test:isolation`
+  - `pnpm test:auth`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+- Acceptance: unit tests cover tenant membership resolution and transaction behavior; integration smoke test confirms RLS sees the expected tenant when `app.current_tenant_id` is set in a transaction.
+
 ## Open Questions
 
 - None.

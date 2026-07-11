@@ -8,8 +8,9 @@
     "lint": "eslint . --max-warnings=0",
     "format": "prettier . --check",
     "typecheck": "pnpm -r --if-present typecheck:local",
-    "test": "pnpm test:auth",
+    "test": "pnpm test:auth && pnpm test:tenant-context",
     "test:auth": "node scripts/auth-claim-smoke.mjs",
+    "test:tenant-context": "tsx packages/tenant-context/src/index.test.ts && tsx scripts/tenant-context-smoke.ts",
     "test:isolation": "node scripts/run-sql-tests.mjs",
     "build": "pnpm -r --if-present build",
     "dev": "pnpm --filter @torrevie/customer-portal dev",
@@ -28,6 +29,7 @@
     "eslint": "9.31.0",
     "prettier": "3.6.2",
     "supabase": "2.109.1",
+    "tsx": "4.23.0",
     "typescript": "5.8.3",
     "typescript-eslint": "8.37.0"
   }
