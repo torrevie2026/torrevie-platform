@@ -38,6 +38,7 @@ async function handle(request: NextRequest, context: RouteContext) {
     const response = await handleTexApiRequest(client, actor, {
       method: request.method,
       path,
+      query: Object.fromEntries(request.nextUrl.searchParams.entries()),
       body: await readBody(request)
     });
 

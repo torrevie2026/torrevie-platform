@@ -5,8 +5,10 @@ import {
   closeTexTrip,
   createTexTrip,
   listTexExpenses,
+  listTexFinanceReview,
   listTexTrips,
   listTexBootstrap,
+  payTexFinanceItems,
   recordTexWebhookSubmission,
   resolveTexActorContext,
   updateTexTrip,
@@ -162,6 +164,47 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("from public.tex_expenses e") && sql.includes("e.status = 'approved'")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000006001",
+            employee_profile_id: "00000000-0000-4000-8000-000000004001",
+            employee_name: "Maya Haddad",
+            vendor: "Airport Cafe",
+            expense_date: "2026-07-12",
+            amount: 120,
+            currency: "AED",
+            base_amount: 120,
+            category: "Meals",
+            trip_name: "Dubai run",
+            notes: "Lunch",
+            approved_at: "2026-07-12T10:00:00.000Z"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("from public.tex_trips t") && sql.includes("driver_payout_status = 'unpaid'")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000008001",
+            name: "Dubai run",
+            driver_employee_profile_id: "00000000-0000-4000-8000-000000004001",
+            driver_name: "Maya Haddad",
+            origin: "Dubai",
+            destination: "Abu Dhabi",
+            start_date: "2026-07-12",
+            driver_trip_amount: 250,
+            subcontractor_driver_name: null,
+            subcontractor_amount: 0,
+            total_amount: 250
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("from public.tex_trips") && sql.includes("budget_amount::float")) {
       return {
         rows: [
@@ -271,6 +314,26 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("update public.tex_expenses") && sql.includes("status = 'paid'")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000006001"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("update public.tex_trips") && sql.includes("driver_payout_status = 'paid'")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000008001"
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("insert into public.tex_unregistered_whatsapp_submissions")) {
       return {
         rows: [
@@ -336,6 +399,27 @@ async function main() {
     assert.equal(trips[0]?.budgetAmount, 1500);
     assert.equal(trips[0]?.expenseCount, 2);
     assert.equal(client.hasSql("from public.tex_trips"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const financeReview = await listTexFinanceReview(client, actor, 7, 2026);
+    assert.equal(financeReview.approvedExpenses[0]?.vendor, "Airport Cafe");
+    assert.equal(financeReview.tripPayouts[0]?.name, "Dubai run");
+    assert.equal(financeReview.totals.netPayable, 370);
+    assert.equal(client.hasSql("e.status = 'approved'"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const payment = await payTexFinanceItems(client, actor, {
+      expenseIds: ["00000000-0000-4000-8000-000000006001"],
+      tripIds: ["00000000-0000-4000-8000-000000008001"]
+    });
+    assert.equal(payment.paidExpenses, 1);
+    assert.equal(payment.paidTrips, 1);
+    assert.equal(client.valuesContain("tex.finance.expense_paid"), true);
+    assert.equal(client.valuesContain("tex.finance.trip_payout_paid"), true);
   }
 
   {

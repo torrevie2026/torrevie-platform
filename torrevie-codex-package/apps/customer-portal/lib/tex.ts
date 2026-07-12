@@ -124,6 +124,53 @@ export type TexTripInput = {
   subcontractorNotes?: string | null;
 };
 
+export type TexFinanceReview = {
+  month: number;
+  year: number;
+  currency: string;
+  approvedExpenses: TexFinanceExpense[];
+  tripPayouts: TexFinanceTripPayout[];
+  totals: {
+    approvedExpenseAmount: number;
+    tripPayoutAmount: number;
+    netPayable: number;
+  };
+};
+
+export type TexFinanceExpense = {
+  id: string;
+  employeeProfileId: string | null;
+  employeeName: string | null;
+  vendor: string | null;
+  expenseDate: string;
+  amount: number;
+  currency: string;
+  baseAmount: number;
+  category: string | null;
+  tripName: string | null;
+  notes: string | null;
+  approvedAt: string | null;
+};
+
+export type TexFinanceTripPayout = {
+  id: string;
+  name: string;
+  driverEmployeeProfileId: string | null;
+  driverName: string | null;
+  origin: string | null;
+  destination: string | null;
+  startDate: string | null;
+  driverTripAmount: number;
+  subcontractorDriverName: string | null;
+  subcontractorAmount: number;
+  totalAmount: number;
+};
+
+export type TexFinancePaymentInput = {
+  expenseIds?: string[];
+  tripIds?: string[];
+};
+
 export type TexWebhookSubmissionInput = {
   senderRaw?: string | null;
   senderPhone?: string | null;
@@ -556,6 +603,164 @@ export async function closeTexTrip(
   });
 }
 
+export async function listTexFinanceReview(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  month: number,
+  year: number
+): Promise<TexFinanceReview> {
+  assertTexPermission(actor, "tex.finance.review");
+  const period = sanitizeFinancePeriod(month, year);
+
+  return withTenantContext(client, actor, async () => {
+    const expenses = await client.query<TexFinanceExpenseRow>(
+      `
+        select
+          e.id,
+          e.employee_profile_id,
+          coalesce(ep.name, e.employee_name) as employee_name,
+          e.vendor,
+          e.expense_date::text as expense_date,
+          e.amount::float as amount,
+          e.currency,
+          coalesce(e.base_amount, e.amount)::float as base_amount,
+          e.category,
+          coalesce(t.name, e.trip_name) as trip_name,
+          e.notes,
+          e.approved_at::text as approved_at
+        from public.tex_expenses e
+        left join public.tex_employee_profiles ep
+          on ep.tenant_id = e.tenant_id
+         and ep.id = e.employee_profile_id
+        left join public.tex_trips t
+          on t.tenant_id = e.tenant_id
+         and t.id = e.trip_id
+        where e.tenant_id = public.current_tenant_id()
+          and e.status = 'approved'
+          and extract(month from e.expense_date)::int = $1
+          and extract(year from e.expense_date)::int = $2
+        order by e.expense_date desc, e.created_at desc
+      `,
+      [period.month, period.year]
+    );
+    const tripPayouts = await client.query<TexFinanceTripPayoutRow>(
+      `
+        select
+          t.id,
+          t.name,
+          t.driver_employee_profile_id,
+          driver.name as driver_name,
+          t.origin,
+          t.destination,
+          t.start_date::text as start_date,
+          t.driver_trip_amount::float as driver_trip_amount,
+          t.subcontractor_driver_name,
+          t.subcontractor_amount::float as subcontractor_amount,
+          (t.driver_trip_amount + t.subcontractor_amount)::float as total_amount
+        from public.tex_trips t
+        left join public.tex_employee_profiles driver
+          on driver.tenant_id = t.tenant_id
+         and driver.id = t.driver_employee_profile_id
+        where t.tenant_id = public.current_tenant_id()
+          and t.driver_payout_status = 'unpaid'
+          and (t.driver_trip_amount > 0 or t.subcontractor_amount > 0)
+          and extract(month from coalesce(t.start_date, t.created_at::date))::int = $1
+          and extract(year from coalesce(t.start_date, t.created_at::date))::int = $2
+        order by coalesce(t.start_date, t.created_at::date) desc, t.created_at desc
+      `,
+      [period.month, period.year]
+    );
+    const approvedExpenses = expenses.rows.map(mapFinanceExpense);
+    const mappedTripPayouts = tripPayouts.rows.map(mapFinanceTripPayout);
+    const approvedExpenseAmount = sum(approvedExpenses.map((expense) => expense.baseAmount));
+    const tripPayoutAmount = sum(mappedTripPayouts.map((trip) => trip.totalAmount));
+
+    return {
+      month: period.month,
+      year: period.year,
+      currency: "AED",
+      approvedExpenses,
+      tripPayouts: mappedTripPayouts,
+      totals: {
+        approvedExpenseAmount,
+        tripPayoutAmount,
+        netPayable: approvedExpenseAmount + tripPayoutAmount
+      }
+    };
+  });
+}
+
+export async function payTexFinanceItems(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexFinancePaymentInput
+): Promise<{ paidExpenses: number; paidTrips: number }> {
+  assertTexPermission(actor, "tex.finance.review");
+  const expenseIds = uniqueUuids(input.expenseIds ?? [], "expense id");
+  const tripIds = uniqueUuids(input.tripIds ?? [], "trip id");
+
+  if (expenseIds.length === 0 && tripIds.length === 0) {
+    throw new Error("Select at least one finance item to pay.");
+  }
+
+  return withTenantContext(client, actor, async () => {
+    let paidExpenses = 0;
+    let paidTrips = 0;
+
+    if (expenseIds.length > 0) {
+      const result = await client.query<{ id: string }>(
+        `
+          update public.tex_expenses
+             set status = 'paid',
+                 finance_reviewed_by = $1,
+                 finance_reviewed_at = now(),
+                 paid_by = $1,
+                 paid_at = now(),
+                 updated_by = $1
+           where tenant_id = public.current_tenant_id()
+             and status = 'approved'
+             and id = any(string_to_array($2, ',')::uuid[])
+          returning id
+        `,
+        [actor.userId, expenseIds.join(",")]
+      );
+      paidExpenses = result.rows.length;
+
+      for (const row of result.rows) {
+        await writeTexAuditEvent(client, actor, "tex.finance.expense_paid", "tex_expense", row.id, {
+          status: "paid"
+        });
+      }
+    }
+
+    if (tripIds.length > 0) {
+      const result = await client.query<{ id: string }>(
+        `
+          update public.tex_trips
+             set driver_payout_status = 'paid',
+                 driver_payout_paid_by = $1,
+                 driver_payout_paid_at = now(),
+                 updated_by = $1
+           where tenant_id = public.current_tenant_id()
+             and driver_payout_status = 'unpaid'
+             and id = any(string_to_array($2, ',')::uuid[])
+          returning id
+        `,
+        [actor.userId, tripIds.join(",")]
+      );
+      paidTrips = result.rows.length;
+
+      for (const row of result.rows) {
+        await writeTexAuditEvent(client, actor, "tex.finance.trip_payout_paid", "tex_trip", row.id, {
+          status: "paid"
+        });
+      }
+    }
+
+    return { paidExpenses, paidTrips };
+  });
+}
+
 export async function createTexExpense(
   client: TenantQueryClient,
   actor: TexActorContext,
@@ -892,6 +1097,35 @@ function tripValues(trip: Required<TexTripInput>, userId: string) {
   ];
 }
 
+function sanitizeFinancePeriod(month: number, year: number) {
+  const parsedMonth = Number(month);
+  const parsedYear = Number(year);
+
+  if (!Number.isInteger(parsedMonth) || parsedMonth < 1 || parsedMonth > 12) {
+    throw new Error("Invalid finance review month.");
+  }
+
+  if (!Number.isInteger(parsedYear) || parsedYear < 2020 || parsedYear > 2100) {
+    throw new Error("Invalid finance review year.");
+  }
+
+  return { month: parsedMonth, year: parsedYear };
+}
+
+function uniqueUuids(values: string[], label: string) {
+  const unique = Array.from(new Set(values));
+
+  for (const value of unique) {
+    assertUuid(value, label);
+  }
+
+  return unique;
+}
+
+function sum(values: number[]) {
+  return values.reduce((total, value) => total + value, 0);
+}
+
 function parseIsoDate(value: string, label: string) {
   const trimmed = value.trim();
 
@@ -1026,6 +1260,39 @@ function mapTripListItem(row: TexTripListRow): TexTripListItem {
   };
 }
 
+function mapFinanceExpense(row: TexFinanceExpenseRow): TexFinanceExpense {
+  return {
+    id: row.id,
+    employeeProfileId: row.employee_profile_id,
+    employeeName: row.employee_name,
+    vendor: row.vendor,
+    expenseDate: row.expense_date,
+    amount: row.amount,
+    currency: row.currency,
+    baseAmount: row.base_amount,
+    category: row.category,
+    tripName: row.trip_name,
+    notes: row.notes,
+    approvedAt: row.approved_at
+  };
+}
+
+function mapFinanceTripPayout(row: TexFinanceTripPayoutRow): TexFinanceTripPayout {
+  return {
+    id: row.id,
+    name: row.name,
+    driverEmployeeProfileId: row.driver_employee_profile_id,
+    driverName: row.driver_name,
+    origin: row.origin,
+    destination: row.destination,
+    startDate: row.start_date,
+    driverTripAmount: row.driver_trip_amount,
+    subcontractorDriverName: row.subcontractor_driver_name,
+    subcontractorAmount: row.subcontractor_amount,
+    totalAmount: row.total_amount
+  };
+}
+
 type TexExpenseCategoryRow = {
   id: string;
   name: string;
@@ -1097,6 +1364,35 @@ type TexTripListRow = {
   driver_payout_status: string;
   expense_count: number;
   spend_amount: number;
+};
+
+type TexFinanceExpenseRow = {
+  id: string;
+  employee_profile_id: string | null;
+  employee_name: string | null;
+  vendor: string | null;
+  expense_date: string;
+  amount: number;
+  currency: string;
+  base_amount: number;
+  category: string | null;
+  trip_name: string | null;
+  notes: string | null;
+  approved_at: string | null;
+};
+
+type TexFinanceTripPayoutRow = {
+  id: string;
+  name: string;
+  driver_employee_profile_id: string | null;
+  driver_name: string | null;
+  origin: string | null;
+  destination: string | null;
+  start_date: string | null;
+  driver_trip_amount: number;
+  subcontractor_driver_name: string | null;
+  subcontractor_amount: number;
+  total_amount: number;
 };
 
 type TexWebhookSubmissionRow = {
