@@ -40,32 +40,89 @@ type RoleRow = {
   key: PlatformRoleKey;
 };
 
+type MembershipRow = {
+  user_id: string;
+  status: string;
+  created_at: string | null;
+};
+
+type UserRow = {
+  id: string;
+  email: string;
+  status: string;
+};
+
+type RoleAssignmentRow = {
+  user_id: string;
+  roles?: { key?: string; scope?: string } | Array<{ key?: string; scope?: string }>;
+};
+
 export async function listPlatformUsers(client: SupabaseClient): Promise<PlatformUserRecord[]> {
   const tenant = await getPlatformTenant(client);
-  const { data, error } = await client
+  const { data: memberships, error: membershipsError } = await client
     .from("tenant_memberships")
-    .select(
-      `
-        user_id,
-        status,
-        created_at,
-        users!inner(email,status),
-        user_role_assignments!inner(
-          roles!inner(key,scope)
-        )
-      `
-    )
+    .select("user_id,status,created_at")
     .eq("tenant_id", tenant.id)
-    .eq("user_role_assignments.roles.scope", "platform")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    throw new Error(`Unable to list platform users: ${error.message}`);
+  if (membershipsError) {
+    throw new Error(`Unable to list platform memberships: ${membershipsError.message}`);
   }
 
-  return ((data ?? []) as unknown[]).flatMap((row) => {
-    const mapped = mapPlatformUserRow(row);
-    return mapped ? [mapped] : [];
+  const membershipRows = (memberships ?? []) as MembershipRow[];
+  const userIds = membershipRows.map((membership) => membership.user_id);
+
+  if (userIds.length === 0) {
+    return [];
+  }
+
+  const [{ data: users, error: usersError }, { data: assignments, error: assignmentsError }] = await Promise.all([
+    client.from("users").select("id,email,status").in("id", userIds),
+    client
+      .from("user_role_assignments")
+      .select("user_id,roles!inner(key,scope)")
+      .eq("tenant_id", tenant.id)
+      .in("user_id", userIds)
+      .eq("roles.scope", "platform")
+  ]);
+
+  if (usersError) {
+    throw new Error(`Unable to list platform user profiles: ${usersError.message}`);
+  }
+
+  if (assignmentsError) {
+    throw new Error(`Unable to list platform role assignments: ${assignmentsError.message}`);
+  }
+
+  const usersById = new Map(((users ?? []) as UserRow[]).map((user) => [user.id, user]));
+  const roleByUserId = new Map<string, PlatformRoleKey>();
+
+  for (const assignment of (assignments ?? []) as RoleAssignmentRow[]) {
+    const role = normalizeRoleKey(assignment.roles);
+
+    if (role) {
+      roleByUserId.set(assignment.user_id, role);
+    }
+  }
+
+  return membershipRows.flatMap((membership) => {
+    const user = usersById.get(membership.user_id);
+    const role = roleByUserId.get(membership.user_id);
+
+    if (!user || !role) {
+      return [];
+    }
+
+    return [
+      {
+        userId: membership.user_id,
+        email: user.email,
+        status: user.status,
+        membershipStatus: membership.status,
+        role,
+        createdAt: membership.created_at ?? ""
+      }
+    ];
   });
 }
 
@@ -291,34 +348,6 @@ async function writePlatformUserAuditEvent(
   }
 }
 
-function mapPlatformUserRow(row: unknown): PlatformUserRecord | null {
-  const candidate = row as {
-    user_id?: string;
-    status?: string;
-    created_at?: string;
-    users?: { email?: string; status?: string };
-    user_role_assignments?: Array<{ roles?: { key?: string } }>;
-  };
-  const role = candidate.user_role_assignments?.[0]?.roles?.key;
-
-  if (!candidate.user_id || !candidate.users?.email || !candidate.users.status || !candidate.status || !role) {
-    return null;
-  }
-
-  if (!platformRoleKeys.includes(role as PlatformRoleKey)) {
-    return null;
-  }
-
-  return {
-    userId: candidate.user_id,
-    email: candidate.users.email,
-    status: candidate.users.status,
-    membershipStatus: candidate.status,
-    role: role as PlatformRoleKey,
-    createdAt: candidate.created_at ?? ""
-  };
-}
-
 function renderPlatformInviteHtml(input: { tenantName: string; role: PlatformRoleKey; actionLink: string }) {
   return `
     <div style="font-family: Inter, Arial, sans-serif; color: #162449; line-height: 1.5;">
@@ -365,6 +394,16 @@ function sanitizePlatformRole(role: PlatformRoleKey) {
   }
 
   return role;
+}
+
+function normalizeRoleKey(value: RoleAssignmentRow["roles"]) {
+  const role = Array.isArray(value) ? value[0]?.key : value?.key;
+
+  if (!role || !platformRoleKeys.includes(role as PlatformRoleKey)) {
+    return null;
+  }
+
+  return role as PlatformRoleKey;
 }
 
 function escapeHtml(value: string) {

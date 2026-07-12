@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { AdminSidebar } from "../components/AdminSidebar";
 import { getSupabaseAdminClient } from "../../lib/admin-client";
 import { getPlatformSession } from "../../lib/session";
@@ -26,9 +26,7 @@ export default async function UsersPage({
     redirect("/login");
   }
 
-  const users = await listPlatformUsers(getSupabaseAdminClient()).catch(() => {
-    notFound();
-  });
+  const users = await listPlatformUsers(getSupabaseAdminClient());
   const { invited } = await searchParams;
 
   return (
