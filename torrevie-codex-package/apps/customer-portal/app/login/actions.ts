@@ -29,5 +29,5 @@ export async function signIn(formData: FormData) {
     redirect("/login?error=invalid_credentials");
   }
 
-  redirect("/tex");
+  redirect("/en");
 }
