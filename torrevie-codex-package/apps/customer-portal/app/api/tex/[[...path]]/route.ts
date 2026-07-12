@@ -1,9 +1,11 @@
-import { createServerClient } from "@supabase/ssr";
-import { getTenantClaimsFromJwt, requireSupabaseBrowserEnv } from "@torrevie/auth";
-import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { handleTexApiRequest } from "../../../../lib/tex-api";
 import { resolveTexActorContext } from "../../../../lib/tex";
+import {
+  isCustomerSessionError,
+  requireVerifiedCustomerSession,
+  resolveCustomerTenantContext
+} from "../../../../lib/server/customer-session";
 import { PostgresTenantQueryClient } from "../../../../lib/server/tenant-query-client";
 
 export const runtime = "nodejs";
@@ -28,19 +30,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
 async function handle(request: NextRequest, context: RouteContext) {
   try {
-    const session = await requireSession();
-    const claims = getTenantClaimsFromJwt(session.accessToken);
-
-    if (!claims.tenant_id) {
-      return json(403, { error: "A tenant claim is required for TEX API access." });
-    }
-
+    const session = await requireVerifiedCustomerSession();
     const client = new PostgresTenantQueryClient(session.userId);
-    const actor = await resolveTexActorContext(client, {
-      tenantId: claims.tenant_id,
-      userId: session.userId,
-      roleScope: claims.role_scope ?? "customer"
-    });
+    const tenantContext = await resolveCustomerTenantContext(client, session);
+    const actor = await resolveTexActorContext(client, tenantContext);
     const path = await pathFromContext(context);
     const response = await handleTexApiRequest(client, actor, {
       method: request.method,
@@ -52,42 +45,6 @@ async function handle(request: NextRequest, context: RouteContext) {
   } catch (error) {
     return json(statusForError(error), { error: messageForError(error) });
   }
-}
-
-async function requireSession() {
-  const cookieStore = await cookies();
-  const { url, anonKey } = requireSupabaseBrowserEnv();
-  const supabase = createServerClient(url, anonKey, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll();
-      },
-      setAll() {
-        return;
-      }
-    }
-  });
-  const {
-    data: { session }
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    throw new UnauthorizedError("Authentication is required for TEX API access.");
-  }
-
-  const {
-    data: { user },
-    error
-  } = await supabase.auth.getUser();
-
-  if (error || !user || user.id !== session.user.id) {
-    throw new UnauthorizedError("Unable to verify the TEX API session.");
-  }
-
-  return {
-    accessToken: session.access_token,
-    userId: user.id
-  };
 }
 
 async function pathFromContext(context: RouteContext) {
@@ -109,7 +66,7 @@ function json(status: number, body: unknown) {
 }
 
 function statusForError(error: unknown) {
-  if (error instanceof UnauthorizedError) {
+  if (isCustomerSessionError(error)) {
     return 401;
   }
 
@@ -133,5 +90,3 @@ function statusForError(error: unknown) {
 function messageForError(error: unknown) {
   return error instanceof Error ? error.message : "Unexpected TEX API error.";
 }
-
-class UnauthorizedError extends Error {}
