@@ -72,6 +72,47 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("from public.tex_expenses e") && sql.includes("e.status = 'approved'")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000006001",
+            employee_profile_id: "00000000-0000-4000-8000-000000004001",
+            employee_name: "Maya Haddad",
+            vendor: "Airport Cafe",
+            expense_date: "2026-07-12",
+            amount: 120,
+            currency: "AED",
+            base_amount: 120,
+            category: "Meals",
+            trip_name: "Dubai run",
+            notes: "Lunch",
+            approved_at: "2026-07-12T10:00:00.000Z"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("from public.tex_trips t") && sql.includes("driver_payout_status = 'unpaid'")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000008001",
+            name: "Dubai run",
+            driver_employee_profile_id: "00000000-0000-4000-8000-000000004001",
+            driver_name: "Maya Haddad",
+            origin: "Dubai",
+            destination: "Abu Dhabi",
+            start_date: "2026-07-12",
+            driver_trip_amount: 250,
+            subcontractor_driver_name: null,
+            subcontractor_amount: 0,
+            total_amount: 250
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("from public.tex_trips") && sql.includes("budget_amount::float")) {
       return {
         rows: [
@@ -163,6 +204,26 @@ class RecordingTexApiClient implements TenantQueryClient {
             driver_payout_status: "unpaid",
             expense_count: 0,
             spend_amount: 0
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("update public.tex_expenses") && sql.includes("status = 'paid'")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000006001"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("update public.tex_trips") && sql.includes("driver_payout_status = 'paid'")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000008001"
           }
         ] as Row[]
       };
@@ -308,6 +369,36 @@ async function main() {
     assert.equal(response.status, 200);
     assert.equal(client.hasSql("status = 'closed'"), true);
     assert.equal(client.valuesContain("tex.trip.closed"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "GET",
+      path: "/finance-review",
+      query: {
+        month: "7",
+        year: "2026"
+      }
+    });
+    assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /Airport Cafe/);
+    assert.equal(client.hasSql("e.status = 'approved'"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "POST",
+      path: "/finance-review/pay",
+      body: {
+        expenseIds: ["00000000-0000-4000-8000-000000006001"],
+        tripIds: ["00000000-0000-4000-8000-000000008001"]
+      }
+    });
+    assert.equal(response.status, 200);
+    assert.equal(client.valuesContain("tex.finance.expense_paid"), true);
+    assert.equal(client.valuesContain("tex.finance.trip_payout_paid"), true);
   }
 
   {

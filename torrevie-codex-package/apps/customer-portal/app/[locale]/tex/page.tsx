@@ -1,7 +1,13 @@
 import { dirForLocale, getMessages, isLocale, type Locale } from "@torrevie/localization";
 import { withTenantContext } from "@torrevie/tenant-context";
 import { notFound, redirect } from "next/navigation";
-import { listTexBootstrap, resolveTexActorContext, type TexActorContext, type TexExpenseListItem } from "../../../lib/tex";
+import {
+  listTexBootstrap,
+  listTexFinanceReview,
+  resolveTexActorContext,
+  type TexActorContext,
+  type TexExpenseListItem
+} from "../../../lib/tex";
 import {
   isCustomerSessionError,
   requireVerifiedCustomerSession,
@@ -9,12 +15,13 @@ import {
 } from "../../../lib/server/customer-session";
 import { PostgresTenantQueryClient } from "../../../lib/server/tenant-query-client";
 import { TexExpensesClient } from "./TexExpensesClient";
+import { TexFinanceClient } from "./TexFinanceClient";
 import { TexTripsClient } from "./TexTripsClient";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type TexSection = "dashboard" | "expenses" | "trips" | "people" | "whatsapp" | "notifications" | "settings";
+type TexSection = "dashboard" | "expenses" | "trips" | "finance" | "people" | "whatsapp" | "notifications" | "settings";
 
 type TexDashboard = {
   tenantName: string;
@@ -169,6 +176,7 @@ export default async function TexPage({
     const actor = await resolveTexActorContext(client, tenantContext);
     const bootstrap = await listTexBootstrap(client, actor);
     const dashboard = await listTexDashboard(client, actor);
+    const financeReview = section === "finance" ? await listCurrentTexFinanceReview(client, actor) : null;
 
     return (
       <main className="customer-shell" data-visual-check="tex-module-shell" lang={locale} dir={dirForLocale(locale)}>
@@ -206,7 +214,7 @@ export default async function TexPage({
             </div>
           </header>
 
-          {renderTexSection(section, dashboard, bootstrap)}
+          {renderTexSection(section, dashboard, bootstrap, financeReview)}
         </section>
       </main>
     );
@@ -226,6 +234,7 @@ function texNavItems(locale: Locale) {
     { section: "dashboard" as const, label: "Dashboard", href: base },
     { section: "expenses" as const, label: "Expenses", href: `${base}?section=expenses` },
     { section: "trips" as const, label: "Trips", href: `${base}?section=trips` },
+    { section: "finance" as const, label: "Finance review", href: `${base}?section=finance` },
     { section: "people" as const, label: "People", href: `${base}?section=people` },
     { section: "whatsapp" as const, label: "WhatsApp intake", href: `${base}?section=whatsapp` },
     { section: "notifications" as const, label: "Notifications", href: `${base}?section=notifications` },
@@ -237,6 +246,7 @@ function readSection(value: string | undefined): TexSection {
   if (
     value === "expenses" ||
     value === "trips" ||
+    value === "finance" ||
     value === "people" ||
     value === "whatsapp" ||
     value === "notifications" ||
@@ -248,7 +258,12 @@ function readSection(value: string | undefined): TexSection {
   return "dashboard";
 }
 
-function renderTexSection(section: TexSection, dashboard: TexDashboard, bootstrap: Awaited<ReturnType<typeof listTexBootstrap>>) {
+function renderTexSection(
+  section: TexSection,
+  dashboard: TexDashboard,
+  bootstrap: Awaited<ReturnType<typeof listTexBootstrap>>,
+  financeReview: Awaited<ReturnType<typeof listTexFinanceReview>> | null
+) {
   if (section === "expenses") {
     return (
       <section className="customer-section activity-panel" aria-labelledby="tex-expenses-title">
@@ -268,6 +283,15 @@ function renderTexSection(section: TexSection, dashboard: TexDashboard, bootstra
       <section className="customer-section activity-panel" aria-labelledby="tex-trips-title">
         <h2 id="tex-trips-title">Trips</h2>
         <TexTripsClient teams={bootstrap.teams} employees={bootstrap.employeeProfiles} initialTrips={dashboard.tripsList.map(mapTripForClient)} />
+      </section>
+    );
+  }
+
+  if (section === "finance") {
+    return (
+      <section className="customer-section activity-panel" aria-labelledby="tex-finance-title">
+        <h2 id="tex-finance-title">Finance review</h2>
+        {financeReview ? <TexFinanceClient initialReview={financeReview} /> : <p>Finance review is not available.</p>}
       </section>
     );
   }
@@ -367,6 +391,7 @@ function renderTexSection(section: TexSection, dashboard: TexDashboard, bootstra
         <div className="module-grid">
           <ModuleCard title="Expenses" text="Migrated expense records and approval status." value={dashboard.openExpenses} href="?section=expenses" />
           <ModuleCard title="Trips" text="Trip and leg records under the platform tenant model." value={dashboard.trips} href="?section=trips" />
+          <ModuleCard title="Finance review" text="Approved expenses and trip driver payouts waiting for payment." value={dashboard.pendingApprovals} href="?section=finance" />
           <ModuleCard title="People" text="Employee profiles available for expense submission." value={dashboard.employees.length} href="?section=people" />
           <ModuleCard title="WhatsApp intake" text="Unregistered submissions requiring review." value={dashboard.whatsappOpen} href="?section=whatsapp" />
         </div>
@@ -423,6 +448,19 @@ function formatDate(value: string) {
 
 function formatAmount(value: number) {
   return new Intl.NumberFormat("en", { maximumFractionDigits: 2 }).format(value);
+}
+
+async function listCurrentTexFinanceReview(client: PostgresTenantQueryClient, actor: TexActorContext) {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en", {
+    month: "numeric",
+    timeZone: "Asia/Dubai",
+    year: "numeric"
+  }).formatToParts(now);
+  const month = Number(parts.find((part) => part.type === "month")?.value ?? now.getUTCMonth() + 1);
+  const year = Number(parts.find((part) => part.type === "year")?.value ?? now.getUTCFullYear());
+
+  return listTexFinanceReview(client, actor, month, year);
 }
 
 async function listTexDashboard(client: PostgresTenantQueryClient, actor: TexActorContext): Promise<TexDashboard> {

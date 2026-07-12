@@ -529,6 +529,13 @@ a {
   grid-template-columns: minmax(320px, 460px) minmax(0, 1fr);
 }
 
+.tex-finance-workspace {
+  align-items: start;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+}
+
 .tex-form-panel {
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
@@ -809,6 +816,73 @@ a {
   display: block;
 }
 
+.tex-finance-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.tex-finance-summary article {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+}
+
+.tex-finance-summary span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.tex-finance-summary strong {
+  color: var(--color-accent);
+  font-size: 20px;
+}
+
+.tex-finance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tex-finance-list {
+  display: grid;
+  gap: 10px;
+}
+
+.tex-finance-row {
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) minmax(120px, auto);
+  padding: 12px;
+}
+
+.tex-finance-row input {
+  accent-color: var(--color-accent);
+}
+
+.tex-finance-row strong,
+.tex-finance-row small {
+  display: block;
+}
+
+.tex-finance-row small {
+  color: var(--color-text-muted);
+  margin-block-start: 4px;
+}
+
+.tex-finance-row b {
+  font-size: 16px;
+  text-align: end;
+}
+
 .login-shell {
   display: grid;
   min-height: 100vh;
@@ -878,14 +952,16 @@ a {
   .admin-layout,
   .crm-workspace,
   .tex-expense-workspace,
-  .tex-trip-workspace {
+  .tex-trip-workspace,
+  .tex-finance-workspace {
     grid-template-columns: 1fr;
   }
 
   .crm-form-grid,
   .pipeline-board,
   .tex-form-grid,
-  .tex-expense-card {
+  .tex-expense-card,
+  .tex-finance-row {
     grid-template-columns: 1fr;
   }
 
@@ -904,6 +980,10 @@ a {
   }
 
   .tex-trip-card strong {
+    text-align: start;
+  }
+
+  .tex-finance-row b {
     text-align: start;
   }
 

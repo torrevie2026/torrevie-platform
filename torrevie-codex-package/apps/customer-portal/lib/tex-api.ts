@@ -5,13 +5,16 @@ import {
   createTexTrip,
   listTexBootstrap,
   listTexExpenses,
+  listTexFinanceReview,
   listTexTrips,
+  payTexFinanceItems,
   recordTexWebhookSubmission,
   updateTexTrip,
   updateTexExpenseStatus,
   type TexActorContext,
   type TexExpenseInput,
   type TexExpenseStatus,
+  type TexFinancePaymentInput,
   type TexTripInput,
   type TexWebhookSubmissionInput
 } from "./tex";
@@ -19,6 +22,7 @@ import {
 export type TexApiRequest = {
   method: string;
   path: string;
+  query?: Record<string, string>;
   body?: unknown;
 };
 
@@ -59,6 +63,15 @@ export async function handleTexApiRequest(
 
   if (path === "/trips" && method === "POST") {
     return json(201, { trip: await createTexTrip(client, actor, request.body as TexTripInput) });
+  }
+
+  if (path === "/finance-review" && method === "GET") {
+    const query = request.query ?? {};
+    return json(200, await listTexFinanceReview(client, actor, readInteger(query.month), readInteger(query.year)));
+  }
+
+  if (path === "/finance-review/pay" && method === "POST") {
+    return json(200, await payTexFinanceItems(client, actor, request.body as TexFinancePaymentInput));
   }
 
   const tripMatch = path.match(/^\/trips\/([0-9a-f-]+)$/i);
@@ -118,4 +131,14 @@ function readExpenseStatus(value: unknown): Exclude<TexExpenseStatus, "pending">
 
 function readOptionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readInteger(value: unknown) {
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`Invalid integer: ${String(value)}`);
+  }
+
+  return parsed;
 }
