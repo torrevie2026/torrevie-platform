@@ -28,7 +28,7 @@ export default async function SubscriptionsPage() {
 
   return (
     <main className="admin-shell">
-      <AdminSidebar />
+      <AdminSidebar activeHref="/subscriptions" />
       <section className="admin-main">
         <header className="topbar">
           <div>
