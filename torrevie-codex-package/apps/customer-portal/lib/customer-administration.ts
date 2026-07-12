@@ -26,6 +26,37 @@ export type CustomerInviteInput = {
   role: RoleKey;
 };
 
+export type WhatsappProvider = "ultramsg" | "wappfly" | "meta";
+
+export type TenantWhatsappSettings = {
+  provider: WhatsappProvider;
+  webhookUrl: string;
+  whatsappInstanceId: string;
+  wappflySessionId: string;
+  metaPhoneNumberId: string;
+  metaWhatsappBusinessAccountId: string;
+  googleMapsEnabled: boolean;
+  apiKeyConfigured: boolean;
+  apiKeyLast4: string;
+  appSecretConfigured: boolean;
+  appSecretLast4: string;
+  webhookVerifyTokenConfigured: boolean;
+  webhookVerifyTokenLast4: string;
+};
+
+export type TenantWhatsappSettingsInput = {
+  provider: WhatsappProvider;
+  webhookUrl?: string | null;
+  whatsappInstanceId?: string | null;
+  wappflySessionId?: string | null;
+  metaPhoneNumberId?: string | null;
+  metaWhatsappBusinessAccountId?: string | null;
+  googleMapsEnabled: boolean;
+  apiKey?: string | null;
+  appSecret?: string | null;
+  webhookVerifyToken?: string | null;
+};
+
 export async function listCustomerMembers(
   client: TenantQueryClient,
   actor: CustomerAdminContext
@@ -116,6 +147,161 @@ export async function inviteCustomerUser(
   });
 }
 
+export async function getTenantWhatsappSettings(
+  client: TenantQueryClient,
+  actor: CustomerAdminContext
+): Promise<TenantWhatsappSettings> {
+  assertTenantSettingsPermission(actor);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<WhatsappSettingsRow>(
+      `
+        select
+          whatsapp_provider,
+          whatsapp_instance_id,
+          wappfly_session_id,
+          meta_phone_number_id,
+          meta_whatsapp_business_account_id,
+          google_maps_enabled,
+          whatsapp_webhook_url,
+          whatsapp_webhook_verify_token_last4,
+          whatsapp_api_key_last4,
+          whatsapp_app_secret_last4,
+          whatsapp_keys_configured
+        from public.tex_integration_settings
+        where tenant_id = public.current_tenant_id()
+        limit 1
+      `
+    );
+
+    return mapWhatsappSettings(result.rows[0]);
+  });
+}
+
+export async function updateTenantWhatsappSettings(
+  client: TenantQueryClient,
+  actor: CustomerAdminContext,
+  input: TenantWhatsappSettingsInput
+): Promise<TenantWhatsappSettings> {
+  assertTenantSettingsPermission(actor);
+
+  const provider = sanitizeWhatsappProvider(input.provider);
+  const webhookUrl = cleanOptional(input.webhookUrl);
+  const whatsappInstanceId = cleanOptional(input.whatsappInstanceId);
+  const wappflySessionId = cleanOptional(input.wappflySessionId);
+  const metaPhoneNumberId = cleanOptional(input.metaPhoneNumberId);
+  const metaWhatsappBusinessAccountId = cleanOptional(input.metaWhatsappBusinessAccountId);
+  const apiKey = cleanOptional(input.apiKey);
+  const appSecret = cleanOptional(input.appSecret);
+  const webhookVerifyToken = cleanOptional(input.webhookVerifyToken);
+
+  validateWebhookUrl(webhookUrl);
+
+  return withTenantContext(client, actor, async () => {
+    if (apiKey) {
+      await upsertTenantIntegrationSecret(client, actor, "api_key", apiKey);
+    }
+
+    if (appSecret) {
+      await upsertTenantIntegrationSecret(client, actor, "app_secret", appSecret);
+    }
+
+    if (webhookVerifyToken) {
+      await upsertTenantIntegrationSecret(client, actor, "webhook_verify_token", webhookVerifyToken);
+    }
+
+    const apiKeyLast4 = apiKey ? last4(apiKey) : undefined;
+    const appSecretLast4 = appSecret ? last4(appSecret) : undefined;
+    const webhookVerifyTokenLast4 = webhookVerifyToken ? last4(webhookVerifyToken) : undefined;
+
+    const result = await client.query<WhatsappSettingsRow>(
+      `
+        insert into public.tex_integration_settings (
+          tenant_id,
+          whatsapp_provider,
+          whatsapp_instance_id,
+          wappfly_session_id,
+          meta_phone_number_id,
+          meta_whatsapp_business_account_id,
+          google_maps_enabled,
+          whatsapp_webhook_url,
+          whatsapp_api_key_last4,
+          whatsapp_app_secret_last4,
+          whatsapp_webhook_verify_token_last4,
+          whatsapp_keys_configured,
+          created_by,
+          updated_by
+        )
+        values (
+          public.current_tenant_id(),
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          $10,
+          $11,
+          $12,
+          $12
+        )
+        on conflict (tenant_id)
+        do update set
+          whatsapp_provider = excluded.whatsapp_provider,
+          whatsapp_instance_id = excluded.whatsapp_instance_id,
+          wappfly_session_id = excluded.wappfly_session_id,
+          meta_phone_number_id = excluded.meta_phone_number_id,
+          meta_whatsapp_business_account_id = excluded.meta_whatsapp_business_account_id,
+          google_maps_enabled = excluded.google_maps_enabled,
+          whatsapp_webhook_url = excluded.whatsapp_webhook_url,
+          whatsapp_api_key_last4 = coalesce(excluded.whatsapp_api_key_last4, public.tex_integration_settings.whatsapp_api_key_last4),
+          whatsapp_app_secret_last4 = coalesce(excluded.whatsapp_app_secret_last4, public.tex_integration_settings.whatsapp_app_secret_last4),
+          whatsapp_webhook_verify_token_last4 = coalesce(
+            excluded.whatsapp_webhook_verify_token_last4,
+            public.tex_integration_settings.whatsapp_webhook_verify_token_last4
+          ),
+          whatsapp_keys_configured = public.tex_integration_settings.whatsapp_keys_configured or excluded.whatsapp_keys_configured,
+          updated_by = excluded.updated_by
+        returning
+          whatsapp_provider,
+          whatsapp_instance_id,
+          wappfly_session_id,
+          meta_phone_number_id,
+          meta_whatsapp_business_account_id,
+          google_maps_enabled,
+          whatsapp_webhook_url,
+          whatsapp_webhook_verify_token_last4,
+          whatsapp_api_key_last4,
+          whatsapp_app_secret_last4,
+          whatsapp_keys_configured
+      `,
+      [
+        provider,
+        whatsappInstanceId,
+        wappflySessionId,
+        metaPhoneNumberId,
+        metaWhatsappBusinessAccountId,
+        input.googleMapsEnabled,
+        webhookUrl,
+        apiKeyLast4 ?? null,
+        appSecretLast4 ?? null,
+        webhookVerifyTokenLast4 ?? null,
+        Boolean(apiKey || appSecret || webhookVerifyToken),
+        actor.userId
+      ]
+    );
+
+    await writeCustomerAdminAuditEvent(client, actor, "tenant.integration.whatsapp.updated", "tex_integration_settings", actor.tenantId, {
+      provider
+    });
+
+    return mapWhatsappSettings(result.rows[0]);
+  });
+}
+
 export async function assignCustomerUserRole(
   client: TenantQueryClient,
   actor: CustomerAdminContext,
@@ -181,6 +367,52 @@ function assertCustomerPermission(actor: CustomerAdminContext, permission: "tena
     roles: actor.roles,
     permission
   });
+}
+
+function assertTenantSettingsPermission(actor: CustomerAdminContext) {
+  if (actor.roleScope !== "customer") {
+    throw new Error("Tenant integration setup requires a customer tenant context.");
+  }
+
+  assertPermission({
+    roles: actor.roles,
+    permission: "tenant.settings.manage"
+  });
+}
+
+async function upsertTenantIntegrationSecret(
+  client: TenantQueryClient,
+  actor: CustomerAdminContext,
+  secretName: "api_key" | "app_secret" | "webhook_verify_token",
+  secretValue: string
+) {
+  await client.query(
+    `
+      delete from public.tenant_integration_secrets
+       where tenant_id = public.current_tenant_id()
+         and product_key = 'tex'
+         and integration_key = 'whatsapp'
+         and secret_name = $1
+    `,
+    [secretName]
+  );
+
+  await client.query(
+    `
+      insert into public.tenant_integration_secrets (
+        tenant_id,
+        product_key,
+        integration_key,
+        secret_name,
+        secret_value,
+        secret_last4,
+        created_by,
+        updated_by
+      )
+      values (public.current_tenant_id(), 'tex', 'whatsapp', $1, $2, $3, $4, $4)
+    `,
+    [secretName, secretValue, last4(secretValue), actor.userId]
+  );
 }
 
 async function upsertUserIdentity(client: TenantQueryClient, email: string, actorUserId: string) {
@@ -313,6 +545,52 @@ function cleanOptional(value: string | null | undefined) {
   return clean ? clean : null;
 }
 
+function sanitizeWhatsappProvider(value: string): WhatsappProvider {
+  if (value === "ultramsg" || value === "wappfly" || value === "meta") {
+    return value;
+  }
+
+  throw new Error(`Unsupported WhatsApp provider: ${value}`);
+}
+
+function validateWebhookUrl(value: string | null) {
+  if (!value) {
+    return;
+  }
+
+  try {
+    const url = new URL(value);
+
+    if (url.protocol !== "https:") {
+      throw new Error("Webhook URL must use HTTPS.");
+    }
+  } catch {
+    throw new Error("Webhook URL must be a valid HTTPS URL.");
+  }
+}
+
+function last4(value: string) {
+  return value.slice(-4);
+}
+
+function mapWhatsappSettings(row: WhatsappSettingsRow | undefined): TenantWhatsappSettings {
+  return {
+    provider: row?.whatsapp_provider ?? "ultramsg",
+    webhookUrl: row?.whatsapp_webhook_url ?? "",
+    whatsappInstanceId: row?.whatsapp_instance_id ?? "",
+    wappflySessionId: row?.wappfly_session_id ?? "",
+    metaPhoneNumberId: row?.meta_phone_number_id ?? "",
+    metaWhatsappBusinessAccountId: row?.meta_whatsapp_business_account_id ?? "",
+    googleMapsEnabled: row?.google_maps_enabled ?? false,
+    apiKeyConfigured: Boolean(row?.whatsapp_api_key_last4 || row?.whatsapp_keys_configured),
+    apiKeyLast4: row?.whatsapp_api_key_last4 ?? "",
+    appSecretConfigured: Boolean(row?.whatsapp_app_secret_last4 || row?.whatsapp_keys_configured),
+    appSecretLast4: row?.whatsapp_app_secret_last4 ?? "",
+    webhookVerifyTokenConfigured: Boolean(row?.whatsapp_webhook_verify_token_last4 || row?.whatsapp_keys_configured),
+    webhookVerifyTokenLast4: row?.whatsapp_webhook_verify_token_last4 ?? ""
+  };
+}
+
 function sanitizeAssignableRole(role: RoleKey) {
   if (!assignableCustomerRoles.includes(role)) {
     throw new Error(`Role cannot be assigned by a customer administrator: ${role}`);
@@ -343,4 +621,18 @@ type MemberRow = {
   display_name: string | null;
   status: MembershipStatus;
   role_key: string | null;
+};
+
+type WhatsappSettingsRow = {
+  whatsapp_provider: WhatsappProvider;
+  whatsapp_instance_id: string | null;
+  wappfly_session_id: string | null;
+  meta_phone_number_id: string | null;
+  meta_whatsapp_business_account_id: string | null;
+  google_maps_enabled: boolean | null;
+  whatsapp_webhook_url: string | null;
+  whatsapp_webhook_verify_token_last4: string | null;
+  whatsapp_api_key_last4: string | null;
+  whatsapp_app_secret_last4: string | null;
+  whatsapp_keys_configured: boolean | null;
 };

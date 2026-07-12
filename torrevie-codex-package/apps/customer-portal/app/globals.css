@@ -412,6 +412,42 @@ a {
   overflow-x: auto;
 }
 
+.tenant-setup-layout {
+  grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr);
+}
+
+.tenant-integration-panel {
+  align-content: start;
+}
+
+.admin-panel-copy {
+  color: var(--color-text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.tenant-integration-form {
+  display: grid;
+  gap: 16px;
+}
+
+.tenant-integration-grid,
+.tenant-secret-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tenant-secret-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tenant-integration-form .tex-checkbox-row {
+  align-items: center;
+  display: flex;
+  font-weight: 700;
+}
+
 .member-table {
   display: grid;
   min-inline-size: 640px;
@@ -1379,6 +1415,8 @@ a {
   .crm-form-grid,
   .pipeline-board,
   .tex-form-grid,
+  .tenant-integration-grid,
+  .tenant-secret-grid,
   .tex-expense-card,
   .tex-finance-row {
     grid-template-columns: 1fr;
