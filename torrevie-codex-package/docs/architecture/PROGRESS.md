@@ -429,6 +429,7 @@ Status: In progress on 2026-07-12.
   - Created production Vercel projects for Admin Portal and Customer Portal from `main` at `a1f4d68`.
   - Configured public production Supabase/browser environment variables on both Vercel production projects.
   - Added `admin.torrevie.com` and `app.torrevie.com` to the matching Vercel production projects.
+  - Configured Cloudflare DNS CNAME records for both production hostnames with proxy disabled.
 - Verification:
   - Production migration history includes platform foundation, auth hook, admin tenant lifecycle grants, provisioning grants, subscription grants, and CRM schema/RLS.
   - Baseline catalogue counts: 11 roles, 24 permissions, 5 products, 15 plans, 9 plan features, and 77 role-permission joins.
@@ -439,14 +440,12 @@ Status: In progress on 2026-07-12.
   - Customer production Vercel deployment `dpl_PiChzcSPJmmVAMNPQJMCA5YqwvvE` is `READY`.
   - Admin production `/login` returns HTTP 200 at the Vercel URL.
   - Customer production `/en` returns HTTP 200 at the Vercel URL.
+  - `admin.torrevie.com` resolves to `ec1d49f965f4edb6.vercel-dns-017.com`, is valid in Vercel, and `/login` returns HTTP 200.
+  - `app.torrevie.com` resolves to `5ce3c2ebe9f1006e.vercel-dns-017.com`, is valid in Vercel, and `/en` returns HTTP 200.
   - Fresh Vercel production runtime error scans for both projects returned no errors after the env redeploys.
 - Remaining:
   - Set `SUPABASE_SERVICE_ROLE_KEY` directly in the Admin Portal production Vercel project, scoped server-only. This value was not read or handled by Codex.
-  - Configure Cloudflare DNS records required by Vercel:
-    - `admin.torrevie.com`: CNAME `admin` to `ec1d49f965f4edb6.vercel-dns-017.com.`, proxy disabled.
-    - `app.torrevie.com`: CNAME `app` to `5ce3c2ebe9f1006e.vercel-dns-017.com.`, proxy disabled.
-  - Re-check both Vercel domains after DNS propagation.
 
 ## Open Questions
 
-- WP-24 production Vercel project creation and DNS access remain pending.
+- WP-24 production DNS is configured and validated. The only remaining production provisioning handoff is setting the Admin Portal `SUPABASE_SERVICE_ROLE_KEY` directly in Vercel as a server-only secret.
