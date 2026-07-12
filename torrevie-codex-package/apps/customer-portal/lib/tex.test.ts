@@ -2,11 +2,14 @@ import { strict as assert } from "node:assert";
 import type { QueryResult, QueryValue, TenantQueryClient } from "@torrevie/tenant-context";
 import {
   createTexExpense,
+  closeTexTrip,
+  createTexTrip,
   listTexExpenses,
   listTexTrips,
   listTexBootstrap,
   recordTexWebhookSubmission,
   resolveTexActorContext,
+  updateTexTrip,
   updateTexExpenseStatus,
   type TexActorContext
 } from "./tex";
@@ -165,12 +168,91 @@ class RecordingTexClient implements TenantQueryClient {
           {
             id: "00000000-0000-4000-8000-000000008001",
             name: "Dubai run",
+            description: "Port delivery",
+            trip_type: "logistics",
             origin: "Dubai",
             destination: "Abu Dhabi",
             status: "open",
             start_date: "2026-07-12",
             end_date: null,
-            budget_amount: 1500
+            budget_amount: 1500,
+            enforce_currency: true,
+            enforced_currency: "AED",
+            team_id: null,
+            team_name: null,
+            container_number: "MSKU123",
+            driver_employee_profile_id: null,
+            driver_name: null,
+            driver_trip_amount: 250,
+            subcontractor_driver_name: null,
+            subcontractor_amount: 0,
+            driver_payout_status: "unpaid",
+            expense_count: 2,
+            spend_amount: 300
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("update public.tex_trips") && sql.includes("status = 'closed'")) {
+      return {
+        rows: [
+          {
+            id: values[1],
+            name: "Dubai run",
+            description: "Port delivery",
+            trip_type: "logistics",
+            origin: "Dubai",
+            destination: "Abu Dhabi",
+            status: "closed",
+            start_date: "2026-07-12",
+            end_date: null,
+            budget_amount: 1500,
+            enforce_currency: true,
+            enforced_currency: "AED",
+            team_id: null,
+            team_name: null,
+            container_number: "MSKU123",
+            driver_employee_profile_id: null,
+            driver_name: null,
+            driver_trip_amount: 250,
+            subcontractor_driver_name: null,
+            subcontractor_amount: 0,
+            driver_payout_status: "unpaid",
+            expense_count: 0,
+            spend_amount: 0
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_trips") || sql.includes("update public.tex_trips")) {
+      return {
+        rows: [
+          {
+            id: sql.includes("insert into public.tex_trips") ? "00000000-0000-4000-8000-000000008001" : values[18],
+            name: values[0] ?? "Dubai run",
+            description: values[1] ?? null,
+            trip_type: values[2] ?? "general",
+            origin: values[3] ?? null,
+            destination: values[4] ?? null,
+            status: sql.includes("status = 'closed'") ? "closed" : "open",
+            start_date: values[6] ?? null,
+            end_date: values[7] ?? null,
+            budget_amount: values[5] ?? null,
+            enforce_currency: values[8] ?? false,
+            enforced_currency: values[9] ?? null,
+            team_id: values[10] ?? null,
+            team_name: null,
+            container_number: values[11] ?? null,
+            driver_employee_profile_id: values[12] ?? null,
+            driver_name: null,
+            driver_trip_amount: values[13] ?? 0,
+            subcontractor_driver_name: values[14] ?? null,
+            subcontractor_amount: values[15] ?? 0,
+            driver_payout_status: "unpaid",
+            expense_count: 0,
+            spend_amount: 0
           }
         ] as Row[]
       };
@@ -252,7 +334,44 @@ async function main() {
     const trips = await listTexTrips(client, actor);
     assert.equal(trips[0]?.name, "Dubai run");
     assert.equal(trips[0]?.budgetAmount, 1500);
+    assert.equal(trips[0]?.expenseCount, 2);
     assert.equal(client.hasSql("from public.tex_trips"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const trip = await createTexTrip(client, actor, {
+      name: "Dubai run",
+      tripType: "logistics",
+      origin: "Dubai",
+      destination: "Abu Dhabi",
+      budgetAmount: 1500,
+      enforceCurrency: true,
+      enforcedCurrency: "AED"
+    });
+    assert.equal(trip.name, "Dubai run");
+    assert.equal(client.hasSql("insert into public.tex_trips"), true);
+    assert.equal(client.valuesContain("tex.trip.created"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const trip = await updateTexTrip(client, actor, "00000000-0000-4000-8000-000000008001", {
+      name: "Dubai run updated",
+      origin: "Dubai",
+      destination: "Sharjah"
+    });
+    assert.equal(trip.name, "Dubai run updated");
+    assert.equal(client.hasSql("update public.tex_trips"), true);
+    assert.equal(client.valuesContain("tex.trip.updated"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const trip = await closeTexTrip(client, actor, "00000000-0000-4000-8000-000000008001");
+    assert.equal(trip.status, "closed");
+    assert.equal(client.hasSql("status = 'closed'"), true);
+    assert.equal(client.valuesContain("tex.trip.closed"), true);
   }
 
   {

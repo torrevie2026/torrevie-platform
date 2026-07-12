@@ -9,6 +9,7 @@ import {
 } from "../../../lib/server/customer-session";
 import { PostgresTenantQueryClient } from "../../../lib/server/tenant-query-client";
 import { TexExpensesClient } from "./TexExpensesClient";
+import { TexTripsClient } from "./TexTripsClient";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -255,16 +256,7 @@ function renderTexSection(section: TexSection, dashboard: TexDashboard, bootstra
         <TexExpensesClient
           categories={bootstrap.categories}
           employees={bootstrap.employeeProfiles}
-          trips={dashboard.tripsList.map((trip) => ({
-            id: trip.id,
-            name: trip.name,
-            origin: trip.origin,
-            destination: trip.destination,
-            status: trip.status,
-            startDate: trip.startDate,
-            endDate: trip.endDate,
-            budgetAmount: trip.budgetAmount ? Number(trip.budgetAmount) : null
-          }))}
+          trips={dashboard.tripsList.map(mapTripForClient)}
           initialExpenses={dashboard.recentExpenses.map(mapRecentExpenseForClient)}
         />
       </section>
@@ -275,15 +267,7 @@ function renderTexSection(section: TexSection, dashboard: TexDashboard, bootstra
     return (
       <section className="customer-section activity-panel" aria-labelledby="tex-trips-title">
         <h2 id="tex-trips-title">Trips</h2>
-        <TexTable
-          empty="No migrated trips are available for this tenant."
-          rows={dashboard.tripsList.map((trip) => [
-            trip.name,
-            `${trip.origin ?? "-"} to ${trip.destination ?? "-"}`,
-            `${trip.spendAmount}${trip.budgetAmount ? ` / ${trip.budgetAmount}` : ""}`,
-            trip.status
-          ])}
-        />
+        <TexTripsClient teams={bootstrap.teams} employees={bootstrap.employeeProfiles} initialTrips={dashboard.tripsList.map(mapTripForClient)} />
       </section>
     );
   }
@@ -606,5 +590,33 @@ function mapRecentExpenseForClient(expense: TexRecentExpense): TexExpenseListIte
     tripName: expense.tripName,
     notes: expense.notes,
     createdAt: expense.createdAt
+  };
+}
+
+function mapTripForClient(trip: TexTrip) {
+  return {
+    id: trip.id,
+    name: trip.name,
+    description: null,
+    tripType: "general" as const,
+    origin: trip.origin,
+    destination: trip.destination,
+    status: trip.status,
+    startDate: trip.startDate,
+    endDate: trip.endDate,
+    budgetAmount: trip.budgetAmount ? Number(trip.budgetAmount) : null,
+    enforceCurrency: false,
+    enforcedCurrency: null,
+    teamId: null,
+    teamName: null,
+    containerNumber: null,
+    driverEmployeeProfileId: null,
+    driverName: null,
+    driverTripAmount: 0,
+    subcontractorDriverName: null,
+    subcontractorAmount: 0,
+    driverPayoutStatus: "unpaid",
+    expenseCount: trip.expenseCount,
+    spendAmount: Number(trip.spendAmount)
   };
 }
