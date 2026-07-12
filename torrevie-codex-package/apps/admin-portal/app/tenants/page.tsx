@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { AdminSidebar } from "../components/AdminSidebar";
 import { getSupabaseAdminClient } from "../../lib/admin-client";
 import { getPlatformSession } from "../../lib/session";
 import { listTenants, tenantStatuses } from "../../lib/tenant-lifecycle";
@@ -19,16 +20,7 @@ export default async function TenantsPage() {
 
   return (
     <main className="admin-shell">
-      <aside className="admin-sidebar" aria-label="Control Plane sections">
-        <p className="brand">Torrevie</p>
-        <nav>
-          <a href="/">Overview</a>
-          <a href="/tenants">Tenants</a>
-          <a href="/provisioning">Provisioning</a>
-          <a href="/subscriptions">Subscriptions</a>
-          <a href="/">Audit</a>
-        </nav>
-      </aside>
+      <AdminSidebar />
       <section className="admin-main">
         <header className="topbar">
           <div>

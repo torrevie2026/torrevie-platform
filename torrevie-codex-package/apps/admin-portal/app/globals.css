@@ -44,11 +44,24 @@ a {
 }
 
 .brand {
+  align-items: center;
+  display: flex;
+  gap: 10px;
   margin: 0 0 28px;
-  color: var(--torrevie-teal);
+  min-height: 40px;
+}
+
+.brand img {
+  display: block;
+  height: 34px;
+  width: auto;
+}
+
+.brand span {
+  color: var(--torrevie-white);
+  font-size: 18px;
   font-weight: 800;
   letter-spacing: 0;
-  text-transform: uppercase;
 }
 
 .admin-sidebar nav {
