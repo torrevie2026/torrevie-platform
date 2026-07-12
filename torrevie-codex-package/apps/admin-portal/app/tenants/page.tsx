@@ -3,12 +3,17 @@ import { AdminSidebar } from "../components/AdminSidebar";
 import { getSupabaseAdminClient } from "../../lib/admin-client";
 import { getPlatformSession } from "../../lib/session";
 import { listTenants, tenantStatuses } from "../../lib/tenant-lifecycle";
-import { createTenantAction, setTenantStatusAction, updateTenantAction } from "./actions";
+import { createTenantAction, hardDeleteTenantAction, setTenantStatusAction, updateTenantAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function TenantsPage() {
+export default async function TenantsPage({
+  searchParams
+}: {
+  searchParams: Promise<{ deleted?: string }>;
+}) {
   const session = await getPlatformSession();
+  const params = await searchParams;
 
   if (!session) {
     redirect("/login");
@@ -80,6 +85,7 @@ export default async function TenantsPage() {
 
         <section className="panel" aria-label="Tenant list">
           <h2>Tenant lifecycle</h2>
+          {params.deleted ? <p className="notice">Tenant permanently deleted.</p> : null}
           <div className="tenant-list">
             {tenants.length === 0 ? <p className="empty">No tenants have been created yet.</p> : null}
             {tenants.map((tenant) => (
@@ -119,10 +125,21 @@ export default async function TenantsPage() {
                   <button type="submit">Save</button>
                 </form>
                 <div className="tenant-actions" aria-label={`${tenant.name} status actions`}>
+                  <a className="tenant-export-link" href={`/tenants/${tenant.id}/export`}>
+                    Export data
+                  </a>
                   <StatusAction tenantId={tenant.id} status="suspended" label="Suspend" />
                   <StatusAction tenantId={tenant.id} status="active" label="Reactivate" />
                   <StatusAction tenantId={tenant.id} status="archived" label="Archive" />
                 </div>
+                <form action={hardDeleteTenantAction} className="tenant-delete-form">
+                  <input type="hidden" name="tenantId" value={tenant.id} />
+                  <label>
+                    Permanent delete
+                    <input name="confirmationSlug" placeholder={`Type ${tenant.slug}`} />
+                  </label>
+                  <button type="submit">Delete customer</button>
+                </form>
               </article>
             ))}
           </div>

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { getSupabaseAdminClient } from "../../lib/admin-client";
 import { getPlatformSession } from "../../lib/session";
+import { hardDeleteTenantData } from "../../lib/tenant-data-management";
 import {
   createTenant,
   setTenantStatus,
@@ -69,6 +70,19 @@ export async function setTenantStatusAction(formData: FormData) {
 
   revalidatePath("/tenants");
   redirect("/tenants");
+}
+
+export async function hardDeleteTenantAction(formData: FormData) {
+  await requirePlatformSession();
+
+  await hardDeleteTenantData(
+    getSupabaseAdminClient(),
+    stringValue(formData, "tenantId"),
+    stringValue(formData, "confirmationSlug").trim()
+  );
+
+  revalidatePath("/tenants");
+  redirect("/tenants?deleted=1");
 }
 
 async function requirePlatformSession() {
