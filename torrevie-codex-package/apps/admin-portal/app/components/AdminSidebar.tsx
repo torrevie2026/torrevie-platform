@@ -11,8 +11,7 @@ export function AdminSidebar({ activeHref = "/" }: { activeHref?: string }) {
   return (
     <aside className="admin-sidebar" aria-label="Control Plane sections">
       <a className="brand" href="/" aria-label="Torrevie Admin overview">
-        <img src="/brand/torrevie_logo_white.png" alt="" />
-        <span>TORREVIE</span>
+        <img src="/brand/torrevie_logo_color.png" alt="Torrevie" />
       </a>
       <nav>
         {navItems.map((item) => (

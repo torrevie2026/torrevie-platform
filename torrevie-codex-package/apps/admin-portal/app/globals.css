@@ -45,23 +45,21 @@ a {
 
 .brand {
   align-items: center;
+  background: var(--torrevie-white);
+  border-radius: 8px;
   display: flex;
-  gap: 10px;
+  justify-content: center;
   margin: 0 0 28px;
-  min-height: 40px;
+  min-height: 64px;
+  padding: 12px;
 }
 
 .brand img {
   display: block;
-  height: 34px;
+  height: auto;
+  max-height: 40px;
+  max-width: 178px;
   width: auto;
-}
-
-.brand span {
-  color: var(--torrevie-white);
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: 0;
 }
 
 .admin-sidebar nav {
