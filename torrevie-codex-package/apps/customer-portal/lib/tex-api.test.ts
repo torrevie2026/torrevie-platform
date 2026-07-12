@@ -52,6 +52,43 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("from public.tex_expenses e") && sql.includes("order by e.created_at desc")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000006001",
+            employee_name: "Maya Haddad",
+            vendor: "Airport Cafe",
+            expense_date: "2026-07-12",
+            amount: 120,
+            currency: "AED",
+            category: "Meals",
+            trip_name: "Dubai run",
+            notes: "Lunch",
+            status: "pending",
+            created_at: "2026-07-12T10:00:00.000Z"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("from public.tex_trips") && sql.includes("budget_amount::float")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000008001",
+            name: "Dubai run",
+            origin: "Dubai",
+            destination: "Abu Dhabi",
+            status: "open",
+            start_date: "2026-07-12",
+            end_date: null,
+            budget_amount: 1500
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("update public.tex_expenses")) {
       return {
         rows: [
@@ -102,6 +139,17 @@ async function main() {
   {
     const client = new RecordingTexApiClient();
     const response = await handleTexApiRequest(client, actor, {
+      method: "GET",
+      path: "/expenses"
+    });
+    assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /Airport Cafe/);
+    assert.equal(client.hasSql("from public.tex_expenses e"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
       method: "POST",
       path: "/expenses",
       body: {
@@ -127,6 +175,17 @@ async function main() {
     assert.equal(response.status, 200);
     assert.equal(client.hasSql("update public.tex_expenses"), true);
     assert.equal(client.valuesContain("tex.expense.approved"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "GET",
+      path: "/trips"
+    });
+    assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /Dubai run/);
+    assert.equal(client.hasSql("from public.tex_trips"), true);
   }
 
   {

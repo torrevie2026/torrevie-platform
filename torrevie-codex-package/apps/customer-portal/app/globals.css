@@ -515,6 +515,178 @@ a {
   font-weight: 800;
 }
 
+.tex-expense-workspace {
+  align-items: start;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+}
+
+.tex-form-panel {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.tex-form-panel h3 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.tex-form-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tex-form-grid label {
+  color: var(--color-text-muted);
+  display: grid;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 6px;
+}
+
+.tex-form-grid input,
+.tex-form-grid select {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  min-block-size: 42px;
+  padding-inline: 10px;
+}
+
+.tex-primary-button,
+.tex-secondary-button,
+.tex-card-actions button,
+.tex-segmented-control button {
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.tex-primary-button {
+  background: var(--color-accent);
+  border: 0;
+  color: var(--color-text-inverse);
+  min-block-size: 42px;
+  padding-inline: 14px;
+}
+
+.tex-secondary-button,
+.tex-card-actions button,
+.tex-segmented-control button {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  min-block-size: 36px;
+  padding-inline: 11px;
+}
+
+.tex-primary-button:disabled,
+.tex-card-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.tex-notice,
+.tex-error {
+  border-radius: 6px;
+  font-weight: 700;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.tex-notice {
+  background: color-mix(in srgb, var(--color-status-success) 12%, var(--color-bg-primary));
+  color: var(--color-status-success);
+}
+
+.tex-error {
+  background: color-mix(in srgb, var(--color-status-error) 12%, var(--color-bg-primary));
+  color: var(--color-status-error);
+}
+
+.tex-segmented-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.tex-segmented-control button[aria-pressed="true"] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-text-inverse);
+}
+
+.tex-expense-list {
+  display: grid;
+  gap: 10px;
+}
+
+.tex-expense-card {
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 1fr) minmax(120px, auto) minmax(150px, auto);
+  padding: 14px;
+}
+
+.tex-expense-card h4 {
+  font-size: 16px;
+  margin: 6px 0 4px;
+}
+
+.tex-expense-card p,
+.tex-card-actions span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.tex-expense-card strong {
+  font-size: 18px;
+  text-align: end;
+}
+
+.tex-card-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.tex-status {
+  border-radius: 999px;
+  color: var(--color-text-inverse);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  padding-block: 4px;
+  padding-inline: 8px;
+  text-transform: uppercase;
+}
+
+.tex-status-pending {
+  background: var(--color-status-warning);
+}
+
+.tex-status-approved,
+.tex-status-paid {
+  background: var(--color-status-success);
+}
+
+.tex-status-rejected {
+  background: var(--color-status-error);
+}
+
 .login-shell {
   display: grid;
   min-height: 100vh;
@@ -582,13 +754,23 @@ a {
   .metric-grid,
   .module-grid,
   .admin-layout,
-  .crm-workspace {
+  .crm-workspace,
+  .tex-expense-workspace {
     grid-template-columns: 1fr;
   }
 
   .crm-form-grid,
-  .pipeline-board {
+  .pipeline-board,
+  .tex-form-grid,
+  .tex-expense-card {
     grid-template-columns: 1fr;
+  }
+
+  .tex-expense-card strong,
+  .tex-card-actions,
+  .tex-segmented-control {
+    justify-content: flex-start;
+    text-align: start;
   }
 
   .customer-sidebar {

@@ -68,6 +68,27 @@ export type TexExpenseRecord = {
   currency: string;
 };
 
+export type TexExpenseListItem = TexExpenseRecord & {
+  employeeName: string | null;
+  vendor: string | null;
+  expenseDate: string;
+  category: string | null;
+  tripName: string | null;
+  notes: string | null;
+  createdAt: string;
+};
+
+export type TexTripListItem = {
+  id: string;
+  name: string;
+  origin: string | null;
+  destination: string | null;
+  status: string;
+  startDate: string | null;
+  endDate: string | null;
+  budgetAmount: number | null;
+};
+
 export type TexWebhookSubmissionInput = {
   senderRaw?: string | null;
   senderPhone?: string | null;
@@ -198,6 +219,67 @@ export async function listTexBootstrap(client: TenantQueryClient, actor: TexActo
       teams: teams.rows.map(mapTeam),
       integrationSettings: integrationSettings.rows[0] ? mapIntegrationSettings(integrationSettings.rows[0]) : null
     };
+  });
+}
+
+export async function listTexExpenses(client: TenantQueryClient, actor: TexActorContext): Promise<TexExpenseListItem[]> {
+  assertTexPermission(actor, "tex.expense.read");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexExpenseListRow>(
+      `
+        select
+          e.id,
+          coalesce(ep.name, e.employee_name) as employee_name,
+          e.vendor,
+          e.expense_date::text as expense_date,
+          e.amount::float as amount,
+          e.currency,
+          e.category,
+          coalesce(t.name, e.trip_name) as trip_name,
+          e.notes,
+          e.status,
+          e.created_at::text as created_at
+        from public.tex_expenses e
+        left join public.tex_employee_profiles ep
+          on ep.tenant_id = e.tenant_id
+         and ep.id = e.employee_profile_id
+        left join public.tex_trips t
+          on t.tenant_id = e.tenant_id
+         and t.id = e.trip_id
+        where e.tenant_id = public.current_tenant_id()
+        order by e.created_at desc
+        limit 100
+      `
+    );
+
+    return result.rows.map(mapExpenseListItem);
+  });
+}
+
+export async function listTexTrips(client: TenantQueryClient, actor: TexActorContext): Promise<TexTripListItem[]> {
+  assertTexPermission(actor, "tex.expense.read");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexTripListRow>(
+      `
+        select
+          id,
+          name,
+          origin,
+          destination,
+          status,
+          start_date::text as start_date,
+          end_date::text as end_date,
+          budget_amount::float as budget_amount
+        from public.tex_trips
+        where tenant_id = public.current_tenant_id()
+        order by created_at desc
+        limit 100
+      `
+    );
+
+    return result.rows.map(mapTripListItem);
   });
 }
 
@@ -551,6 +633,35 @@ function mapExpense(row: TexExpenseRow): TexExpenseRecord {
   };
 }
 
+function mapExpenseListItem(row: TexExpenseListRow): TexExpenseListItem {
+  return {
+    id: row.id,
+    status: row.status,
+    amount: row.amount,
+    currency: row.currency,
+    employeeName: row.employee_name,
+    vendor: row.vendor,
+    expenseDate: row.expense_date,
+    category: row.category,
+    tripName: row.trip_name,
+    notes: row.notes,
+    createdAt: row.created_at
+  };
+}
+
+function mapTripListItem(row: TexTripListRow): TexTripListItem {
+  return {
+    id: row.id,
+    name: row.name,
+    origin: row.origin,
+    destination: row.destination,
+    status: row.status,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    budgetAmount: row.budget_amount
+  };
+}
+
 type TexExpenseCategoryRow = {
   id: string;
   name: string;
@@ -586,6 +697,27 @@ type TexExpenseRow = {
   status: TexExpenseStatus;
   amount: number;
   currency: string;
+};
+
+type TexExpenseListRow = TexExpenseRow & {
+  employee_name: string | null;
+  vendor: string | null;
+  expense_date: string;
+  category: string | null;
+  trip_name: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+type TexTripListRow = {
+  id: string;
+  name: string;
+  origin: string | null;
+  destination: string | null;
+  status: string;
+  start_date: string | null;
+  end_date: string | null;
+  budget_amount: number | null;
 };
 
 type TexWebhookSubmissionRow = {

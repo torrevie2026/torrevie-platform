@@ -2,6 +2,8 @@ import type { TenantQueryClient } from "@torrevie/tenant-context";
 import {
   createTexExpense,
   listTexBootstrap,
+  listTexExpenses,
+  listTexTrips,
   recordTexWebhookSubmission,
   updateTexExpenseStatus,
   type TexActorContext,
@@ -39,8 +41,16 @@ export async function handleTexApiRequest(
     return json(200, await listTexBootstrap(client, actor));
   }
 
+  if (path === "/expenses" && method === "GET") {
+    return json(200, { expenses: await listTexExpenses(client, actor) });
+  }
+
   if (path === "/expenses" && method === "POST") {
     return json(201, { expense: await createTexExpense(client, actor, request.body as TexExpenseInput) });
+  }
+
+  if (path === "/trips" && method === "GET") {
+    return json(200, { trips: await listTexTrips(client, actor) });
   }
 
   const statusMatch = path.match(/^\/expenses\/([0-9a-f-]+)\/status$/i);
