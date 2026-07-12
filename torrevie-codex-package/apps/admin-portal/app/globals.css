@@ -243,7 +243,9 @@ h1 {
 
 .tenant-form button,
 .tenant-edit button,
-.tenant-actions button {
+.tenant-actions button,
+.tenant-export-link,
+.tenant-delete-form button {
   background: var(--torrevie-teal);
   border: 0;
   border-radius: 6px;
@@ -272,8 +274,42 @@ h1 {
   gap: 8px;
 }
 
-.tenant-actions button {
+.tenant-actions button,
+.tenant-export-link {
   background: var(--torrevie-steel-blue);
+}
+
+.tenant-export-link {
+  align-items: center;
+  display: inline-flex;
+  text-decoration: none;
+}
+
+.tenant-delete-form {
+  align-items: end;
+  border: 1px solid #ffd6d6;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  padding: 12px;
+}
+
+.tenant-delete-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 800;
+}
+
+.tenant-delete-form input {
+  border: 1px solid #ffd6d6;
+  border-radius: 6px;
+  min-height: 40px;
+  padding: 0 10px;
+}
+
+.tenant-delete-form button {
+  background: #b42318;
 }
 
 .empty {
