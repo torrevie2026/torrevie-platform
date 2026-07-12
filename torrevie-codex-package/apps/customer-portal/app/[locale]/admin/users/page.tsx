@@ -1,33 +1,31 @@
 import { getMessages, isLocale, type Locale } from "@torrevie/localization";
-import { notFound } from "next/navigation";
+import { roleKeys, type RoleKey } from "@torrevie/permissions";
+import { notFound, redirect } from "next/navigation";
+import {
+  getTenantWhatsappSettings,
+  listCustomerMembers,
+  type CustomerAdminContext
+} from "../../../../lib/customer-administration";
+import {
+  isCustomerSessionError,
+  requireVerifiedCustomerSession,
+  resolveCustomerTenantContext
+} from "../../../../lib/server/customer-session";
+import { PostgresTenantQueryClient } from "../../../../lib/server/tenant-query-client";
+import { updateTenantWhatsappSettingsAction } from "./actions";
 
-const sampleMembers = [
-  {
-    name: "Maya Haddad",
-    email: "maya.haddad@example.test",
-    status: "active",
-    role: "Customer Admin"
-  },
-  {
-    name: "Omar Faris",
-    email: "omar.faris@example.test",
-    status: "invited",
-    role: "Customer Manager"
-  },
-  {
-    name: "Leen Salim",
-    email: "leen.salim@example.test",
-    status: "active",
-    role: "Customer Readonly"
-  }
-] as const;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export default async function CustomerUsersPage({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ locale: string }>;
+  searchParams?: Promise<{ integration?: string }>;
 }) {
   const { locale: rawLocale } = await params;
+  const status = await searchParams;
 
   if (!isLocale(rawLocale)) {
     notFound();
@@ -37,88 +35,200 @@ export default async function CustomerUsersPage({
   const t = getMessages(locale);
   const admin = t.adminUsers;
 
-  return (
-    <main className="customer-shell admin-users-shell" data-visual-check="customer-admin-users">
-      <aside className="customer-sidebar" aria-label="Customer Portal sections">
-        <a className="customer-brand" href={`/${locale}`} aria-label={t.appName}>
-          <img src="/logo/torrevie_logo_color.png" alt="" width="36" height="36" />
-          <span>{t.appName}</span>
-        </a>
-        <nav>
-          <a href={`/${locale}`}>{t.nav.overview}</a>
-          <a href={`/${locale}/admin/users`} aria-current="page">
-            {t.nav.admin}
+  try {
+    const { actor, client, tenantName } = await resolveActor();
+    const members = await listCustomerMembers(client, actor);
+    const whatsappSettings = await getTenantWhatsappSettings(client, actor);
+
+    return (
+      <main className="customer-shell admin-users-shell" data-visual-check="customer-admin-users">
+        <aside className="customer-sidebar" aria-label="Customer Portal sections">
+          <a className="customer-brand" href={`/${locale}`} aria-label={t.appName}>
+            <img src="/logo/torrevie_logo_color.png" alt="" width="36" height="36" />
+            <span>{t.appName}</span>
           </a>
-          <a href={`/${locale}`}>{t.nav.settings}</a>
-        </nav>
-      </aside>
+          <nav>
+            <a href={`/${locale}`}>{t.nav.overview}</a>
+            <a href={`/${locale}/admin/users`} aria-current="page">
+              Tenant admin
+            </a>
+            <a href={`/${locale}/account`}>Account</a>
+          </nav>
+        </aside>
 
-      <section className="customer-main">
-        <header className="customer-topbar">
-          <div>
-            <p className="eyebrow">{admin.eyebrow}</p>
-            <h1>{admin.title}</h1>
-            <p>{admin.subtitle}</p>
-          </div>
-          <div className="customer-context" aria-label="Administration guardrails">
-            <span>{admin.requiredRole}: customer_admin</span>
-            <span>{admin.tenantScope}: Gulf Demo</span>
-            <span>{admin.rlsContext}: tenant only</span>
-          </div>
-        </header>
-
-        <section className="admin-layout" aria-label="Customer administration">
-          <form className="admin-panel" aria-label={admin.inviteUser}>
-            <h2>{admin.inviteUser}</h2>
-            <label>
-              {admin.email}
-              <input name="email" type="email" placeholder="user@example.com" dir="ltr" />
-            </label>
-            <label>
-              {admin.displayName}
-              <input name="displayName" type="text" placeholder={admin.displayNamePlaceholder} />
-            </label>
-            <label>
-              {admin.role}
-              <select name="role" defaultValue="customer_standard_user">
-                <option value="customer_admin">Customer Admin</option>
-                <option value="customer_module_admin">Module Admin</option>
-                <option value="customer_manager">Customer Manager</option>
-                <option value="customer_standard_user">Standard User</option>
-                <option value="customer_readonly">Readonly</option>
-              </select>
-            </label>
-            <button type="button">{admin.invite}</button>
-          </form>
-
-          <section className="admin-panel member-panel" aria-labelledby="members-title">
-            <h2 id="members-title">{admin.tenantUsers}</h2>
-            <div className="member-table" role="table" aria-label={admin.tenantUsers}>
-              <div role="row" className="member-row member-row-head">
-                <span role="columnheader">{admin.user}</span>
-                <span role="columnheader">{admin.status}</span>
-                <span role="columnheader">{admin.role}</span>
-                <span role="columnheader">{admin.action}</span>
-              </div>
-              {sampleMembers.map((member) => (
-                <div role="row" className="member-row" key={member.email}>
-                  <span role="cell">
-                    <strong>{member.name}</strong>
-                    <small>{member.email}</small>
-                  </span>
-                  <span role="cell">
-                    <mark>{member.status}</mark>
-                  </span>
-                  <span role="cell">{member.role}</span>
-                  <span role="cell">
-                    <button type="button">{admin.update}</button>
-                  </span>
-                </div>
-              ))}
+        <section className="customer-main">
+          <header className="customer-topbar">
+            <div>
+              <p className="eyebrow">{admin.eyebrow}</p>
+              <h1>Tenant setup</h1>
+              <p>Manage tenant users and app-level configuration for subscribed Torrevie modules.</p>
             </div>
+            <div className="customer-context" aria-label="Administration guardrails">
+              <span>{admin.requiredRole}: customer_admin</span>
+              <span>
+                {admin.tenantScope}: {tenantName}
+              </span>
+              <span>{admin.rlsContext}: tenant only</span>
+            </div>
+          </header>
+
+          {status?.integration === "updated" ? <p className="tex-notice">WhatsApp integration settings updated.</p> : null}
+          {status?.integration === "failed" ? <p className="tex-error">WhatsApp integration settings could not be updated.</p> : null}
+
+          <section className="admin-layout tenant-setup-layout" aria-label="Tenant administration">
+            <section className="admin-panel tenant-integration-panel" aria-labelledby="whatsapp-settings-title">
+              <div className="section-heading-row">
+                <h2 id="whatsapp-settings-title">TEX WhatsApp setup</h2>
+                <span className="module-status module-status-active">tenant scoped</span>
+              </div>
+              <p className="admin-panel-copy">
+                Configure webhook routing and provider keys at tenant level. Existing secrets are never shown after saving.
+              </p>
+              <form action={updateTenantWhatsappSettingsAction} className="tenant-integration-form">
+                <input type="hidden" name="locale" value={locale} />
+                <label>
+                  Provider
+                  <select name="provider" defaultValue={whatsappSettings.provider}>
+                    <option value="ultramsg">UltraMsg</option>
+                    <option value="wappfly">Wappfly</option>
+                    <option value="meta">Meta WhatsApp Cloud API</option>
+                  </select>
+                </label>
+                <label>
+                  Webhook URL
+                  <input name="webhookUrl" type="url" defaultValue={whatsappSettings.webhookUrl} placeholder="https://app.torrevie.com/api/tex/webhook" dir="ltr" />
+                </label>
+                <div className="tenant-integration-grid">
+                  <label>
+                    UltraMsg instance ID
+                    <input name="whatsappInstanceId" defaultValue={whatsappSettings.whatsappInstanceId} dir="ltr" />
+                  </label>
+                  <label>
+                    Wappfly session ID
+                    <input name="wappflySessionId" defaultValue={whatsappSettings.wappflySessionId} dir="ltr" />
+                  </label>
+                  <label>
+                    Meta phone number ID
+                    <input name="metaPhoneNumberId" defaultValue={whatsappSettings.metaPhoneNumberId} dir="ltr" />
+                  </label>
+                  <label>
+                    Meta business account ID
+                    <input name="metaWhatsappBusinessAccountId" defaultValue={whatsappSettings.metaWhatsappBusinessAccountId} dir="ltr" />
+                  </label>
+                </div>
+                <div className="tenant-secret-grid" aria-label="Write-only WhatsApp secrets">
+                  <SecretInput
+                    name="apiKey"
+                    label="Provider API key"
+                    configured={whatsappSettings.apiKeyConfigured}
+                    last4={whatsappSettings.apiKeyLast4}
+                  />
+                  <SecretInput
+                    name="appSecret"
+                    label="App secret"
+                    configured={whatsappSettings.appSecretConfigured}
+                    last4={whatsappSettings.appSecretLast4}
+                  />
+                  <SecretInput
+                    name="webhookVerifyToken"
+                    label="Webhook verify token"
+                    configured={whatsappSettings.webhookVerifyTokenConfigured}
+                    last4={whatsappSettings.webhookVerifyTokenLast4}
+                  />
+                </div>
+                <label className="tex-checkbox-row">
+                  <input name="googleMapsEnabled" type="checkbox" defaultChecked={whatsappSettings.googleMapsEnabled} />
+                  Enable Google Maps enrichment for WhatsApp trip messages
+                </label>
+                <button type="submit">Save WhatsApp setup</button>
+              </form>
+            </section>
+
+            <section className="admin-panel member-panel" aria-labelledby="members-title">
+              <h2 id="members-title">{admin.tenantUsers}</h2>
+              <div className="member-table" role="table" aria-label={admin.tenantUsers}>
+                <div role="row" className="member-row member-row-head">
+                  <span role="columnheader">{admin.user}</span>
+                  <span role="columnheader">{admin.status}</span>
+                  <span role="columnheader">{admin.role}</span>
+                  <span role="columnheader">{admin.action}</span>
+                </div>
+                {members.map((member) => (
+                  <div role="row" className="member-row" key={member.userId}>
+                    <span role="cell">
+                      <strong>{member.displayName ?? member.email}</strong>
+                      <small>{member.email}</small>
+                    </span>
+                    <span role="cell">
+                      <mark>{member.status}</mark>
+                    </span>
+                    <span role="cell">{member.roles.join(", ") || "No role"}</span>
+                    <span role="cell">
+                      <button type="button">{admin.update}</button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
           </section>
         </section>
-      </section>
-    </main>
+      </main>
+    );
+  } catch (error) {
+    if (isCustomerSessionError(error)) {
+      redirect("/login");
+    }
+
+    throw error;
+  }
+}
+
+function SecretInput({
+  configured,
+  label,
+  last4,
+  name
+}: {
+  configured: boolean;
+  label: string;
+  last4: string;
+  name: string;
+}) {
+  return (
+    <label>
+      {label}
+      <input name={name} type="password" autoComplete="new-password" placeholder={configured ? `Configured ending ${last4 || "****"}` : "Not configured"} dir="ltr" />
+    </label>
   );
+}
+
+async function resolveActor() {
+  const session = await requireVerifiedCustomerSession();
+  const client = new PostgresTenantQueryClient(session.userId);
+  const tenantContext = await resolveCustomerTenantContext(client, session);
+  const rolesResult = await client.query<{ key: string }>(
+    `
+      select r.key
+      from public.user_role_assignments ura
+      join public.roles r on r.id = ura.role_id
+      where ura.tenant_id = $1
+        and ura.user_id = $2
+    `,
+    [tenantContext.tenantId, tenantContext.userId]
+  );
+  const tenantResult = await client.query<{ name: string }>("select name from public.tenants where id = $1", [tenantContext.tenantId]);
+  const actor: CustomerAdminContext = {
+    ...tenantContext,
+    roles: rolesResult.rows.map((row) => row.key).filter(isRoleKey)
+  };
+
+  return {
+    actor,
+    client,
+    tenantName: tenantResult.rows[0]?.name ?? "Current tenant"
+  };
+}
+
+function isRoleKey(value: string): value is RoleKey {
+  return roleKeys.includes(value as RoleKey);
 }

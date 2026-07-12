@@ -3,9 +3,11 @@ import type { QueryResult, QueryValue, TenantQueryClient } from "@torrevie/tenan
 import {
   assignCustomerUserRole,
   assignableCustomerRoles,
+  getTenantWhatsappSettings,
   inviteCustomerUser,
   listCustomerMembers,
   setCustomerMembershipStatus,
+  updateTenantWhatsappSettings,
   type CustomerAdminContext
 } from "./customer-administration";
 
@@ -40,6 +42,46 @@ class RecordingTenantClient implements TenantQueryClient {
 
     if (sql.includes("from public.tenant_memberships") || sql.includes("update public.tenant_memberships")) {
       return { rows: [{ id: "00000000-0000-4000-8000-000000000801" }] as Row[] };
+    }
+
+    if (sql.includes("from public.tex_integration_settings")) {
+      return {
+        rows: [
+          {
+            whatsapp_provider: "wappfly",
+            whatsapp_instance_id: "instance-1",
+            wappfly_session_id: "session-1",
+            meta_phone_number_id: null,
+            meta_whatsapp_business_account_id: null,
+            google_maps_enabled: true,
+            whatsapp_webhook_url: "https://app.torrevie.com/api/tex/webhook",
+            whatsapp_webhook_verify_token_last4: "tokn",
+            whatsapp_api_key_last4: "1234",
+            whatsapp_app_secret_last4: null,
+            whatsapp_keys_configured: true
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_integration_settings")) {
+      return {
+        rows: [
+          {
+            whatsapp_provider: values[0],
+            whatsapp_instance_id: values[1],
+            wappfly_session_id: values[2],
+            meta_phone_number_id: values[3],
+            meta_whatsapp_business_account_id: values[4],
+            google_maps_enabled: values[5],
+            whatsapp_webhook_url: values[6],
+            whatsapp_api_key_last4: values[7],
+            whatsapp_app_secret_last4: values[8],
+            whatsapp_webhook_verify_token_last4: values[9],
+            whatsapp_keys_configured: values[10]
+          }
+        ] as Row[]
+      };
     }
 
     if (sql.includes("insert into public.users")) {
@@ -104,6 +146,69 @@ async function main() {
           role: "torrevie_platform_admin"
         }),
       /Role cannot be assigned/
+    );
+    assert.equal(client.calls.length, 0);
+  }
+
+  {
+    const client = new RecordingTenantClient();
+    const settings = await getTenantWhatsappSettings(client, adminContext);
+
+    assert.equal(settings.provider, "wappfly");
+    assert.equal(settings.webhookUrl, "https://app.torrevie.com/api/tex/webhook");
+    assert.equal(settings.apiKeyConfigured, true);
+    assert.equal(settings.apiKeyLast4, "1234");
+  }
+
+  {
+    const client = new RecordingTenantClient();
+    const settings = await updateTenantWhatsappSettings(client, adminContext, {
+      provider: "meta",
+      webhookUrl: "https://app.torrevie.com/api/tex/webhook",
+      whatsappInstanceId: "",
+      wappflySessionId: "",
+      metaPhoneNumberId: "phone-1",
+      metaWhatsappBusinessAccountId: "business-1",
+      googleMapsEnabled: true,
+      apiKey: "api-secret-1234",
+      appSecret: "app-secret-9999",
+      webhookVerifyToken: "verify-token-0000"
+    });
+
+    assert.equal(settings.provider, "meta");
+    assert.equal(settings.apiKeyLast4, "1234");
+    assert.equal(settings.appSecretLast4, "9999");
+    assert.equal(settings.webhookVerifyTokenLast4, "0000");
+    assert.equal(client.hasSql("delete from public.tenant_integration_secrets"), true);
+    assert.equal(client.hasSql("insert into public.tenant_integration_secrets"), true);
+    assert.equal(client.valuesContain("api_key"), true);
+    assert.equal(client.valuesContain("tenant.integration.whatsapp.updated"), true);
+  }
+
+  {
+    const client = new RecordingTenantClient();
+    await assert.rejects(
+      () =>
+        updateTenantWhatsappSettings(client, adminContext, {
+          provider: "ultramsg",
+          webhookUrl: "http://app.torrevie.com/api/tex/webhook",
+          googleMapsEnabled: false
+        }),
+      /Webhook URL must be a valid HTTPS URL/
+    );
+    assert.equal(client.calls.length, 0);
+  }
+
+  {
+    const client = new RecordingTenantClient();
+    await assert.rejects(
+      () =>
+        updateTenantWhatsappSettings(client, standardContext, {
+          provider: "ultramsg",
+          webhookUrl: "https://app.torrevie.com/api/tex/webhook",
+          googleMapsEnabled: false
+        }),
+      /Permission denied for tenant.settings.manage/
     );
     assert.equal(client.calls.length, 0);
   }
