@@ -268,7 +268,7 @@ async function listLauncherData(
           coalesce((select name from public.tenants where id = public.current_tenant_id()), 'Current tenant') as tenant_name,
           (select count(*)::int from public.tex_expenses where tenant_id = public.current_tenant_id() and status in ('pending', 'approved')) as tex_open_expenses,
           (select count(*)::int from public.tex_expenses where tenant_id = public.current_tenant_id() and status = 'pending') as tex_pending_approvals,
-          (select count(*)::int from public.crm_opportunities where tenant_id = public.current_tenant_id()) as crm_open_opportunities,
+          (select count(*)::int from public.opportunities where tenant_id = public.current_tenant_id()) as crm_open_opportunities,
           (select count(*)::int from public.audit_events where tenant_id = public.current_tenant_id() and occurred_at >= now() - interval '7 days') as activity_count
       `
     );

@@ -16,6 +16,8 @@ assert.match(layoutSource, /lang=\{locale\}/);
 assert.match(layoutSource, /dir=\{dirForLocale/);
 assert.match(pageSource, /data-visual-check="customer-shell"/);
 assert.match(pageSource, /\/logo\/torrevie_logo_color\.png/);
+assert.match(pageSource, /from public\.opportunities/);
+assert.doesNotMatch(pageSource, /crm_opportunities/);
 
 assert.match(cssSource, /border-inline-start/);
 assert.match(cssSource, /border-inline-end/);
