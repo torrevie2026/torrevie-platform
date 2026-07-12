@@ -3,16 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { getSupabaseAdminClient } from "../../lib/admin-client";
+import { sendTenantAdminInvitationEmail } from "../../lib/onboarding-invitations";
 import { getPlatformSession } from "../../lib/session";
 import { assignSubscription, subscriptionStatuses, type SubscriptionStatus } from "../../lib/subscription-management";
 
 export async function assignSubscriptionAction(formData: FormData) {
   const session = await requirePlatformSession();
+  const tenantId = stringValue(formData, "tenantId");
 
   await assignSubscription(
     getSupabaseAdminClient(),
     {
-      tenantId: stringValue(formData, "tenantId"),
+      tenantId,
       planId: stringValue(formData, "planId"),
       status: statusValue(formData),
       startsAt: stringValue(formData, "startsAt"),
@@ -22,7 +24,16 @@ export async function assignSubscriptionAction(formData: FormData) {
   );
 
   revalidatePath("/subscriptions");
-  redirect("/subscriptions");
+  redirect(`/subscriptions?assigned=1&tenantId=${encodeURIComponent(tenantId)}`);
+}
+
+export async function inviteTenantAdminAction(formData: FormData) {
+  const session = await requirePlatformSession();
+  const tenantId = stringValue(formData, "tenantId");
+
+  await sendTenantAdminInvitationEmail(getSupabaseAdminClient(), tenantId, session.userId);
+  revalidatePath("/subscriptions");
+  redirect(`/subscriptions?invited=1&tenantId=${encodeURIComponent(tenantId)}`);
 }
 
 async function requirePlatformSession() {

@@ -223,28 +223,37 @@ async function writeInvitationAuditEvent(
 }
 
 function renderInvitationHtml(invitation: TenantAdminInvitation) {
+  const portalUrl = customerPortalUrl();
+
   return `
     <div style="font-family: Inter, Arial, sans-serif; color: #162449; line-height: 1.5;">
       <h1 style="font-size: 22px;">Welcome to Torrevie</h1>
       <p>You have been invited as the customer administrator for ${escapeHtml(invitation.tenantName)}.</p>
+      <p>Accept the invitation, set your password, then open ${escapeHtml(portalUrl)} to start using your workspace.</p>
       <p>
         <a href="${escapeHtml(invitation.actionLink)}" style="background: #0D9488; color: #FFFFFF; padding: 12px 18px; text-decoration: none; border-radius: 6px; display: inline-block;">
-          Accept invitation
+          Accept invitation and set password
         </a>
       </p>
       <p>If the button does not work, open this link:</p>
       <p><a href="${escapeHtml(invitation.actionLink)}">${escapeHtml(invitation.actionLink)}</a></p>
+      <p>Customer portal: <a href="${escapeHtml(portalUrl)}">${escapeHtml(portalUrl)}</a></p>
     </div>
   `;
 }
 
 function renderInvitationText(invitation: TenantAdminInvitation) {
+  const portalUrl = customerPortalUrl();
+
   return [
     "Welcome to Torrevie",
     "",
     `You have been invited as the customer administrator for ${invitation.tenantName}.`,
     "",
-    `Accept your invitation: ${invitation.actionLink}`
+    "Accept the invitation, set your password, then open the customer portal to start using your workspace.",
+    "",
+    `Accept invitation and set password: ${invitation.actionLink}`,
+    `Customer portal: ${portalUrl}`
   ].join("\n");
 }
 

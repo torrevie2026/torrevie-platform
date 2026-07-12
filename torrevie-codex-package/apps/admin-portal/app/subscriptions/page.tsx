@@ -4,11 +4,15 @@ import { getSupabaseAdminClient } from "../../lib/admin-client";
 import { getPlatformSession } from "../../lib/session";
 import { listSubscriptionCatalog, listSubscriptions, subscriptionStatuses } from "../../lib/subscription-management";
 import { listTenants } from "../../lib/tenant-lifecycle";
-import { assignSubscriptionAction } from "./actions";
+import { assignSubscriptionAction, inviteTenantAdminAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function SubscriptionsPage() {
+export default async function SubscriptionsPage({
+  searchParams
+}: {
+  searchParams: Promise<{ assigned?: string; invited?: string; tenantId?: string }>;
+}) {
   const session = await getPlatformSession();
 
   if (!session) {
@@ -24,6 +28,9 @@ export default async function SubscriptionsPage() {
     notFound();
   });
   const tenantNames = new Map(tenants.map((tenant) => [tenant.id, tenant.name]));
+  const tenantBillingEmails = new Map(tenants.map((tenant) => [tenant.id, tenant.billing_email]));
+  const params = await searchParams;
+  const selectedTenant = params.tenantId ? tenants.find((tenant) => tenant.id === params.tenantId) : null;
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -87,6 +94,27 @@ export default async function SubscriptionsPage() {
           {plans.length === 0 ? <p className="empty">Seed product plans before assigning subscriptions.</p> : null}
         </section>
 
+        {selectedTenant && params.assigned === "1" ? (
+          <section className="panel onboarding-next-step" aria-label="Invite tenant administrator">
+            <div>
+              <p className="eyebrow">Next step</p>
+              <h2>Invite the tenant admin</h2>
+              <p>
+                {selectedTenant.name} now has a subscription. Send the customer administrator invitation so they can
+                accept it, set their password, and start using app.torrevie.com.
+              </p>
+              <span>Invitation email: {selectedTenant.billing_email ?? "Set tenant billing email first"}</span>
+            </div>
+            <InviteTenantAdminForm tenantId={selectedTenant.id} disabled={!selectedTenant.billing_email} />
+          </section>
+        ) : null}
+
+        {selectedTenant && params.invited === "1" ? (
+          <p className="notice">
+            Customer admin invitation sent to {selectedTenant.billing_email ?? "the tenant billing email"}.
+          </p>
+        ) : null}
+
         <section className="panel" aria-label="Current subscriptions">
           <h2>Current subscriptions</h2>
           <div className="subscription-list">
@@ -110,6 +138,12 @@ export default async function SubscriptionsPage() {
                   <strong>{subscription.entitlement_count}</strong>
                   <span>entitlements</span>
                 </div>
+                <div className="subscription-actions">
+                  <InviteTenantAdminForm
+                    tenantId={subscription.tenant_id}
+                    disabled={!tenantBillingEmails.get(subscription.tenant_id)}
+                  />
+                </div>
               </article>
             ))}
           </div>
@@ -121,4 +155,15 @@ export default async function SubscriptionsPage() {
 
 function formatDate(value: string) {
   return new Date(value).toISOString().slice(0, 10);
+}
+
+function InviteTenantAdminForm({ tenantId, disabled }: { tenantId: string; disabled: boolean }) {
+  return (
+    <form action={inviteTenantAdminAction}>
+      <input type="hidden" name="tenantId" value={tenantId} />
+      <button type="submit" disabled={disabled}>
+        Invite admin
+      </button>
+    </form>
+  );
 }
