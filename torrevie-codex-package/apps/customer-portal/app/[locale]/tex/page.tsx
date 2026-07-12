@@ -24,6 +24,14 @@ export const dynamic = "force-dynamic";
 
 type TexSection = "dashboard" | "expenses" | "trips" | "finance" | "people" | "whatsapp" | "notifications" | "settings";
 
+type TexNavItem = {
+  section: TexSection;
+  label: string;
+  href: string;
+  icon: string;
+  primary?: boolean;
+};
+
 type TexDashboard = {
   tenantName: string;
   openExpenses: number;
@@ -193,30 +201,59 @@ export default async function TexPage({
     const dashboard = await listTexDashboard(client, actor);
     const financeReview = section === "finance" ? await listCurrentTexFinanceReview(client, actor) : null;
 
+    const navItems = texNavItems(locale);
+
     return (
-      <main className="customer-shell" data-visual-check="tex-module-shell" lang={locale} dir={dirForLocale(locale)}>
-        <aside className="customer-sidebar" aria-label="Customer Portal sections">
-          <a className="customer-brand" href={`/${locale}`} aria-label={t.appName}>
-            <img src="/logo/torrevie_logo_color.png" alt="" width="36" height="36" />
-            <span>Torrevie TEX</span>
-          </a>
+      <main className="customer-shell tex-shell" data-visual-check="tex-module-shell" lang={locale} dir={dirForLocale(locale)}>
+        <aside className="customer-sidebar tex-sidebar" aria-label="TEX sections">
+          <div className="tex-sidebar-header">
+            <a className="customer-brand tex-brand" href={`/${locale}/tex`} aria-label="Torrevie TEX">
+              <img src="/logo/torrevie_logo_color.png" alt="" width="36" height="36" />
+              <span>
+                <strong>Torrevie TEX</strong>
+                <small>The Optimized Way</small>
+              </span>
+            </a>
+            <div className="tex-company-chip">
+              <span>{dashboard.tenantName}</span>
+            </div>
+          </div>
+
           <nav className="tex-nav">
-            {texNavItems(locale).map((item) => (
-              <a key={item.section} href={item.href} aria-current={section === item.section ? "page" : undefined}>
+            {navItems.map((item) => (
+              <a
+                key={`${item.section}-${item.label}`}
+                className={item.primary ? "tex-nav-primary" : undefined}
+                href={item.href}
+                aria-current={section === item.section ? "page" : undefined}
+              >
+                <span className="tex-nav-icon" aria-hidden="true">
+                  {item.icon}
+                </span>
                 <span>{item.label}</span>
               </a>
             ))}
           </nav>
+
+          <div className="tex-sidebar-user" aria-label="Signed in user">
+            <span className="tex-avatar" aria-hidden="true">
+              {(session.email ?? session.userId).slice(0, 1).toUpperCase()}
+            </span>
+            <span>
+              <strong>{session.email ?? "Signed in"}</strong>
+              <small>{t.shell.activeTenant}</small>
+            </span>
+          </div>
         </aside>
 
-        <section className="customer-main">
-          <header className="customer-topbar">
+        <section className="customer-main tex-main">
+          <header className="customer-topbar tex-topbar">
             <div>
-              <p className="eyebrow">{t.nav.tex}</p>
-              <h1>Travel and expense</h1>
-              <p>Trips, expenses, receipt intake, approvals, WhatsApp submissions, and employee records.</p>
+              <p className="eyebrow">TEX operations</p>
+              <h1>{sectionTitle(section)}</h1>
+              <p>{sectionSubtitle(section)}</p>
             </div>
-            <div className="customer-context" aria-label="TEX session context">
+            <div className="customer-context tex-context" aria-label="TEX session context">
               <span>
                 {t.shell.activeTenant}: {dashboard.tenantName}
               </span>
@@ -230,6 +267,19 @@ export default async function TexPage({
           </header>
 
           {renderTexSection(section, dashboard, bootstrap, financeReview)}
+
+          <nav className="tex-mobile-nav" aria-label="Primary TEX sections">
+            {navItems
+              .filter((item) => item.primary || item.section === "dashboard" || item.section === "expenses" || item.section === "finance")
+              .map((item) => (
+                <a key={`mobile-${item.section}-${item.label}`} href={item.href} aria-current={section === item.section ? "page" : undefined}>
+                  <span className="tex-nav-icon" aria-hidden="true">
+                    {item.icon}
+                  </span>
+                  <span>{item.label.replace("New ", "")}</span>
+                </a>
+              ))}
+          </nav>
         </section>
       </main>
     );
@@ -242,19 +292,50 @@ export default async function TexPage({
   }
 }
 
-function texNavItems(locale: Locale) {
+function texNavItems(locale: Locale): TexNavItem[] {
   const base = `/${locale}/tex`;
 
   return [
-    { section: "dashboard" as const, label: "Dashboard", href: base },
-    { section: "expenses" as const, label: "Expenses", href: `${base}?section=expenses` },
-    { section: "trips" as const, label: "Trips", href: `${base}?section=trips` },
-    { section: "finance" as const, label: "Finance review", href: `${base}?section=finance` },
-    { section: "people" as const, label: "People", href: `${base}?section=people` },
-    { section: "whatsapp" as const, label: "WhatsApp intake", href: `${base}?section=whatsapp` },
-    { section: "notifications" as const, label: "Notifications", href: `${base}?section=notifications` },
-    { section: "settings" as const, label: "Settings", href: `${base}?section=settings` }
+    { section: "dashboard", label: "Dashboard", href: base, icon: "D" },
+    { section: "expenses", label: "New Expense", href: `${base}?section=expenses#tex-new-expense-title`, icon: "+", primary: true },
+    { section: "expenses", label: "My Expenses", href: `${base}?section=expenses#tex-expense-list-title`, icon: "R" },
+    { section: "trips", label: "Trips", href: `${base}?section=trips`, icon: "T" },
+    { section: "people", label: "My Team", href: `${base}?section=people`, icon: "M" },
+    { section: "finance", label: "Finance Review", href: `${base}?section=finance`, icon: "$" },
+    { section: "whatsapp", label: "WhatsApp Intake", href: `${base}?section=whatsapp`, icon: "W" },
+    { section: "notifications", label: "Notifications", href: `${base}?section=notifications`, icon: "N" },
+    { section: "settings", label: "Settings", href: `${base}?section=settings`, icon: "S" }
   ];
+}
+
+function sectionTitle(section: TexSection) {
+  const titles: Record<TexSection, string> = {
+    dashboard: "Dashboard",
+    expenses: "My Expenses",
+    trips: "Trips",
+    finance: "Finance Review",
+    people: "My Team",
+    whatsapp: "WhatsApp Intake",
+    notifications: "Notifications",
+    settings: "Settings"
+  };
+
+  return titles[section];
+}
+
+function sectionSubtitle(section: TexSection) {
+  const subtitles: Record<TexSection, string> = {
+    dashboard: "Your travel, expense, approvals, and receipt activity in one operating view.",
+    expenses: "Submit expenses, review the queue, and keep receipt records moving.",
+    trips: "Create trip files, track spend, and manage driver settlement context.",
+    finance: "Review approved expenses and trip payouts before marking them paid.",
+    people: "Employee and team records available for TEX expense operations.",
+    whatsapp: "Incoming WhatsApp receipt submissions that need review or assignment.",
+    notifications: "Operational notices created by TEX workflows and integrations.",
+    settings: "Tenant TEX settings and integration status."
+  };
+
+  return subtitles[section];
 }
 
 function readSection(value: string | undefined): TexSection {
@@ -401,14 +482,19 @@ function renderTexSection(
         </article>
       </section>
 
-      <section className="customer-section" aria-labelledby="tex-work-title">
-        <h2 id="tex-work-title">TEX workspace</h2>
-        <div className="module-grid">
-          <ModuleCard title="Expenses" text="Migrated expense records and approval status." value={dashboard.openExpenses} href="?section=expenses" />
-          <ModuleCard title="Trips" text="Trip and leg records under the platform tenant model." value={dashboard.trips} href="?section=trips" />
-          <ModuleCard title="Finance review" text="Approved expenses and trip driver payouts waiting for payment." value={dashboard.pendingApprovals} href="?section=finance" />
-          <ModuleCard title="People" text="Employee profiles available for expense submission." value={dashboard.employees.length} href="?section=people" />
-          <ModuleCard title="WhatsApp intake" text="Unregistered submissions requiring review." value={dashboard.whatsappOpen} href="?section=whatsapp" />
+      <section className="customer-section tex-quick-actions" aria-labelledby="tex-work-title">
+        <div className="section-heading-row">
+          <h2 id="tex-work-title">Work shortcuts</h2>
+          <a className="tex-action" href="?section=expenses#tex-new-expense-title">
+            New expense
+          </a>
+        </div>
+        <div className="module-grid tex-action-grid">
+          <ModuleCard title="My Expenses" text="Expense queue, status, and approvals." value={dashboard.openExpenses} href="?section=expenses" />
+          <ModuleCard title="Trips" text="Trip files, budget use, and driver context." value={dashboard.trips} href="?section=trips" />
+          <ModuleCard title="Finance Review" text="Approved spend and payouts ready for settlement." value={dashboard.pendingApprovals} href="?section=finance" />
+          <ModuleCard title="My Team" text="Employee records linked to TEX submissions." value={dashboard.employees.length} href="?section=people" />
+          <ModuleCard title="WhatsApp Intake" text="Receipt messages waiting for assignment." value={dashboard.whatsappOpen} href="?section=whatsapp" />
         </div>
       </section>
 
