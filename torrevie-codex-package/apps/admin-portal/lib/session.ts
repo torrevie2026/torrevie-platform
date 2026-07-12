@@ -6,6 +6,8 @@ import { canAccessAdminPortalFromClaims } from "./access";
 export type PlatformSession = {
   accessToken: string;
   userId: string;
+  email: string;
+  timezone: string;
 };
 
 export async function getPlatformSession(): Promise<PlatformSession | null> {
@@ -30,6 +32,14 @@ export async function getPlatformSession(): Promise<PlatformSession | null> {
 
   return {
     accessToken: session.access_token,
-    userId: session.user.id
+    userId: session.user.id,
+    email: session.user.email ?? "",
+    timezone: readTimezone(session.user.user_metadata)
   };
+}
+
+function readTimezone(metadata: unknown) {
+  const timezone = (metadata as { timezone?: unknown } | null)?.timezone;
+
+  return typeof timezone === "string" && timezone.trim() ? timezone : "Asia/Dubai";
 }

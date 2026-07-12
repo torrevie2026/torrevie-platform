@@ -40,6 +40,8 @@ a {
 .admin-sidebar {
   background: var(--torrevie-navy);
   color: var(--torrevie-white);
+  display: flex;
+  flex-direction: column;
   padding: 28px 20px;
 }
 
@@ -75,6 +77,61 @@ a {
 
 .admin-sidebar a[aria-current="page"] {
   background: rgba(255, 255, 255, 0.12);
+}
+
+.account-card {
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  display: grid;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 18px;
+}
+
+.account-card div {
+  display: grid;
+  gap: 4px;
+}
+
+.account-card span,
+.account-card small {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+}
+
+.account-card strong {
+  color: var(--torrevie-white);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.account-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.account-actions a,
+.account-actions button,
+.signout-form button {
+  background: var(--torrevie-white);
+  border: 0;
+  border-radius: 6px;
+  color: var(--torrevie-navy);
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 38px;
+  padding: 0 12px;
+  text-align: center;
+}
+
+.account-actions a {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+.account-actions a[aria-current="page"] {
+  outline: 2px solid var(--torrevie-teal);
+  outline-offset: 2px;
 }
 
 .admin-main {
@@ -239,6 +296,69 @@ h1 {
   display: grid;
   gap: 14px;
   grid-template-columns: minmax(220px, 1fr) minmax(180px, 260px) auto;
+}
+
+.account-summary {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.account-summary div {
+  display: grid;
+  gap: 6px;
+}
+
+.account-summary span {
+  color: var(--torrevie-steel-blue);
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.account-summary strong {
+  overflow-wrap: anywhere;
+}
+
+.account-form {
+  align-items: end;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(220px, 1fr) auto;
+}
+
+.account-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.account-form input,
+.account-form select {
+  border: 1px solid #e2e6ec;
+  border-radius: 6px;
+  min-height: 40px;
+  padding: 0 10px;
+}
+
+.account-form button {
+  background: var(--torrevie-teal);
+  border: 0;
+  border-radius: 6px;
+  color: var(--torrevie-white);
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.signout-form {
+  display: flex;
+}
+
+.signout-form button {
+  background: var(--torrevie-navy);
+  color: var(--torrevie-white);
 }
 
 .user-form label {
@@ -500,6 +620,15 @@ h1 {
   margin-bottom: 24px;
 }
 
+.login-brand {
+  color: var(--torrevie-teal);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
 .login-panel form {
   display: grid;
   gap: 16px;
@@ -560,6 +689,8 @@ h1 {
   .tenant-form,
   .tenant-edit,
   .user-form,
+  .account-form,
+  .account-summary,
   .provisioning-form,
   .subscription-form,
   .subscription-row {

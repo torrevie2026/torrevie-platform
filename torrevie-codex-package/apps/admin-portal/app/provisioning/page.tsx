@@ -24,7 +24,7 @@ export default async function ProvisioningPage() {
 
   return (
     <main className="admin-shell">
-      <AdminSidebar activeHref="/provisioning" />
+      <AdminSidebar activeHref="/provisioning" session={session} />
       <section className="admin-main">
         <header className="topbar">
           <div>

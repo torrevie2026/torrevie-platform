@@ -20,7 +20,7 @@ export default async function TenantsPage() {
 
   return (
     <main className="admin-shell">
-      <AdminSidebar activeHref="/tenants" />
+      <AdminSidebar activeHref="/tenants" session={session} />
       <section className="admin-main">
         <header className="topbar">
           <div>

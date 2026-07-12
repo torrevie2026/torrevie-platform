@@ -1,26 +1,19 @@
-import { createServerClient } from "@supabase/ssr";
-import { getTenantClaimsFromJwt, requireSupabaseBrowserEnv } from "@torrevie/auth";
-import { cookies } from "next/headers";
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { AdminSidebar } from "./components/AdminSidebar";
-import { canAccessAdminPortalFromClaims } from "../lib/access";
+import { getPlatformSession } from "../lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminHomePage() {
-  const accessToken = await getAccessToken();
+  const session = await getPlatformSession();
 
-  if (!accessToken) {
+  if (!session) {
     redirect("/login");
-  }
-
-  if (!canAccessAdminPortalFromClaims(getTenantClaimsFromJwt(accessToken))) {
-    notFound();
   }
 
   return (
     <main className="admin-shell">
-      <AdminSidebar />
+      <AdminSidebar session={session} />
       <section className="admin-main">
         <header className="topbar">
           <div>
@@ -49,22 +42,4 @@ export default async function AdminHomePage() {
       </section>
     </main>
   );
-}
-
-async function getAccessToken() {
-  const cookieStore = await cookies();
-  const { url, anonKey } = requireSupabaseBrowserEnv();
-  const supabase = createServerClient(url, anonKey, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll();
-      },
-      setAll() {
-        return;
-      }
-    }
-  });
-  const { data } = await supabase.auth.getSession();
-
-  return data.session?.access_token ?? null;
 }

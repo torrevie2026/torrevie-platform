@@ -10,7 +10,7 @@ export default async function LoginPage({
   return (
     <main className="login-shell">
       <section className="login-panel" aria-label="Admin sign in">
-        <p className="brand">Torrevie</p>
+        <p className="login-brand">Torrevie</p>
         <h1>Admin sign in</h1>
         {params.error ? <p className="error">Sign in failed. Check the account and try again.</p> : null}
         <form action={signIn}>

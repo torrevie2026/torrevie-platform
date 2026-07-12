@@ -31,7 +31,7 @@ export default async function UsersPage({
 
   return (
     <main className="admin-shell">
-      <AdminSidebar activeHref="/users" />
+      <AdminSidebar activeHref="/users" session={session} />
       <section className="admin-main">
         <header className="topbar">
           <div>
