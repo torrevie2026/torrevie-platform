@@ -430,6 +430,8 @@ Status: In progress on 2026-07-12.
   - Configured public production Supabase/browser environment variables on both Vercel production projects.
   - Added `admin.torrevie.com` and `app.torrevie.com` to the matching Vercel production projects.
   - Configured Cloudflare DNS CNAME records for both production hostnames with proxy disabled.
+  - Set `SUPABASE_SERVICE_ROLE_KEY` directly in the Admin Portal production Vercel project as a sensitive Production-only environment variable. Codex did not read or handle the secret value.
+  - Created the first production Torrevie platform admin user and linked it to the `torrevie_platform_admin` role.
 - Verification:
   - Production migration history includes platform foundation, auth hook, admin tenant lifecycle grants, provisioning grants, subscription grants, and CRM schema/RLS.
   - Baseline catalogue counts: 11 roles, 24 permissions, 5 products, 15 plans, 9 plan features, and 77 role-permission joins.
@@ -442,10 +444,12 @@ Status: In progress on 2026-07-12.
   - Customer production `/en` returns HTTP 200 at the Vercel URL.
   - `admin.torrevie.com` resolves to `ec1d49f965f4edb6.vercel-dns-017.com`, is valid in Vercel, and `/login` returns HTTP 200.
   - `app.torrevie.com` resolves to `5ce3c2ebe9f1006e.vercel-dns-017.com`, is valid in Vercel, and `/en` returns HTTP 200.
-  - Fresh Vercel production runtime error scans for both projects returned no errors after the env redeploys.
-- Remaining:
-  - Set `SUPABASE_SERVICE_ROLE_KEY` directly in the Admin Portal production Vercel project, scoped server-only. This value was not read or handled by Codex.
+  - Admin Portal production environment variables include `SUPABASE_SERVICE_ROLE_KEY` as a sensitive Production-only variable.
+  - Latest Admin Portal production deployment `dpl_3hjxnwbWLT2HmPH9uHoMym2D4ZgF` is `READY`.
+  - Production database contains one active `torrevie_platform_admin` user under tenant slug `torrevie-platform`.
+  - Supabase Auth custom access-token hook returns `role_scope = 'platform'` for the first platform admin user.
+  - Fresh Vercel production runtime error scans for the Admin Portal returned no errors after the service-role env redeploy.
 
 ## Open Questions
 
-- WP-24 production DNS is configured and validated. The only remaining production provisioning handoff is setting the Admin Portal `SUPABASE_SERVICE_ROLE_KEY` directly in Vercel as a server-only secret.
+- WP-24 production provisioning is complete pending only a human login smoke test with the first platform admin credentials.
