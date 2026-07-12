@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { getTenantClaimsFromJwt, requireSupabaseBrowserEnv } from "@torrevie/auth";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { AdminSidebar } from "./components/AdminSidebar";
 import { canAccessAdminPortalFromClaims } from "../lib/access";
 
 export const dynamic = "force-dynamic";
@@ -19,16 +20,7 @@ export default async function AdminHomePage() {
 
   return (
     <main className="admin-shell">
-      <aside className="admin-sidebar" aria-label="Control Plane sections">
-        <p className="brand">Torrevie</p>
-        <nav>
-          <a href="/">Overview</a>
-          <a href="/tenants">Tenants</a>
-          <a href="/provisioning">Provisioning</a>
-          <a href="/subscriptions">Subscriptions</a>
-          <a href="/">Audit</a>
-        </nav>
-      </aside>
+      <AdminSidebar />
       <section className="admin-main">
         <header className="topbar">
           <div>
