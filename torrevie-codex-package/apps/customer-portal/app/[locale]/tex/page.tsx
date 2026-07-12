@@ -62,6 +62,9 @@ type TexRecentExpense = {
   tripName: string | null;
   notes: string | null;
   createdAt: string;
+  duplicateStatus: string;
+  duplicateReason: string | null;
+  managerReviewRequired: boolean;
 };
 
 type TexTrip = {
@@ -91,6 +94,9 @@ type TexWhatsappSubmission = {
   senderPhone: string | null;
   messageText: string | null;
   status: string;
+  messageType: string;
+  ocrStatus: string;
+  replyText: string | null;
   createdAt: string;
 };
 
@@ -124,6 +130,9 @@ type ExpenseRow = {
   trip_name: string | null;
   notes: string | null;
   created_at: string;
+  duplicate_status: string;
+  duplicate_reason: string | null;
+  manager_review_required: boolean;
 };
 
 type TripRow = {
@@ -152,6 +161,9 @@ type WhatsappSubmissionRow = {
   sender_phone: string | null;
   message_text: string | null;
   status: string;
+  message_type: string;
+  ocr_status: string;
+  whatsapp_reply_text: string | null;
   created_at: string;
 };
 
@@ -422,6 +434,8 @@ function renderTexSection(
           rows={dashboard.whatsappSubmissions.map((submission) => [
             submission.senderPhone ?? "Unknown sender",
             submission.messageText ?? "No message text",
+            `${submission.messageType} / ${submission.ocrStatus}`,
+            submission.replyText ?? "No reply generated",
             formatDate(submission.createdAt),
             submission.status
           ])}
@@ -579,6 +593,7 @@ function TexDashboardHome({ dashboard }: { dashboard: TexDashboard }) {
                   <strong>{expense.vendor ?? expense.category ?? "Expense"}</strong>
                   <small>
                     {expense.employeeName ?? "Unassigned"} - {formatDate(expense.createdAt)}
+                    {expense.duplicateStatus !== "clear" ? ` - ${expense.duplicateStatus} duplicate` : ""}
                   </small>
                 </span>
                 <b>{formatAmount(expense.amount)} {expense.currency}</b>
@@ -762,7 +777,10 @@ async function listTexDashboard(client: PostgresTenantQueryClient, actor: TexAct
           e.category,
           coalesce(t.name, e.trip_name) as trip_name,
           e.notes,
-          e.created_at::text as created_at
+          e.created_at::text as created_at,
+          e.duplicate_status,
+          e.duplicate_reason,
+          e.manager_review_required
         from public.tex_expenses e
         left join public.tex_employee_profiles ep
           on ep.tenant_id = e.tenant_id
@@ -809,7 +827,7 @@ async function listTexDashboard(client: PostgresTenantQueryClient, actor: TexAct
     );
     const whatsappSubmissions = await client.query<WhatsappSubmissionRow>(
       `
-        select id, sender_phone, message_text, status, created_at::text as created_at
+        select id, sender_phone, message_text, status, message_type, ocr_status, whatsapp_reply_text, created_at::text as created_at
         from public.tex_unregistered_whatsapp_submissions
         where tenant_id = public.current_tenant_id()
         order by created_at desc
@@ -846,7 +864,10 @@ async function listTexDashboard(client: PostgresTenantQueryClient, actor: TexAct
         category: expense.category,
         tripName: expense.trip_name,
         notes: expense.notes,
-        createdAt: expense.created_at
+        createdAt: expense.created_at,
+        duplicateStatus: expense.duplicate_status,
+        duplicateReason: expense.duplicate_reason,
+        managerReviewRequired: expense.manager_review_required
       })),
       tripsList: trips.rows.map((trip) => ({
         id: trip.id,
@@ -873,6 +894,9 @@ async function listTexDashboard(client: PostgresTenantQueryClient, actor: TexAct
         senderPhone: submission.sender_phone,
         messageText: submission.message_text,
         status: submission.status,
+        messageType: submission.message_type,
+        ocrStatus: submission.ocr_status,
+        replyText: submission.whatsapp_reply_text,
         createdAt: submission.created_at
       })),
       notificationList: notifications.rows.map((notification) => ({
@@ -903,7 +927,10 @@ function mapRecentExpenseForClient(expense: TexRecentExpense): TexExpenseListIte
     category: expense.category,
     tripName: expense.tripName,
     notes: expense.notes,
-    createdAt: expense.createdAt
+    createdAt: expense.createdAt,
+    duplicateStatus: expense.duplicateStatus as TexExpenseListItem["duplicateStatus"],
+    duplicateReason: expense.duplicateReason,
+    managerReviewRequired: expense.managerReviewRequired
   };
 }
 

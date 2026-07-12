@@ -8,6 +8,7 @@ import {
   listTexFinanceReview,
   listTexTrips,
   payTexFinanceItems,
+  processTexWhatsappSubmission,
   recordTexWebhookSubmission,
   updateTexTrip,
   updateTexExpenseStatus,
@@ -102,6 +103,10 @@ export async function handleTexApiRequest(
     return json(201, {
       submission: await recordTexWebhookSubmission(client, actor, request.body as TexWebhookSubmissionInput)
     });
+  }
+
+  if (path === "/webhook-submissions/process" && method === "POST") {
+    return json(201, await processTexWhatsappSubmission(client, actor, request.body as TexWebhookSubmissionInput));
   }
 
   return json(404, { error: "TEX API route was not found." });

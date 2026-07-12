@@ -36,7 +36,16 @@ class RecordingTexApiClient implements TenantQueryClient {
     }
 
     if (sql.includes("from public.tex_integration_settings")) {
-      return { rows: [] };
+      return {
+        rows: [
+          {
+            ai_receipt_extraction_enabled: true,
+            duplicate_detection_enabled: true,
+            duplicate_auto_reject_enabled: false,
+            duplicate_similarity_threshold: 0.92
+          }
+        ] as Row[]
+      };
     }
 
     if (sql.includes("insert into public.tex_expenses")) {
@@ -66,7 +75,10 @@ class RecordingTexApiClient implements TenantQueryClient {
             trip_name: "Dubai run",
             notes: "Lunch",
             status: "pending",
-            created_at: "2026-07-12T10:00:00.000Z"
+            created_at: "2026-07-12T10:00:00.000Z",
+            duplicate_status: "clear",
+            duplicate_reason: null,
+            manager_review_required: false
           }
         ] as Row[]
       };
@@ -413,6 +425,23 @@ async function main() {
     });
     assert.equal(response.status, 201);
     assert.equal(client.hasSql("on conflict (tenant_id, message_id)"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, integrationActor, {
+      method: "POST",
+      path: "/webhook-submissions/process",
+      body: {
+        messageId: "wamid.status",
+        messageText: "STATUS",
+        senderPhone: "+971500000001",
+        payload: { provider: "meta" }
+      }
+    });
+    assert.equal(response.status, 201);
+    assert.match(JSON.stringify(response.body), /No TEX employee profile/);
+    assert.equal(client.hasSql("ocr_status"), true);
   }
 
   {
