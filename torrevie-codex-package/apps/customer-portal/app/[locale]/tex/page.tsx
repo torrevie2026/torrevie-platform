@@ -1,13 +1,14 @@
 import { dirForLocale, getMessages, isLocale, type Locale } from "@torrevie/localization";
 import { withTenantContext } from "@torrevie/tenant-context";
 import { notFound, redirect } from "next/navigation";
-import { listTexBootstrap, resolveTexActorContext, type TexActorContext } from "../../../lib/tex";
+import { listTexBootstrap, resolveTexActorContext, type TexActorContext, type TexExpenseListItem } from "../../../lib/tex";
 import {
   isCustomerSessionError,
   requireVerifiedCustomerSession,
   resolveCustomerTenantContext
 } from "../../../lib/server/customer-session";
 import { PostgresTenantQueryClient } from "../../../lib/server/tenant-query-client";
+import { TexExpensesClient } from "./TexExpensesClient";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,9 +34,14 @@ type TexRecentExpense = {
   id: string;
   employeeName: string | null;
   vendor: string | null;
-  amount: string;
+  amount: number;
   currency: string;
   status: string;
+  expenseDate: string;
+  category: string | null;
+  tripName: string | null;
+  notes: string | null;
+  createdAt: string;
 };
 
 type TexTrip = {
@@ -89,9 +95,14 @@ type ExpenseRow = {
   id: string;
   employee_name: string | null;
   vendor: string | null;
-  amount: string;
+  amount: number;
   currency: string;
   status: string;
+  expense_date: string;
+  category: string | null;
+  trip_name: string | null;
+  notes: string | null;
+  created_at: string;
 };
 
 type TripRow = {
@@ -240,20 +251,21 @@ function renderTexSection(section: TexSection, dashboard: TexDashboard, bootstra
   if (section === "expenses") {
     return (
       <section className="customer-section activity-panel" aria-labelledby="tex-expenses-title">
-        <div className="section-heading-row">
-          <h2 id="tex-expenses-title">Expenses</h2>
-          <a className="tex-action" href="/api/tex/bootstrap">
-            API status
-          </a>
-        </div>
-        <TexTable
-          empty="No migrated expenses are available for this tenant."
-          rows={dashboard.recentExpenses.map((expense) => [
-            expense.employeeName ?? "Unassigned",
-            expense.vendor ?? "No vendor",
-            `${expense.amount} ${expense.currency}`,
-            expense.status
-          ])}
+        <h2 id="tex-expenses-title">Expenses</h2>
+        <TexExpensesClient
+          categories={bootstrap.categories}
+          employees={bootstrap.employeeProfiles}
+          trips={dashboard.tripsList.map((trip) => ({
+            id: trip.id,
+            name: trip.name,
+            origin: trip.origin,
+            destination: trip.destination,
+            status: trip.status,
+            startDate: trip.startDate,
+            endDate: trip.endDate,
+            budgetAmount: trip.budgetAmount ? Number(trip.budgetAmount) : null
+          }))}
+          initialExpenses={dashboard.recentExpenses.map(mapRecentExpenseForClient)}
         />
       </section>
     );
@@ -383,7 +395,7 @@ function renderTexSection(section: TexSection, dashboard: TexDashboard, bootstra
           rows={dashboard.recentExpenses.map((expense) => [
             expense.employeeName ?? "Unassigned",
             expense.vendor ?? "No vendor",
-            `${expense.amount} ${expense.currency}`,
+            `${formatAmount(expense.amount)} ${expense.currency}`,
             expense.status
           ])}
         />
@@ -425,6 +437,10 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
+function formatAmount(value: number) {
+  return new Intl.NumberFormat("en", { maximumFractionDigits: 2 }).format(value);
+}
+
 async function listTexDashboard(client: PostgresTenantQueryClient, actor: TexActorContext): Promise<TexDashboard> {
   return withTenantContext(client, actor, async () => {
     const [dashboard, recentExpenses, trips, employees, whatsappSubmissions, notifications] = await Promise.all([
@@ -446,16 +462,24 @@ async function listTexDashboard(client: PostgresTenantQueryClient, actor: TexAct
             e.id,
             ep.name as employee_name,
             e.vendor,
-            e.amount::text as amount,
+            e.amount::float as amount,
             e.currency,
-            e.status
+            e.status,
+            e.expense_date::text as expense_date,
+            e.category,
+            coalesce(t.name, e.trip_name) as trip_name,
+            e.notes,
+            e.created_at::text as created_at
           from public.tex_expenses e
           left join public.tex_employee_profiles ep
             on ep.tenant_id = e.tenant_id
            and ep.id = e.employee_profile_id
+          left join public.tex_trips t
+            on t.tenant_id = e.tenant_id
+           and t.id = e.trip_id
           where e.tenant_id = public.current_tenant_id()
           order by e.created_at desc
-          limit 5
+          limit 50
         `
       ),
       client.query<TripRow>(
@@ -525,7 +549,12 @@ async function listTexDashboard(client: PostgresTenantQueryClient, actor: TexAct
         vendor: expense.vendor,
         amount: expense.amount,
         currency: expense.currency,
-        status: expense.status
+        status: expense.status,
+        expenseDate: expense.expense_date,
+        category: expense.category,
+        tripName: expense.trip_name,
+        notes: expense.notes,
+        createdAt: expense.created_at
       })),
       tripsList: trips.rows.map((trip) => ({
         id: trip.id,
@@ -562,4 +591,20 @@ async function listTexDashboard(client: PostgresTenantQueryClient, actor: TexAct
       }))
     };
   });
+}
+
+function mapRecentExpenseForClient(expense: TexRecentExpense): TexExpenseListItem {
+  return {
+    id: expense.id,
+    status: expense.status as TexExpenseListItem["status"],
+    amount: expense.amount,
+    currency: expense.currency,
+    employeeName: expense.employeeName,
+    vendor: expense.vendor,
+    expenseDate: expense.expenseDate,
+    category: expense.category,
+    tripName: expense.tripName,
+    notes: expense.notes,
+    createdAt: expense.createdAt
+  };
 }

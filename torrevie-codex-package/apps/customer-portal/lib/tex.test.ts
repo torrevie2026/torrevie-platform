@@ -2,6 +2,8 @@ import { strict as assert } from "node:assert";
 import type { QueryResult, QueryValue, TenantQueryClient } from "@torrevie/tenant-context";
 import {
   createTexExpense,
+  listTexExpenses,
+  listTexTrips,
   listTexBootstrap,
   recordTexWebhookSubmission,
   resolveTexActorContext,
@@ -137,6 +139,43 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("from public.tex_expenses e") && sql.includes("order by e.created_at desc")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000006001",
+            employee_name: "Maya Haddad",
+            vendor: "Airport Cafe",
+            expense_date: "2026-07-12",
+            amount: 120,
+            currency: "AED",
+            category: "Meals",
+            trip_name: "Dubai run",
+            notes: "Lunch",
+            status: "pending",
+            created_at: "2026-07-12T10:00:00.000Z"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("from public.tex_trips") && sql.includes("budget_amount::float")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000008001",
+            name: "Dubai run",
+            origin: "Dubai",
+            destination: "Abu Dhabi",
+            status: "open",
+            start_date: "2026-07-12",
+            end_date: null,
+            budget_amount: 1500
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("update public.tex_expenses") && sql.includes("returning id, status")) {
       return {
         rows: [
@@ -197,6 +236,23 @@ async function main() {
     assert.equal(bootstrap.integrationSettings?.whatsappProvider, "wappfly");
     assert.equal(client.hasSql("public.tex_expense_categories"), true);
     assert.equal(client.hasSql("app.current_tenant_id"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const expenses = await listTexExpenses(client, actor);
+    assert.equal(expenses[0]?.employeeName, "Maya Haddad");
+    assert.equal(expenses[0]?.tripName, "Dubai run");
+    assert.equal(expenses[0]?.status, "pending");
+    assert.equal(client.hasSql("from public.tex_expenses e"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const trips = await listTexTrips(client, actor);
+    assert.equal(trips[0]?.name, "Dubai run");
+    assert.equal(trips[0]?.budgetAmount, 1500);
+    assert.equal(client.hasSql("from public.tex_trips"), true);
   }
 
   {
