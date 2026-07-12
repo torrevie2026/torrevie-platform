@@ -16,10 +16,8 @@ export async function getPlatformSession(): Promise<PlatformSession | null> {
       getAll() {
         return cookieStore.getAll();
       },
-      setAll(cookiesToSet) {
-        for (const cookieToSet of cookiesToSet) {
-          cookieStore.set(cookieToSet.name, cookieToSet.value, cookieToSet.options);
-        }
+      setAll() {
+        return;
       }
     }
   });
