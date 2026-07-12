@@ -5,6 +5,7 @@ import { signOutAction } from "../account/actions";
 const navItems = [
   { href: "/", label: "Overview" },
   { href: "/tenants", label: "Tenants" },
+  { href: "/tenant-users", label: "Tenant users" },
   { href: "/users", label: "Users" },
   { href: "/provisioning", label: "Provisioning" },
   { href: "/subscriptions", label: "Subscriptions" },

@@ -334,6 +334,111 @@ h1 {
   grid-template-columns: minmax(220px, 1fr) minmax(180px, 260px) auto;
 }
 
+.tenant-user-selector,
+.tenant-user-form,
+.tenant-user-edit {
+  align-items: end;
+  display: grid;
+  gap: 14px;
+}
+
+.tenant-user-selector {
+  grid-template-columns: minmax(260px, 420px) auto;
+}
+
+.tenant-user-form {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.tenant-user-list {
+  display: grid;
+  gap: 16px;
+}
+
+.tenant-user-row {
+  border-top: 1px solid #e2e6ec;
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+}
+
+.tenant-user-edit {
+  grid-template-columns: minmax(220px, 1.4fr) repeat(4, minmax(150px, 1fr));
+}
+
+.tenant-user-edit > div {
+  display: grid;
+  gap: 4px;
+}
+
+.tenant-user-edit span {
+  color: var(--torrevie-black);
+  font-size: 13px;
+}
+
+.tenant-user-selector label,
+.tenant-user-form label,
+.tenant-user-edit label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.tenant-user-selector input,
+.tenant-user-selector select,
+.tenant-user-form input,
+.tenant-user-form select,
+.tenant-user-edit input,
+.tenant-user-edit select {
+  border: 1px solid #e2e6ec;
+  border-radius: 6px;
+  min-height: 40px;
+  padding: 0 10px;
+}
+
+.tenant-user-selector button,
+.tenant-user-form button,
+.tenant-user-edit button,
+.tenant-user-actions button {
+  background: var(--torrevie-teal);
+  border: 0;
+  border-radius: 6px;
+  color: var(--torrevie-white);
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.checkbox-label {
+  align-items: center;
+  background: var(--torrevie-light-grey);
+  border-radius: 6px;
+  display: flex !important;
+  gap: 8px !important;
+  min-height: 40px;
+  padding: 0 10px;
+}
+
+.checkbox-label input {
+  min-height: 0;
+  padding: 0;
+}
+
+.tenant-user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tenant-user-actions form {
+  display: flex;
+}
+
+.tenant-user-actions form:last-child button {
+  background: #b42318;
+}
+
 .account-summary {
   display: grid;
   gap: 16px;
@@ -840,8 +945,11 @@ h1 {
   }
 
   .tenant-form,
-  .tenant-edit,
-  .user-form,
+    .tenant-edit,
+    .tenant-user-selector,
+    .tenant-user-form,
+    .tenant-user-edit,
+    .user-form,
   .account-form,
   .account-summary,
   .profile-form,

@@ -9,6 +9,19 @@ export type VerifiedCustomerSession = {
   email: string | null;
 };
 
+export type CustomerAccessRequirements = {
+  displayName: string;
+  firstName: string;
+  lastName: string;
+  mobileNumber: string;
+  recoveryEmail: string;
+  profileComplete: boolean;
+  requireProfileCompletion: boolean;
+  requirePasswordChange: boolean;
+  requireMfa: boolean;
+  mfaEnrolled: boolean;
+};
+
 export async function requireVerifiedCustomerSession(): Promise<VerifiedCustomerSession> {
   const cookieStore = await cookies();
   const { url, anonKey } = requireSupabaseBrowserEnv();
@@ -63,6 +76,48 @@ export async function resolveCustomerTenantContext(
   return resolveTenantContext(client, session.userId);
 }
 
+export async function getCustomerAccessRequirements(
+  client: TenantQueryClient,
+  context: ResolvedTenantContext
+): Promise<CustomerAccessRequirements> {
+  const userResult = await client.query<UserRequirementRow>(
+    `
+      select first_name, last_name, mobile_number, recovery_email, profile_completed_at, mfa_enrolled
+      from public.users
+      where id = $1
+    `,
+    [context.userId]
+  );
+  const profileResult = await client.query<ProfileRequirementRow>(
+    `
+      select
+        display_name,
+        require_profile_completion,
+        require_password_change,
+        require_mfa
+      from public.user_profiles
+      where tenant_id = $1
+        and user_id = $2
+    `,
+    [context.tenantId, context.userId]
+  );
+  const user = userResult.rows[0];
+  const profile = profileResult.rows[0];
+
+  return {
+    displayName: profile?.display_name ?? "",
+    firstName: user?.first_name ?? "",
+    lastName: user?.last_name ?? "",
+    mobileNumber: user?.mobile_number ?? "",
+    recoveryEmail: user?.recovery_email ?? "",
+    profileComplete: Boolean(user?.profile_completed_at),
+    requireProfileCompletion: profile?.require_profile_completion ?? true,
+    requirePasswordChange: profile?.require_password_change ?? false,
+    requireMfa: profile?.require_mfa ?? false,
+    mfaEnrolled: user?.mfa_enrolled ?? false
+  };
+}
+
 export function isCustomerSessionError(error: unknown): error is CustomerSessionError {
   return error instanceof CustomerSessionError;
 }
@@ -76,3 +131,19 @@ export class CustomerSessionError extends Error {
     this.name = "CustomerSessionError";
   }
 }
+
+type UserRequirementRow = {
+  first_name: string | null;
+  last_name: string | null;
+  mobile_number: string | null;
+  recovery_email: string | null;
+  profile_completed_at: string | null;
+  mfa_enrolled: boolean;
+};
+
+type ProfileRequirementRow = {
+  display_name: string | null;
+  require_profile_completion: boolean | null;
+  require_password_change: boolean | null;
+  require_mfa: boolean | null;
+};

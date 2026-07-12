@@ -883,6 +883,73 @@ a {
   text-align: end;
 }
 
+.customer-account-grid {
+  align-items: start;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.customer-account-grid .tex-form-panel:last-child {
+  grid-column: 1 / -1;
+}
+
+.customer-account-form,
+.customer-account-stack,
+.customer-mfa-enrollment,
+.customer-mfa-list {
+  display: grid;
+  gap: 14px;
+}
+
+.customer-account-form label,
+.customer-mfa-enrollment label {
+  color: var(--color-text-muted);
+  display: grid;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 6px;
+}
+
+.customer-account-form input,
+.customer-mfa-enrollment input {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  min-block-size: 42px;
+  padding-inline: 10px;
+}
+
+.customer-mfa-list article {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+}
+
+.customer-mfa-list span,
+.customer-mfa-enrollment p {
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.customer-mfa-enrollment img {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  height: 180px;
+  width: 180px;
+}
+
+.customer-mfa-enrollment code {
+  background: var(--color-bg-surface);
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+  padding: 10px;
+}
+
 .login-shell {
   display: grid;
   min-height: 100vh;
@@ -953,8 +1020,13 @@ a {
   .crm-workspace,
   .tex-expense-workspace,
   .tex-trip-workspace,
-  .tex-finance-workspace {
+  .tex-finance-workspace,
+  .customer-account-grid {
     grid-template-columns: 1fr;
+  }
+
+  .customer-account-grid .tex-form-panel:last-child {
+    grid-column: auto;
   }
 
   .crm-form-grid,

@@ -9,6 +9,7 @@ import {
   type TexExpenseListItem
 } from "../../../lib/tex";
 import {
+  getCustomerAccessRequirements,
   isCustomerSessionError,
   requireVerifiedCustomerSession,
   resolveCustomerTenantContext
@@ -173,6 +174,20 @@ export default async function TexPage({
     const session = await requireVerifiedCustomerSession();
     const client = new PostgresTenantQueryClient(session.userId);
     const tenantContext = await resolveCustomerTenantContext(client, session);
+    const requirements = await getCustomerAccessRequirements(client, tenantContext);
+
+    if (requirements.requireProfileCompletion && !requirements.profileComplete) {
+      redirect(`/${locale}/account?profile=required`);
+    }
+
+    if (requirements.requirePasswordChange) {
+      redirect(`/${locale}/account?password=required`);
+    }
+
+    if (requirements.requireMfa && !requirements.mfaEnrolled) {
+      redirect(`/${locale}/account?mfa=required`);
+    }
+
     const actor = await resolveTexActorContext(client, tenantContext);
     const bootstrap = await listTexBootstrap(client, actor);
     const dashboard = await listTexDashboard(client, actor);
