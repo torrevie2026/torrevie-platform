@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import type { PlatformSession } from "../../lib/session";
 import { signOutAction } from "../account/actions";
 
@@ -12,6 +13,14 @@ const navItems = [
 ];
 
 export function AdminSidebar({ activeHref = "/", session }: { activeHref?: string; session?: PlatformSession }) {
+  if (session?.mfaRequired && activeHref !== "/mfa") {
+    redirect("/mfa");
+  }
+
+  if (session && !session.profileComplete && activeHref !== "/account" && activeHref !== "/mfa") {
+    redirect("/account?profile=required");
+  }
+
   return (
     <aside className="admin-sidebar" aria-label="Control Plane sections">
       <a className="brand" href="/" aria-label="Torrevie Admin overview">

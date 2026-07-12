@@ -14,6 +14,13 @@ export type PlatformRoleKey = (typeof platformRoleKeys)[number];
 export type PlatformUserRecord = {
   userId: string;
   email: string;
+  firstName: string;
+  lastName: string;
+  position: string;
+  mobileNumber: string;
+  recoveryEmail: string;
+  profileCompletedAt: string | null;
+  mfaEnrolled: boolean;
   status: string;
   role: PlatformRoleKey;
   membershipStatus: string;
@@ -49,6 +56,13 @@ type MembershipRow = {
 type UserRow = {
   id: string;
   email: string;
+  first_name: string | null;
+  last_name: string | null;
+  position: string | null;
+  mobile_number: string | null;
+  recovery_email: string | null;
+  profile_completed_at: string | null;
+  mfa_enrolled: boolean;
   status: string;
 };
 
@@ -77,7 +91,10 @@ export async function listPlatformUsers(client: SupabaseClient): Promise<Platfor
   }
 
   const [{ data: users, error: usersError }, { data: assignments, error: assignmentsError }] = await Promise.all([
-    client.from("users").select("id,email,status").in("id", userIds),
+    client
+      .from("users")
+      .select("id,email,first_name,last_name,position,mobile_number,recovery_email,profile_completed_at,mfa_enrolled,status")
+      .in("id", userIds),
     client
       .from("user_role_assignments")
       .select("user_id,roles!inner(key,scope)")
@@ -117,6 +134,13 @@ export async function listPlatformUsers(client: SupabaseClient): Promise<Platfor
       {
         userId: membership.user_id,
         email: user.email,
+        firstName: user.first_name ?? "",
+        lastName: user.last_name ?? "",
+        position: user.position ?? "",
+        mobileNumber: user.mobile_number ?? "",
+        recoveryEmail: user.recovery_email ?? "",
+        profileCompletedAt: user.profile_completed_at,
+        mfaEnrolled: user.mfa_enrolled,
         status: user.status,
         membershipStatus: membership.status,
         role,

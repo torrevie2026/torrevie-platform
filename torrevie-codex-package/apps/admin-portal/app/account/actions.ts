@@ -5,6 +5,7 @@ import { getTenantClaimsFromJwt, requireSupabaseBrowserEnv } from "@torrevie/aut
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { canAccessAdminPortalFromClaims } from "../../lib/access";
+import { getSupabaseAdminClient } from "../../lib/admin-client";
 
 export async function signOutAction() {
   const supabase = await createWritableSupabaseServerClient();
@@ -67,6 +68,52 @@ export async function updateTimezoneAction(formData: FormData) {
   redirect("/account?timezone=updated");
 }
 
+export async function updateProfileAction(formData: FormData) {
+  const supabase = await createWritableSupabaseServerClient();
+  const session = await requireAuthorizedSession(supabase);
+  const profile = sanitizeProfile({
+    firstName: stringValue(formData, "firstName"),
+    lastName: stringValue(formData, "lastName"),
+    position: stringValue(formData, "position"),
+    mobileNumber: stringValue(formData, "mobileNumber"),
+    recoveryEmail: stringValue(formData, "recoveryEmail")
+  });
+  const { error } = await getSupabaseAdminClient()
+    .from("users")
+    .update({
+      first_name: profile.firstName,
+      last_name: profile.lastName,
+      position: profile.position,
+      mobile_number: profile.mobileNumber,
+      recovery_email: profile.recoveryEmail,
+      profile_completed_at: new Date().toISOString(),
+      updated_by: session.user.id
+    })
+    .eq("id", session.user.id);
+
+  if (error) {
+    redirect("/account?profile=failed");
+  }
+
+  redirect("/account?profile=updated");
+}
+
+export async function updateMfaEnrollmentAction(enabled: boolean) {
+  const supabase = await createWritableSupabaseServerClient();
+  const session = await requireAuthorizedSession(supabase);
+  const { error } = await getSupabaseAdminClient()
+    .from("users")
+    .update({
+      mfa_enrolled: enabled,
+      updated_by: session.user.id
+    })
+    .eq("id", session.user.id);
+
+  if (error) {
+    throw new Error(`Unable to update MFA enrollment state: ${error.message}`);
+  }
+}
+
 async function createWritableSupabaseServerClient() {
   const cookieStore = await cookies();
   const { url, anonKey } = requireSupabaseBrowserEnv();
@@ -116,4 +163,26 @@ function sanitizeTimezone(value: string) {
   }
 
   return value;
+}
+
+function sanitizeProfile(input: {
+  firstName: string;
+  lastName: string;
+  position: string;
+  mobileNumber: string;
+  recoveryEmail: string;
+}) {
+  if (!input.firstName || !input.lastName || !input.position || !input.mobileNumber || !input.recoveryEmail) {
+    redirect("/account?profile=missing");
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.recoveryEmail)) {
+    redirect("/account?profile=invalid_recovery_email");
+  }
+
+  if (input.mobileNumber.length < 7 || input.mobileNumber.length > 32) {
+    redirect("/account?profile=invalid_mobile");
+  }
+
+  return input;
 }

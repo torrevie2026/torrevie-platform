@@ -82,13 +82,29 @@ function PlatformUserRow({ user }: { user: PlatformUserRecord }) {
   return (
     <article className="user-row">
       <div>
-        <strong>{user.email}</strong>
+        <strong>{displayName(user)}</strong>
+        <span>{user.email}</span>
         <span>{platformRoleLabels[user.role]}</span>
       </div>
       <div>
         <mark>{user.membershipStatus}</mark>
         <span>{user.status}</span>
       </div>
+      <div>
+        <strong>{user.position || "Position not set"}</strong>
+        <span>{user.mobileNumber || "Mobile not set"}</span>
+        <span>{user.recoveryEmail || "Recovery email not set"}</span>
+      </div>
+      <div className="user-badges">
+        <mark>{user.profileCompletedAt ? "profile complete" : "profile required"}</mark>
+        <mark>{user.mfaEnrolled ? "mfa enabled" : "mfa optional"}</mark>
+      </div>
     </article>
   );
+}
+
+function displayName(user: PlatformUserRecord) {
+  const name = `${user.firstName} ${user.lastName}`.trim();
+
+  return name || "Name not set";
 }

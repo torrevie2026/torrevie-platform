@@ -320,28 +320,39 @@ h1 {
   overflow-wrap: anywhere;
 }
 
-.account-form {
+.account-form,
+.profile-form {
   align-items: end;
   display: grid;
   gap: 14px;
   grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(220px, 1fr) auto;
 }
 
-.account-form label {
+.profile-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.account-form label,
+.profile-form label {
   display: grid;
   gap: 6px;
   font-weight: 700;
 }
 
 .account-form input,
-.account-form select {
+.account-form select,
+.profile-form input {
   border: 1px solid #e2e6ec;
   border-radius: 6px;
   min-height: 40px;
   padding: 0 10px;
 }
 
-.account-form button {
+.account-form button,
+.profile-form button,
+.mfa-settings button,
+.mfa-enrollment button,
+.mfa-factor-list button {
   background: var(--torrevie-teal);
   border: 0;
   border-radius: 6px;
@@ -349,6 +360,67 @@ h1 {
   cursor: pointer;
   font-weight: 800;
   min-height: 40px;
+  padding: 0 12px;
+}
+
+.profile-form button {
+  grid-column: 1 / -1;
+}
+
+.mfa-settings {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.mfa-factor-list,
+.mfa-enrollment {
+  display: grid;
+  gap: 12px;
+}
+
+.mfa-factor-list article {
+  align-items: center;
+  border-top: 1px solid #e2e6ec;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding-top: 12px;
+}
+
+.mfa-factor-list div,
+.mfa-enrollment label {
+  display: grid;
+  gap: 6px;
+}
+
+.mfa-factor-list span,
+.mfa-enrollment p {
+  color: var(--torrevie-black);
+  font-size: 13px;
+  margin: 0;
+}
+
+.mfa-enrollment img {
+  border: 1px solid #e2e6ec;
+  border-radius: 8px;
+  height: 180px;
+  width: 180px;
+}
+
+.mfa-enrollment code {
+  background: var(--torrevie-light-grey);
+  border-radius: 6px;
+  color: var(--torrevie-navy);
+  overflow-wrap: anywhere;
+  padding: 10px;
+}
+
+.mfa-enrollment input,
+.login-panel select {
+  border: 1px solid #e2e6ec;
+  border-radius: 6px;
+  min-height: 44px;
   padding: 0 12px;
 }
 
@@ -396,7 +468,7 @@ h1 {
   border-top: 1px solid #e2e6ec;
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1.4fr) auto minmax(0, 1fr) auto;
   padding-top: 14px;
 }
 
@@ -670,6 +742,10 @@ h1 {
   text-transform: uppercase;
 }
 
+.user-badges {
+  align-content: start;
+}
+
 .login-panel form {
   display: grid;
   gap: 16px;
@@ -732,6 +808,7 @@ h1 {
   .user-form,
   .account-form,
   .account-summary,
+  .profile-form,
   .provisioning-form,
   .onboarding-next-step,
   .subscription-form,
