@@ -79,6 +79,21 @@ a {
   border-inline-start: 3px solid var(--color-accent);
 }
 
+.tex-nav a {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.tex-nav mark {
+  background: var(--color-bg-surface);
+  border-radius: 999px;
+  color: var(--color-accent-secondary);
+  font-size: 12px;
+  padding-block: 3px;
+  padding-inline: 8px;
+}
+
 .customer-main {
   display: grid;
   gap: 24px;
@@ -405,6 +420,17 @@ a {
   gap: 10px;
 }
 
+.module-card-link {
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.module-card-link:hover {
+  border-color: var(--color-accent);
+  transform: translateY(-1px);
+}
+
 .module-card h3,
 .module-card p {
   margin: 0;
@@ -437,6 +463,56 @@ a {
 
 .module-status-inactive {
   background: var(--color-accent-secondary);
+}
+
+.section-heading-row {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.tex-action {
+  background: var(--color-accent);
+  border-radius: 6px;
+  color: var(--color-text-inverse);
+  font-size: 13px;
+  font-weight: 700;
+  padding-block: 9px;
+  padding-inline: 12px;
+}
+
+.tex-table {
+  min-inline-size: 720px;
+}
+
+.tex-settings-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tex-settings-grid article {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.tex-settings-grid span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.tex-settings-grid a,
+.tex-settings-grid strong {
+  color: var(--color-accent);
+  font-size: 18px;
+  font-weight: 800;
 }
 
 .login-shell {
