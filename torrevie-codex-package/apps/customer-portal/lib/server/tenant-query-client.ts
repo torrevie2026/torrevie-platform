@@ -65,11 +65,21 @@ function getPool() {
     pool = new Pool({
       connectionString: requireDatabaseUrl(),
       max: Number(process.env.TORREVIE_DATABASE_POOL_SIZE ?? 5),
-      ssl: process.env.TORREVIE_DATABASE_SSL === "true" ? { rejectUnauthorized: true } : undefined
+      ssl: databaseSslConfig()
     });
   }
 
   return pool;
+}
+
+function databaseSslConfig() {
+  if (process.env.TORREVIE_DATABASE_SSL !== "true") {
+    return undefined;
+  }
+
+  return {
+    rejectUnauthorized: process.env.TORREVIE_DATABASE_SSL_REJECT_UNAUTHORIZED === "true"
+  };
 }
 
 function requireDatabaseUrl() {
