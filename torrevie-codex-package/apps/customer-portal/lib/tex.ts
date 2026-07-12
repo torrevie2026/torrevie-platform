@@ -81,12 +81,47 @@ export type TexExpenseListItem = TexExpenseRecord & {
 export type TexTripListItem = {
   id: string;
   name: string;
+  description: string | null;
+  tripType: "general" | "logistics";
   origin: string | null;
   destination: string | null;
   status: string;
   startDate: string | null;
   endDate: string | null;
   budgetAmount: number | null;
+  enforceCurrency: boolean;
+  enforcedCurrency: string | null;
+  teamId: string | null;
+  teamName: string | null;
+  containerNumber: string | null;
+  driverEmployeeProfileId: string | null;
+  driverName: string | null;
+  driverTripAmount: number;
+  subcontractorDriverName: string | null;
+  subcontractorAmount: number;
+  driverPayoutStatus: string;
+  expenseCount: number;
+  spendAmount: number;
+};
+
+export type TexTripInput = {
+  name: string;
+  description?: string | null;
+  tripType?: "general" | "logistics" | null;
+  origin?: string | null;
+  destination?: string | null;
+  budgetAmount?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  enforceCurrency?: boolean | null;
+  enforcedCurrency?: string | null;
+  teamId?: string | null;
+  containerNumber?: string | null;
+  driverEmployeeProfileId?: string | null;
+  driverTripAmount?: number | null;
+  subcontractorDriverName?: string | null;
+  subcontractorAmount?: number | null;
+  subcontractorNotes?: string | null;
 };
 
 export type TexWebhookSubmissionInput = {
@@ -264,22 +299,260 @@ export async function listTexTrips(client: TenantQueryClient, actor: TexActorCon
     const result = await client.query<TexTripListRow>(
       `
         select
-          id,
-          name,
-          origin,
-          destination,
-          status,
-          start_date::text as start_date,
-          end_date::text as end_date,
-          budget_amount::float as budget_amount
-        from public.tex_trips
-        where tenant_id = public.current_tenant_id()
-        order by created_at desc
+          t.id,
+          t.name,
+          t.description,
+          t.trip_type,
+          t.origin,
+          t.destination,
+          t.status,
+          t.start_date::text as start_date,
+          t.end_date::text as end_date,
+          t.budget_amount::float as budget_amount,
+          t.enforce_currency,
+          t.enforced_currency,
+          t.team_id,
+          team.name as team_name,
+          t.container_number,
+          t.driver_employee_profile_id,
+          driver.name as driver_name,
+          t.driver_trip_amount::float as driver_trip_amount,
+          t.subcontractor_driver_name,
+          t.subcontractor_amount::float as subcontractor_amount,
+          t.driver_payout_status,
+          count(e.id)::int as expense_count,
+          coalesce(sum(e.amount), 0)::float as spend_amount
+        from public.tex_trips t
+        left join public.tex_teams team
+          on team.tenant_id = t.tenant_id
+         and team.id = t.team_id
+        left join public.tex_employee_profiles driver
+          on driver.tenant_id = t.tenant_id
+         and driver.id = t.driver_employee_profile_id
+        left join public.tex_expenses e
+          on e.tenant_id = t.tenant_id
+         and e.trip_id = t.id
+        where t.tenant_id = public.current_tenant_id()
+        group by t.id, team.name, driver.name
+        order by t.status = 'open' desc, t.created_at desc
         limit 100
       `
     );
 
     return result.rows.map(mapTripListItem);
+  });
+}
+
+export async function createTexTrip(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexTripInput
+): Promise<TexTripListItem> {
+  assertTexPermission(actor, "tex.expense.manage");
+  const trip = sanitizeTrip(input);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexTripListRow>(
+      `
+        insert into public.tex_trips (
+          tenant_id,
+          name,
+          description,
+          trip_type,
+          origin,
+          destination,
+          budget_amount,
+          start_date,
+          end_date,
+          enforce_currency,
+          enforced_currency,
+          team_id,
+          container_number,
+          driver_employee_profile_id,
+          driver_trip_amount,
+          subcontractor_driver_name,
+          subcontractor_amount,
+          subcontractor_notes,
+          created_by,
+          updated_by
+        )
+        values (
+          public.current_tenant_id(),
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          $10,
+          $11,
+          $12,
+          $13,
+          $14,
+          $15,
+          $16,
+          $17,
+          $18,
+          $18
+        )
+        returning
+          id,
+          name,
+          description,
+          trip_type,
+          origin,
+          destination,
+          status,
+          start_date::text as start_date,
+          end_date::text as end_date,
+          budget_amount::float as budget_amount,
+          enforce_currency,
+          enforced_currency,
+          team_id,
+          null::text as team_name,
+          container_number,
+          driver_employee_profile_id,
+          null::text as driver_name,
+          driver_trip_amount::float as driver_trip_amount,
+          subcontractor_driver_name,
+          subcontractor_amount::float as subcontractor_amount,
+          driver_payout_status,
+          0::int as expense_count,
+          0::float as spend_amount
+      `,
+      tripValues(trip, actor.userId)
+    );
+    const row = requireSingleRow(result.rows, "trip");
+    await writeTexAuditEvent(client, actor, "tex.trip.created", "tex_trip", row.id, {
+      name: row.name
+    });
+
+    return mapTripListItem(row);
+  });
+}
+
+export async function updateTexTrip(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  tripId: string,
+  input: TexTripInput
+): Promise<TexTripListItem> {
+  assertTexPermission(actor, "tex.expense.manage");
+  assertUuid(tripId, "trip id");
+  const trip = sanitizeTrip(input);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexTripListRow>(
+      `
+        update public.tex_trips
+           set name = $1,
+               description = $2,
+               trip_type = $3,
+               origin = $4,
+               destination = $5,
+               budget_amount = $6,
+               start_date = $7,
+               end_date = $8,
+               enforce_currency = $9,
+               enforced_currency = $10,
+               team_id = $11,
+               container_number = $12,
+               driver_employee_profile_id = $13,
+               driver_trip_amount = $14,
+               subcontractor_driver_name = $15,
+               subcontractor_amount = $16,
+               subcontractor_notes = $17,
+               updated_by = $18
+         where tenant_id = public.current_tenant_id()
+           and id = $19
+        returning
+          id,
+          name,
+          description,
+          trip_type,
+          origin,
+          destination,
+          status,
+          start_date::text as start_date,
+          end_date::text as end_date,
+          budget_amount::float as budget_amount,
+          enforce_currency,
+          enforced_currency,
+          team_id,
+          null::text as team_name,
+          container_number,
+          driver_employee_profile_id,
+          null::text as driver_name,
+          driver_trip_amount::float as driver_trip_amount,
+          subcontractor_driver_name,
+          subcontractor_amount::float as subcontractor_amount,
+          driver_payout_status,
+          0::int as expense_count,
+          0::float as spend_amount
+      `,
+      [...tripValues(trip, actor.userId), tripId]
+    );
+    const row = requireSingleRow(result.rows, "trip");
+    await writeTexAuditEvent(client, actor, "tex.trip.updated", "tex_trip", row.id, {
+      name: row.name
+    });
+
+    return mapTripListItem(row);
+  });
+}
+
+export async function closeTexTrip(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  tripId: string
+): Promise<TexTripListItem> {
+  assertTexPermission(actor, "tex.expense.manage");
+  assertUuid(tripId, "trip id");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexTripListRow>(
+      `
+        update public.tex_trips
+           set status = 'closed',
+               updated_by = $1
+         where tenant_id = public.current_tenant_id()
+           and id = $2
+        returning
+          id,
+          name,
+          description,
+          trip_type,
+          origin,
+          destination,
+          status,
+          start_date::text as start_date,
+          end_date::text as end_date,
+          budget_amount::float as budget_amount,
+          enforce_currency,
+          enforced_currency,
+          team_id,
+          null::text as team_name,
+          container_number,
+          driver_employee_profile_id,
+          null::text as driver_name,
+          driver_trip_amount::float as driver_trip_amount,
+          subcontractor_driver_name,
+          subcontractor_amount::float as subcontractor_amount,
+          driver_payout_status,
+          0::int as expense_count,
+          0::float as spend_amount
+      `,
+      [actor.userId, tripId]
+    );
+    const row = requireSingleRow(result.rows, "trip");
+    await writeTexAuditEvent(client, actor, "tex.trip.closed", "tex_trip", row.id, {
+      name: row.name
+    });
+
+    return mapTripListItem(row);
   });
 }
 
@@ -543,6 +816,82 @@ function sanitizeWebhookSubmission(input: TexWebhookSubmissionInput): Required<T
   };
 }
 
+function sanitizeTrip(input: TexTripInput): Required<TexTripInput> {
+  const name = input.name.trim();
+
+  if (!name) {
+    throw new Error("Trip name is required.");
+  }
+
+  const tripType = input.tripType === "logistics" ? "logistics" : "general";
+  const budgetAmount = optionalNonNegative(input.budgetAmount, "budget amount");
+  const driverTripAmount = optionalNonNegative(input.driverTripAmount, "driver trip amount") ?? 0;
+  const subcontractorAmount = optionalNonNegative(input.subcontractorAmount, "subcontractor amount") ?? 0;
+  const enforceCurrency = Boolean(input.enforceCurrency);
+  const enforcedCurrency = cleanOptional(input.enforcedCurrency)?.toUpperCase() ?? null;
+
+  if (enforceCurrency && (!enforcedCurrency || !/^[A-Z]{3}$/.test(enforcedCurrency))) {
+    throw new Error("Enforced currency must be a three-letter ISO code.");
+  }
+
+  return {
+    name,
+    description: cleanOptional(input.description),
+    tripType,
+    origin: cleanOptional(input.origin),
+    destination: cleanOptional(input.destination),
+    budgetAmount,
+    startDate: input.startDate ? parseIsoDate(input.startDate, "start date") : null,
+    endDate: input.endDate ? parseIsoDate(input.endDate, "end date") : null,
+    enforceCurrency,
+    enforcedCurrency: enforceCurrency ? enforcedCurrency : null,
+    teamId: cleanOptional(input.teamId),
+    containerNumber: cleanOptional(input.containerNumber),
+    driverEmployeeProfileId: cleanOptional(input.driverEmployeeProfileId),
+    driverTripAmount,
+    subcontractorDriverName: cleanOptional(input.subcontractorDriverName),
+    subcontractorAmount,
+    subcontractorNotes: cleanOptional(input.subcontractorNotes)
+  };
+}
+
+function optionalNonNegative(value: number | null | undefined, label: string) {
+  if (value === null || value === undefined || value === 0) {
+    return null;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`Trip ${label} cannot be negative.`);
+  }
+
+  return parsed;
+}
+
+function tripValues(trip: Required<TexTripInput>, userId: string) {
+  return [
+    trip.name,
+    trip.description,
+    trip.tripType,
+    trip.origin,
+    trip.destination,
+    trip.budgetAmount,
+    trip.startDate,
+    trip.endDate,
+    trip.enforceCurrency,
+    trip.enforcedCurrency,
+    trip.teamId,
+    trip.containerNumber,
+    trip.driverEmployeeProfileId,
+    trip.driverTripAmount,
+    trip.subcontractorDriverName,
+    trip.subcontractorAmount,
+    trip.subcontractorNotes,
+    userId
+  ];
+}
+
 function parseIsoDate(value: string, label: string) {
   const trimmed = value.trim();
 
@@ -653,12 +1002,27 @@ function mapTripListItem(row: TexTripListRow): TexTripListItem {
   return {
     id: row.id,
     name: row.name,
+    description: row.description,
+    tripType: row.trip_type,
     origin: row.origin,
     destination: row.destination,
     status: row.status,
     startDate: row.start_date,
     endDate: row.end_date,
-    budgetAmount: row.budget_amount
+    budgetAmount: row.budget_amount,
+    enforceCurrency: row.enforce_currency,
+    enforcedCurrency: row.enforced_currency,
+    teamId: row.team_id,
+    teamName: row.team_name,
+    containerNumber: row.container_number,
+    driverEmployeeProfileId: row.driver_employee_profile_id,
+    driverName: row.driver_name,
+    driverTripAmount: row.driver_trip_amount,
+    subcontractorDriverName: row.subcontractor_driver_name,
+    subcontractorAmount: row.subcontractor_amount,
+    driverPayoutStatus: row.driver_payout_status,
+    expenseCount: row.expense_count,
+    spendAmount: row.spend_amount
   };
 }
 
@@ -712,12 +1076,27 @@ type TexExpenseListRow = TexExpenseRow & {
 type TexTripListRow = {
   id: string;
   name: string;
+  description: string | null;
+  trip_type: "general" | "logistics";
   origin: string | null;
   destination: string | null;
   status: string;
   start_date: string | null;
   end_date: string | null;
   budget_amount: number | null;
+  enforce_currency: boolean;
+  enforced_currency: string | null;
+  team_id: string | null;
+  team_name: string | null;
+  container_number: string | null;
+  driver_employee_profile_id: string | null;
+  driver_name: string | null;
+  driver_trip_amount: number;
+  subcontractor_driver_name: string | null;
+  subcontractor_amount: number;
+  driver_payout_status: string;
+  expense_count: number;
+  spend_amount: number;
 };
 
 type TexWebhookSubmissionRow = {

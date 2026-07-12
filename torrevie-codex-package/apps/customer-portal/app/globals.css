@@ -522,6 +522,13 @@ a {
   grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
 }
 
+.tex-trip-workspace {
+  align-items: start;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(320px, 460px) minmax(0, 1fr);
+}
+
 .tex-form-panel {
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
@@ -529,6 +536,36 @@ a {
   display: grid;
   gap: 16px;
   padding: 18px;
+}
+
+.tex-wide-label {
+  color: var(--color-text-muted);
+  display: grid;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 6px;
+}
+
+.tex-wide-label input {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  min-block-size: 42px;
+  padding-inline: 10px;
+}
+
+.tex-checkbox-row {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.tex-checkbox-row input {
+  accent-color: var(--color-accent);
 }
 
 .tex-form-panel h3 {
@@ -687,6 +724,91 @@ a {
   background: var(--color-status-error);
 }
 
+.tex-status-open {
+  background: var(--color-status-success);
+}
+
+.tex-status-closed,
+.tex-status-cancelled {
+  background: var(--color-accent-secondary);
+}
+
+.tex-inline-button {
+  inline-size: fit-content;
+}
+
+.tex-trip-list {
+  display: grid;
+  gap: 12px;
+}
+
+.tex-trip-card {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.tex-trip-card header,
+.tex-trip-card footer,
+.tex-trip-meta {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.tex-trip-card h4 {
+  font-size: 17px;
+  margin: 6px 0 4px;
+}
+
+.tex-trip-card p,
+.tex-trip-meta {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.tex-trip-card strong {
+  font-size: 18px;
+  text-align: end;
+}
+
+.tex-trip-card footer {
+  justify-content: flex-end;
+}
+
+.tex-trip-card footer button {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-weight: 700;
+  min-block-size: 34px;
+  padding-inline: 11px;
+}
+
+.tex-trip-card footer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.tex-budget-bar {
+  background: var(--color-bg-surface);
+  border-radius: 999px;
+  block-size: 8px;
+  overflow: hidden;
+}
+
+.tex-budget-bar span {
+  background: var(--color-accent);
+  block-size: 100%;
+  display: block;
+}
+
 .login-shell {
   display: grid;
   min-height: 100vh;
@@ -755,7 +877,8 @@ a {
   .module-grid,
   .admin-layout,
   .crm-workspace,
-  .tex-expense-workspace {
+  .tex-expense-workspace,
+  .tex-trip-workspace {
     grid-template-columns: 1fr;
   }
 
@@ -770,6 +893,17 @@ a {
   .tex-card-actions,
   .tex-segmented-control {
     justify-content: flex-start;
+    text-align: start;
+  }
+
+  .tex-trip-card header,
+  .tex-trip-card footer,
+  .tex-trip-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .tex-trip-card strong {
     text-align: start;
   }
 

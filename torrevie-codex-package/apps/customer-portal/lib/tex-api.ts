@@ -1,14 +1,18 @@
 import type { TenantQueryClient } from "@torrevie/tenant-context";
 import {
+  closeTexTrip,
   createTexExpense,
+  createTexTrip,
   listTexBootstrap,
   listTexExpenses,
   listTexTrips,
   recordTexWebhookSubmission,
+  updateTexTrip,
   updateTexExpenseStatus,
   type TexActorContext,
   type TexExpenseInput,
   type TexExpenseStatus,
+  type TexTripInput,
   type TexWebhookSubmissionInput
 } from "./tex";
 
@@ -51,6 +55,20 @@ export async function handleTexApiRequest(
 
   if (path === "/trips" && method === "GET") {
     return json(200, { trips: await listTexTrips(client, actor) });
+  }
+
+  if (path === "/trips" && method === "POST") {
+    return json(201, { trip: await createTexTrip(client, actor, request.body as TexTripInput) });
+  }
+
+  const tripMatch = path.match(/^\/trips\/([0-9a-f-]+)$/i);
+  if (tripMatch && method === "PATCH") {
+    return json(200, { trip: await updateTexTrip(client, actor, tripMatch[1] ?? "", request.body as TexTripInput) });
+  }
+
+  const closeTripMatch = path.match(/^\/trips\/([0-9a-f-]+)\/close$/i);
+  if (closeTripMatch && method === "PATCH") {
+    return json(200, { trip: await closeTexTrip(client, actor, closeTripMatch[1] ?? "") });
   }
 
   const statusMatch = path.match(/^\/expenses\/([0-9a-f-]+)\/status$/i);
