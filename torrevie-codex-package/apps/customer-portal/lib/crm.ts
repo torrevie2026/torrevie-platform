@@ -118,33 +118,31 @@ export async function listCrmDashboard(
   assertCrmPermission(actor, "crm.opportunity.read");
 
   return withTenantContext(client, actor, async () => {
-    const [stages, counts, opportunityRows] = await Promise.all([
-      listPipelineStagesInContext(client),
-      listCrmCountsInContext(client),
-      client.query<OpportunityRow>(
-        `
-          select
-            o.id,
-            o.name,
-            o.amount,
-            o.currency,
-            o.version,
-            o.owner_user_id,
-            o.pipeline_stage_id,
-            a.name as account_name,
-            nullif(concat_ws(' ', c.first_name, c.last_name), '') as contact_name
-          from public.opportunities o
-          join public.accounts a
-            on a.tenant_id = o.tenant_id
-           and a.id = o.account_id
-          left join public.contacts c
-            on c.tenant_id = o.tenant_id
-           and c.id = o.primary_contact_id
-          where o.tenant_id = public.current_tenant_id()
-          order by o.created_at desc
-        `
-      )
-    ]);
+    const stages = await listPipelineStagesInContext(client);
+    const counts = await listCrmCountsInContext(client);
+    const opportunityRows = await client.query<OpportunityRow>(
+      `
+        select
+          o.id,
+          o.name,
+          o.amount,
+          o.currency,
+          o.version,
+          o.owner_user_id,
+          o.pipeline_stage_id,
+          a.name as account_name,
+          nullif(concat_ws(' ', c.first_name, c.last_name), '') as contact_name
+        from public.opportunities o
+        join public.accounts a
+          on a.tenant_id = o.tenant_id
+         and a.id = o.account_id
+        left join public.contacts c
+          on c.tenant_id = o.tenant_id
+         and c.id = o.primary_contact_id
+        where o.tenant_id = public.current_tenant_id()
+        order by o.created_at desc
+      `
+    );
 
     const cards = opportunityRows.rows.map(mapOpportunityCard);
 

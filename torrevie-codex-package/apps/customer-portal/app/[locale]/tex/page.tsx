@@ -737,96 +737,94 @@ async function listCurrentTexFinanceReview(client: PostgresTenantQueryClient, ac
 
 async function listTexDashboard(client: PostgresTenantQueryClient, actor: TexActorContext): Promise<TexDashboard> {
   return withTenantContext(client, actor, async () => {
-    const [dashboard, recentExpenses, trips, employees, whatsappSubmissions, notifications] = await Promise.all([
-      client.query<DashboardRow>(
-        `
-          select
-            coalesce((select name from public.tenants where id = public.current_tenant_id()), 'Current tenant') as tenant_name,
-            (select count(*)::int from public.tex_expenses where tenant_id = public.current_tenant_id() and status in ('pending', 'approved')) as open_expenses,
-            (select count(*)::int from public.tex_expenses where tenant_id = public.current_tenant_id() and status = 'pending') as pending_approvals,
-            (select count(*)::int from public.tex_legacy_files where tenant_id = public.current_tenant_id()) as receipt_files,
-            (select count(*)::int from public.tex_trips where tenant_id = public.current_tenant_id()) as trips,
-            (select count(*)::int from public.tex_unregistered_whatsapp_submissions where tenant_id = public.current_tenant_id() and status = 'open') as whatsapp_open,
-            (select count(*)::int from public.tex_notifications where tenant_id = public.current_tenant_id()) as notifications
-        `
-      ),
-      client.query<ExpenseRow>(
-        `
-          select
-            e.id,
-            ep.name as employee_name,
-            e.vendor,
-            e.amount::float as amount,
-            e.currency,
-            e.status,
-            e.expense_date::text as expense_date,
-            e.category,
-            coalesce(t.name, e.trip_name) as trip_name,
-            e.notes,
-            e.created_at::text as created_at
-          from public.tex_expenses e
-          left join public.tex_employee_profiles ep
-            on ep.tenant_id = e.tenant_id
-           and ep.id = e.employee_profile_id
-          left join public.tex_trips t
-            on t.tenant_id = e.tenant_id
-           and t.id = e.trip_id
-          where e.tenant_id = public.current_tenant_id()
-          order by e.created_at desc
-          limit 50
-        `
-      ),
-      client.query<TripRow>(
-        `
-          select
-            t.id,
-            t.name,
-            t.origin,
-            t.destination,
-            t.status,
-            t.start_date::text as start_date,
-            t.end_date::text as end_date,
-            t.budget_amount::text as budget_amount,
-            count(e.id)::int as expense_count,
-            coalesce(sum(e.amount), 0)::text as spend_amount
-          from public.tex_trips t
-          left join public.tex_expenses e
-            on e.tenant_id = t.tenant_id
-           and e.trip_id = t.id
-          where t.tenant_id = public.current_tenant_id()
-          group by t.id
-          order by t.created_at desc
-          limit 25
-        `
-      ),
-      client.query<EmployeeRow>(
-        `
-          select id, name, phone_number, department, is_active
-          from public.tex_employee_profiles
-          where tenant_id = public.current_tenant_id()
-          order by is_active desc, name asc
-          limit 50
-        `
-      ),
-      client.query<WhatsappSubmissionRow>(
-        `
-          select id, sender_phone, message_text, status, created_at::text as created_at
-          from public.tex_unregistered_whatsapp_submissions
-          where tenant_id = public.current_tenant_id()
-          order by created_at desc
-          limit 25
-        `
-      ),
-      client.query<NotificationRow>(
-        `
-          select id, title, body, is_read, created_at::text as created_at
-          from public.tex_notifications
-          where tenant_id = public.current_tenant_id()
-          order by created_at desc
-          limit 25
-        `
-      )
-    ]);
+    const dashboard = await client.query<DashboardRow>(
+      `
+        select
+          coalesce((select name from public.tenants where id = public.current_tenant_id()), 'Current tenant') as tenant_name,
+          (select count(*)::int from public.tex_expenses where tenant_id = public.current_tenant_id() and status in ('pending', 'approved')) as open_expenses,
+          (select count(*)::int from public.tex_expenses where tenant_id = public.current_tenant_id() and status = 'pending') as pending_approvals,
+          (select count(*)::int from public.tex_legacy_files where tenant_id = public.current_tenant_id()) as receipt_files,
+          (select count(*)::int from public.tex_trips where tenant_id = public.current_tenant_id()) as trips,
+          (select count(*)::int from public.tex_unregistered_whatsapp_submissions where tenant_id = public.current_tenant_id() and status = 'open') as whatsapp_open,
+          (select count(*)::int from public.tex_notifications where tenant_id = public.current_tenant_id()) as notifications
+      `
+    );
+    const recentExpenses = await client.query<ExpenseRow>(
+      `
+        select
+          e.id,
+          ep.name as employee_name,
+          e.vendor,
+          e.amount::float as amount,
+          e.currency,
+          e.status,
+          e.expense_date::text as expense_date,
+          e.category,
+          coalesce(t.name, e.trip_name) as trip_name,
+          e.notes,
+          e.created_at::text as created_at
+        from public.tex_expenses e
+        left join public.tex_employee_profiles ep
+          on ep.tenant_id = e.tenant_id
+         and ep.id = e.employee_profile_id
+        left join public.tex_trips t
+          on t.tenant_id = e.tenant_id
+         and t.id = e.trip_id
+        where e.tenant_id = public.current_tenant_id()
+        order by e.created_at desc
+        limit 50
+      `
+    );
+    const trips = await client.query<TripRow>(
+      `
+        select
+          t.id,
+          t.name,
+          t.origin,
+          t.destination,
+          t.status,
+          t.start_date::text as start_date,
+          t.end_date::text as end_date,
+          t.budget_amount::text as budget_amount,
+          count(e.id)::int as expense_count,
+          coalesce(sum(e.amount), 0)::text as spend_amount
+        from public.tex_trips t
+        left join public.tex_expenses e
+          on e.tenant_id = t.tenant_id
+         and e.trip_id = t.id
+        where t.tenant_id = public.current_tenant_id()
+        group by t.id
+        order by t.created_at desc
+        limit 25
+      `
+    );
+    const employees = await client.query<EmployeeRow>(
+      `
+        select id, name, phone_number, department, is_active
+        from public.tex_employee_profiles
+        where tenant_id = public.current_tenant_id()
+        order by is_active desc, name asc
+        limit 50
+      `
+    );
+    const whatsappSubmissions = await client.query<WhatsappSubmissionRow>(
+      `
+        select id, sender_phone, message_text, status, created_at::text as created_at
+        from public.tex_unregistered_whatsapp_submissions
+        where tenant_id = public.current_tenant_id()
+        order by created_at desc
+        limit 25
+      `
+    );
+    const notifications = await client.query<NotificationRow>(
+      `
+        select id, title, body, is_read, created_at::text as created_at
+        from public.tex_notifications
+        where tenant_id = public.current_tenant_id()
+        order by created_at desc
+        limit 25
+      `
+    );
     const row = dashboard.rows[0];
 
     return {
