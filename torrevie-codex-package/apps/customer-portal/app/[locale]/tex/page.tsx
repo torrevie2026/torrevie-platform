@@ -71,7 +71,8 @@ export default async function TexPage({
     const client = new PostgresTenantQueryClient(session.userId);
     const tenantContext = await resolveCustomerTenantContext(client, session);
     const actor = await resolveTexActorContext(client, tenantContext);
-    const [bootstrap, dashboard] = await Promise.all([listTexBootstrap(client, actor), listTexDashboard(client, actor)]);
+    const bootstrap = await listTexBootstrap(client, actor);
+    const dashboard = await listTexDashboard(client, actor);
 
     return (
       <main className="customer-shell" data-visual-check="tex-module-shell" lang={locale} dir={dirForLocale(locale)}>
