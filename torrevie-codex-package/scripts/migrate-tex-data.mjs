@@ -1,4 +1,5 @@
 import pg from "pg";
+import { URL } from "node:url";
 
 const { Client } = pg;
 
@@ -486,7 +487,7 @@ async function migrateWhatsApp(companyMap, userMap, employeeMap, legacyFileMap, 
           resolved_by, resolved_at, legacy_receipt_image_url, legacy_receipt_file_id,
           created_at, updated_at
         )
-        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$17)
+        values ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$14,$15,$16,$17,$17)
         on conflict (id) do update set
           tenant_id = excluded.tenant_id,
           status = excluded.status,
@@ -494,7 +495,7 @@ async function migrateWhatsApp(companyMap, userMap, employeeMap, legacyFileMap, 
       `,
       [
         row.id, tenantId, row.sender_raw, row.sender_phone, row.whatsapp_chat_jid, row.message_id, row.session_id,
-        row.message_text, row.payload ?? {}, normalizeSubmissionStatus(row.status), row.resolved_expense_id,
+        row.message_text, jsonParam(row.payload, {}), normalizeSubmissionStatus(row.status), row.resolved_expense_id,
         employeeMap.get(row.resolved_employee_id) ?? null, userMap.get(row.resolved_by) ?? null, row.resolved_at,
         row.receipt_image_url, legacyFileMap.get(row.receipt_file_id) ?? null, row.created_at
       ]
@@ -513,7 +514,7 @@ async function migrateWhatsApp(companyMap, userMap, employeeMap, legacyFileMap, 
           id, tenant_id, employee_profile_id, expense_id, sender_phone, whatsapp_chat_jid,
           provider, action, options, status, expires_at, resolved_at, created_at, updated_at
         )
-        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13)
+        values ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$13)
         on conflict (id) do update set
           tenant_id = excluded.tenant_id,
           status = excluded.status,
@@ -521,7 +522,7 @@ async function migrateWhatsApp(companyMap, userMap, employeeMap, legacyFileMap, 
       `,
       [
         row.id, tenantId, employeeMap.get(row.employee_id) ?? null, row.expense_id, row.sender_phone,
-        row.whatsapp_chat_jid, normalizeProvider(row.provider), normalizeAction(row.action), row.options ?? [],
+        row.whatsapp_chat_jid, normalizeProvider(row.provider), normalizeAction(row.action), jsonParam(row.options, []),
         normalizePendingStatus(row.status), row.expires_at, row.resolved_at, row.created_at
       ]
     );
@@ -847,10 +848,32 @@ async function one(promise, label) {
 }
 
 function connectionConfig(connectionString, sslFlag) {
+  const ssl = sslFlag === "false" ? undefined : { rejectUnauthorized: false };
+
+  if (isSupabasePoolerUrl(connectionString)) {
+    const url = new URL(connectionString);
+    return {
+      host: url.hostname,
+      port: Number(url.port || 5432),
+      user: decodeURIComponent(url.username),
+      password: decodeURIComponent(url.password),
+      database: url.pathname.replace(/^\//, "") || "postgres",
+      ssl
+    };
+  }
+
   return {
     connectionString,
-    ssl: sslFlag === "false" ? undefined : { rejectUnauthorized: false }
+    ssl
   };
+}
+
+function isSupabasePoolerUrl(connectionString) {
+  try {
+    return new URL(connectionString).hostname.endsWith(".pooler.supabase.com");
+  } catch {
+    return false;
+  }
 }
 
 function tenantSlug(company) {
@@ -922,6 +945,27 @@ function normalizePendingStatus(value) {
 
 function normalizeAction(value) {
   return value === "select_trip" ? value : "select_trip";
+}
+
+function jsonParam(value, fallback) {
+  return JSON.stringify(normalizeJsonValue(value, fallback));
+}
+
+function normalizeJsonValue(value, fallback) {
+  if (value === null || value === undefined) return fallback;
+  if (Buffer.isBuffer(value)) return normalizeJsonValue(value.toString("utf8"), fallback);
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return fallback;
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return { legacy_value: value };
+    }
+  }
+  if (Array.isArray(value)) return value.map((entry) => normalizeJsonValue(entry, entry));
+  if (typeof value === "object") return value;
+  return value;
 }
 
 function increment(object, key) {
