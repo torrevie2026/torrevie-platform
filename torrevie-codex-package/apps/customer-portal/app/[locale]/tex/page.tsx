@@ -40,6 +40,9 @@ type TexDashboard = {
   trips: number;
   whatsappOpen: number;
   notifications: number;
+  totalSpend: number;
+  approvedSpend: number;
+  openTripSpend: number;
   recentExpenses: TexRecentExpense[];
   tripsList: TexTrip[];
   employees: TexEmployee[];
@@ -72,6 +75,7 @@ type TexTrip = {
   budgetAmount: string | null;
   expenseCount: number;
   spendAmount: string;
+  spendAmountAsNumber: number;
 };
 
 type TexEmployee = {
@@ -296,15 +300,15 @@ function texNavItems(locale: Locale): TexNavItem[] {
   const base = `/${locale}/tex`;
 
   return [
-    { section: "dashboard", label: "Dashboard", href: base, icon: "D" },
+    { section: "dashboard", label: "Dashboard", href: base, icon: "DB" },
     { section: "expenses", label: "New Expense", href: `${base}?section=expenses#tex-new-expense-title`, icon: "+", primary: true },
-    { section: "expenses", label: "My Expenses", href: `${base}?section=expenses#tex-expense-list-title`, icon: "R" },
-    { section: "trips", label: "Trips", href: `${base}?section=trips`, icon: "T" },
-    { section: "people", label: "My Team", href: `${base}?section=people`, icon: "M" },
-    { section: "finance", label: "Finance Review", href: `${base}?section=finance`, icon: "$" },
-    { section: "whatsapp", label: "WhatsApp Intake", href: `${base}?section=whatsapp`, icon: "W" },
-    { section: "notifications", label: "Notifications", href: `${base}?section=notifications`, icon: "N" },
-    { section: "settings", label: "Settings", href: `${base}?section=settings`, icon: "S" }
+    { section: "expenses", label: "My Expenses", href: `${base}?section=expenses#tex-expense-list-title`, icon: "EX" },
+    { section: "trips", label: "Trips", href: `${base}?section=trips`, icon: "TR" },
+    { section: "people", label: "My Team", href: `${base}?section=people`, icon: "TM" },
+    { section: "finance", label: "Finance Review", href: `${base}?section=finance`, icon: "FN" },
+    { section: "whatsapp", label: "WhatsApp Intake", href: `${base}?section=whatsapp`, icon: "WA" },
+    { section: "notifications", label: "Notifications", href: `${base}?section=notifications`, icon: "NT" },
+    { section: "settings", label: "Settings", href: `${base}?section=settings`, icon: "ST" }
   ];
 }
 
@@ -465,20 +469,145 @@ function renderTexSection(
     );
   }
 
+  return <TexDashboardHome dashboard={dashboard} />;
+}
+
+function TexDashboardHome({ dashboard }: { dashboard: TexDashboard }) {
+  const categorySpend = topCategorySpend(dashboard.recentExpenses);
+  const statusCounts = statusBreakdown(dashboard.recentExpenses);
+  const busiestTrips = [...dashboard.tripsList]
+    .sort((first, second) => second.spendAmountAsNumber - first.spendAmountAsNumber)
+    .slice(0, 4);
+  const maxCategorySpend = Math.max(...categorySpend.map((item) => item.amount), 1);
+  const maxStatusCount = Math.max(...statusCounts.map((item) => item.count), 1);
+
   return (
     <>
-      <section className="metric-grid" aria-label="TEX metrics">
-        <article>
-          <span>Open expenses</span>
-          <strong>{dashboard.openExpenses}</strong>
+      <section className="tex-dashboard-hero" aria-label="TEX command summary">
+        <div className="tex-hero-copy">
+          <p className="eyebrow">Live operating center</p>
+          <h2>{dashboard.tenantName} expense flow</h2>
+          <p>Track WhatsApp receipts, employee spend, trips, approvals, and finance payout readiness in one focused TEX cockpit.</p>
+          <div className="tex-hero-actions">
+            <a className="tex-action" href="?section=expenses#tex-new-expense-title">
+              Create expense
+            </a>
+            <a className="tex-secondary-link" href="?section=finance">
+              Review finance
+            </a>
+          </div>
+        </div>
+        <div className="tex-hero-signal" aria-label="Operational signal">
+          <span>Spend captured</span>
+          <strong>{formatAmount(dashboard.totalSpend)} AED</strong>
+          <div className="tex-signal-ring" aria-hidden="true">
+            <span>{dashboard.pendingApprovals}</span>
+          </div>
+          <small>pending approvals</small>
+        </div>
+      </section>
+
+      <section className="tex-kpi-grid" aria-label="TEX metrics">
+        <KpiCard label="Open expenses" value={dashboard.openExpenses} detail={`${formatAmount(dashboard.approvedSpend)} AED approved`} tone="teal" />
+        <KpiCard label="Pending approvals" value={dashboard.pendingApprovals} detail="Waiting for manager or finance action" tone="gold" />
+        <KpiCard label="Active trips" value={dashboard.trips} detail={`${formatAmount(dashboard.openTripSpend)} AED open trip spend`} tone="blue" />
+        <KpiCard label="WhatsApp queue" value={dashboard.whatsappOpen} detail={`${dashboard.receiptFiles} receipt records available`} tone="green" />
+      </section>
+
+      <section className="tex-flow-strip" aria-label="TEX process flow">
+        <FlowStep label="WhatsApp intake" value={dashboard.whatsappOpen} />
+        <FlowStep label="Expense capture" value={dashboard.openExpenses} />
+        <FlowStep label="Approval" value={dashboard.pendingApprovals} />
+        <FlowStep label="Finance payout" value={`${formatAmount(dashboard.approvedSpend)} AED`} />
+      </section>
+
+      <section className="tex-analytics-grid" aria-label="TEX analytics">
+        <article className="tex-analytics-panel">
+          <div className="section-heading-row">
+            <h2>Spend by category</h2>
+            <a href="?section=expenses">Open expenses</a>
+          </div>
+          <div className="tex-bar-list">
+            {categorySpend.length > 0 ? (
+              categorySpend.map((item) => (
+                <div className="tex-bar-row" key={item.label}>
+                  <span>{item.label}</span>
+                  <div className="tex-bar-track" aria-label={`${item.label} ${formatAmount(item.amount)} AED`}>
+                    <i style={{ inlineSize: `${Math.max((item.amount / maxCategorySpend) * 100, 8)}%` }} />
+                  </div>
+                  <strong>{formatAmount(item.amount)}</strong>
+                </div>
+              ))
+            ) : (
+              <p>No spend categories are available yet.</p>
+            )}
+          </div>
         </article>
-        <article>
-          <span>Pending approvals</span>
-          <strong>{dashboard.pendingApprovals}</strong>
+
+        <article className="tex-analytics-panel">
+          <div className="section-heading-row">
+            <h2>Status mix</h2>
+            <a href="?section=finance">Finance review</a>
+          </div>
+          <div className="tex-status-chart">
+            {statusCounts.length > 0 ? (
+              statusCounts.map((item) => (
+                <div className="tex-status-column" key={item.label}>
+                  <span style={{ blockSize: `${Math.max((item.count / maxStatusCount) * 100, 12)}%` }} />
+                  <strong>{item.count}</strong>
+                  <small>{item.label}</small>
+                </div>
+              ))
+            ) : (
+              <p>No status activity is available yet.</p>
+            )}
+          </div>
         </article>
-        <article>
-          <span>Receipt records</span>
-          <strong>{dashboard.receiptFiles}</strong>
+      </section>
+
+      <section className="tex-dashboard-grid" aria-label="TEX work queues">
+        <article className="tex-work-panel">
+          <div className="section-heading-row">
+            <h2>Recent expense flow</h2>
+            <a href="?section=expenses">View all</a>
+          </div>
+          <div className="tex-feed-list">
+            {dashboard.recentExpenses.slice(0, 6).map((expense) => (
+              <a className="tex-feed-item" href="?section=expenses" key={expense.id}>
+                <span className={`tex-status-dot tex-status-dot-${expense.status}`} aria-hidden="true" />
+                <span>
+                  <strong>{expense.vendor ?? expense.category ?? "Expense"}</strong>
+                  <small>
+                    {expense.employeeName ?? "Unassigned"} - {formatDate(expense.createdAt)}
+                  </small>
+                </span>
+                <b>{formatAmount(expense.amount)} {expense.currency}</b>
+              </a>
+            ))}
+            {dashboard.recentExpenses.length === 0 ? <p>No migrated expenses are available for this tenant.</p> : null}
+          </div>
+        </article>
+
+        <article className="tex-work-panel">
+          <div className="section-heading-row">
+            <h2>Trip spend board</h2>
+            <a href="?section=trips">Open trips</a>
+          </div>
+          <div className="tex-trip-snapshot-list">
+            {busiestTrips.map((trip) => (
+              <a className="tex-trip-snapshot" href="?section=trips" key={trip.id}>
+                <span>
+                  <strong>{trip.name}</strong>
+                  <small>{trip.origin ?? "-"} to {trip.destination ?? "-"}</small>
+                </span>
+                <b>{formatAmount(trip.spendAmountAsNumber)}</b>
+                <div className="tex-budget-bar" aria-label={`${trip.name} budget usage`}>
+                  <span style={{ inlineSize: `${tripBudgetUsage(trip)}%` }} />
+                </div>
+              </a>
+            ))}
+            {busiestTrips.length === 0 ? <p>No trips are available yet.</p> : null}
+          </div>
         </article>
       </section>
 
@@ -497,19 +626,6 @@ function renderTexSection(
           <ModuleCard title="WhatsApp Intake" text="Receipt messages waiting for assignment." value={dashboard.whatsappOpen} href="?section=whatsapp" />
         </div>
       </section>
-
-      <section className="customer-section activity-panel" aria-labelledby="recent-expenses-title">
-        <h2 id="recent-expenses-title">Recent expenses</h2>
-        <TexTable
-          empty="No migrated expenses are available for this tenant."
-          rows={dashboard.recentExpenses.map((expense) => [
-            expense.employeeName ?? "Unassigned",
-            expense.vendor ?? "No vendor",
-            `${formatAmount(expense.amount)} ${expense.currency}`,
-            expense.status
-          ])}
-        />
-      </section>
     </>
   );
 }
@@ -522,6 +638,25 @@ function ModuleCard({ title, text, value, href }: { title: string; text: string;
       <p>{text}</p>
       <strong>{value}</strong>
     </a>
+  );
+}
+
+function KpiCard({ label, value, detail, tone }: { label: string; value: number; detail: string; tone: "teal" | "gold" | "blue" | "green" }) {
+  return (
+    <article className={`tex-kpi-card tex-kpi-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+    </article>
+  );
+}
+
+function FlowStep({ label, value }: { label: string; value: number | string }) {
+  return (
+    <article>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
   );
 }
 
@@ -549,6 +684,42 @@ function formatDate(value: string) {
 
 function formatAmount(value: number) {
   return new Intl.NumberFormat("en", { maximumFractionDigits: 2 }).format(value);
+}
+
+function topCategorySpend(expenses: TexRecentExpense[]) {
+  const totals = new Map<string, number>();
+
+  for (const expense of expenses) {
+    const label = expense.category ?? "Uncategorized";
+    totals.set(label, (totals.get(label) ?? 0) + expense.amount);
+  }
+
+  return [...totals.entries()]
+    .map(([label, amount]) => ({ label, amount }))
+    .sort((first, second) => second.amount - first.amount)
+    .slice(0, 5);
+}
+
+function statusBreakdown(expenses: TexRecentExpense[]) {
+  const totals = new Map<string, number>();
+
+  for (const expense of expenses) {
+    totals.set(expense.status, (totals.get(expense.status) ?? 0) + 1);
+  }
+
+  return [...totals.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((first, second) => second.count - first.count);
+}
+
+function tripBudgetUsage(trip: TexTrip & { spendAmountAsNumber: number }) {
+  const budget = trip.budgetAmount ? Number(trip.budgetAmount) : 0;
+
+  if (budget <= 0) {
+    return 0;
+  }
+
+  return Math.min((trip.spendAmountAsNumber / budget) * 100, 100);
 }
 
 async function listCurrentTexFinanceReview(client: PostgresTenantQueryClient, actor: TexActorContext) {
@@ -689,7 +860,8 @@ async function listTexDashboard(client: PostgresTenantQueryClient, actor: TexAct
         endDate: trip.end_date,
         budgetAmount: trip.budget_amount,
         expenseCount: trip.expense_count,
-        spendAmount: trip.spend_amount
+        spendAmount: trip.spend_amount,
+        spendAmountAsNumber: Number(trip.spend_amount)
       })),
       employees: employees.rows.map((employee) => ({
         id: employee.id,
@@ -711,7 +883,12 @@ async function listTexDashboard(client: PostgresTenantQueryClient, actor: TexAct
         body: notification.body,
         isRead: notification.is_read,
         createdAt: notification.created_at
-      }))
+      })),
+      totalSpend: recentExpenses.rows.reduce((sum, expense) => sum + expense.amount, 0),
+      approvedSpend: recentExpenses.rows
+        .filter((expense) => expense.status === "approved" || expense.status === "paid")
+        .reduce((sum, expense) => sum + expense.amount, 0),
+      openTripSpend: trips.rows.reduce((sum, trip) => sum + Number(trip.spend_amount), 0)
     };
   });
 }
