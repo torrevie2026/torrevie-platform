@@ -1,13 +1,96 @@
 import { dirForLocale, getMessages, isLocale, type Locale } from "@torrevie/localization";
-import { notFound } from "next/navigation";
+import { withTenantContext, type ResolvedTenantContext } from "@torrevie/tenant-context";
+import { notFound, redirect } from "next/navigation";
+import {
+  getCustomerAccessRequirements,
+  isCustomerSessionError,
+  requireVerifiedCustomerSession,
+  resolveCustomerTenantContext
+} from "../../lib/server/customer-session";
+import { PostgresTenantQueryClient } from "../../lib/server/tenant-query-client";
 
-const modules = [
-  { key: "crm", metric: "18", status: "active" },
-  { key: "fsm", metric: "7", status: "active" },
-  { key: "tex", metric: "4", status: "pending" },
-  { key: "cme", metric: "0", status: "inactive" },
-  { key: "lqs", metric: "0", status: "inactive" }
-] as const;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+type ProductKey = "crm" | "fsm" | "tex" | "cme" | "lqs";
+
+type LauncherApp = {
+  key: ProductKey;
+  label: string;
+  description: string;
+  href: string | null;
+  status: "online" | "coming_soon";
+  metricLabel: string;
+  metricValue: string;
+  accent: "teal" | "blue" | "navy";
+};
+
+type LauncherData = {
+  tenantName: string;
+  apps: LauncherApp[];
+  activityCount: number;
+  actionCount: number;
+};
+
+type SubscriptionRow = {
+  key: ProductKey;
+};
+
+type DashboardRow = {
+  tenant_name: string;
+  tex_open_expenses: number;
+  tex_pending_approvals: number;
+  crm_open_opportunities: number;
+  activity_count: number;
+};
+
+const appCatalog: Record<ProductKey, Omit<LauncherApp, "metricValue">> = {
+  crm: {
+    key: "crm",
+    label: "CRM",
+    description: "Accounts, contacts, opportunities, and relationship activity.",
+    href: "/crm",
+    status: "online",
+    metricLabel: "Open opportunities",
+    accent: "blue"
+  },
+  fsm: {
+    key: "fsm",
+    label: "FSM",
+    description: "Field service work orders, assignments, and site activity.",
+    href: null,
+    status: "coming_soon",
+    metricLabel: "Work orders",
+    accent: "navy"
+  },
+  tex: {
+    key: "tex",
+    label: "TEX",
+    description: "Travel, expenses, receipts, trips, approvals, and finance review.",
+    href: "/tex",
+    status: "online",
+    metricLabel: "Open expenses",
+    accent: "teal"
+  },
+  cme: {
+    key: "cme",
+    label: "CME",
+    description: "Content planning, drafts, approvals, and publishing workflow.",
+    href: null,
+    status: "coming_soon",
+    metricLabel: "Content items",
+    accent: "blue"
+  },
+  lqs: {
+    key: "lqs",
+    label: "LQS",
+    description: "Lead qualification, scoring, routing, and follow-up queue.",
+    href: null,
+    status: "coming_soon",
+    metricLabel: "Qualified leads",
+    accent: "navy"
+  }
+};
 
 export default async function CustomerPortalShell({
   params
@@ -24,75 +107,204 @@ export default async function CustomerPortalShell({
   const t = getMessages(locale);
   const otherLocale = locale === "en" ? "ar" : "en";
 
-  return (
-    <main className="customer-shell" data-visual-check="customer-shell" lang={locale} dir={dirForLocale(locale)}>
-      <aside className="customer-sidebar" aria-label="Customer Portal sections">
-        <a className="customer-brand" href={`/${locale}`} aria-label={t.appName}>
-          <img src="/logo/torrevie_logo_color.png" alt="" width="36" height="36" />
-          <span>{t.appName}</span>
-        </a>
-        <nav>
-          <a href={`/${locale}`}>{t.nav.overview}</a>
-          <a href={`/${locale}/crm`}>{t.nav.crm}</a>
-          <a href={`/${locale}`}>{t.nav.fsm}</a>
-          <a href={`/${locale}/tex`}>{t.nav.tex}</a>
-          <a href={`/${locale}`}>{t.nav.cme}</a>
-          <a href={`/${locale}`}>{t.nav.lqs}</a>
-          <a href={`/${locale}/admin/users`}>{t.nav.admin}</a>
-          <a href={`/${locale}`}>{t.nav.settings}</a>
-        </nav>
-      </aside>
+  try {
+    const session = await requireVerifiedCustomerSession();
+    const client = new PostgresTenantQueryClient(session.userId);
+    const tenantContext = await resolveCustomerTenantContext(client, session);
+    const requirements = await getCustomerAccessRequirements(client, tenantContext);
 
-      <section className="customer-main">
-        <header className="customer-topbar">
-          <div>
-            <p className="eyebrow">{t.shell.eyebrow}</p>
-            <h1>{t.shell.title}</h1>
-            <p>{t.shell.subtitle}</p>
-          </div>
-          <div className="customer-context" aria-label="Session context">
-            <span>{t.shell.activeTenant}: Gulf Demo</span>
-            <span>{t.shell.signedInAs}: admin@example.test</span>
-            <a href={`/${otherLocale}`} hrefLang={otherLocale}>
-              {t.languageLabel}: {otherLocale.toUpperCase()}
+    if (requirements.requireProfileCompletion && !requirements.profileComplete) {
+      redirect(`/${locale}/account?profile=required`);
+    }
+
+    if (requirements.requirePasswordChange) {
+      redirect(`/${locale}/account?password=required`);
+    }
+
+    if (requirements.requireMfa && !requirements.mfaEnrolled) {
+      redirect(`/${locale}/account?mfa=required`);
+    }
+
+    const launcher = await listLauncherData(client, tenantContext, locale);
+
+    return (
+      <main className="customer-shell app-launcher-shell" data-visual-check="customer-shell" lang={locale} dir={dirForLocale(locale)}>
+        <aside className="customer-sidebar app-launcher-sidebar" aria-label="Customer Portal sections">
+          <a className="customer-brand" href={`/${locale}`} aria-label={t.appName}>
+            <img src="/logo/torrevie_logo_color.png" alt="" width="36" height="36" />
+            <span>{t.appName}</span>
+          </a>
+          <nav>
+            <a href={`/${locale}`} aria-current="page">
+              {t.nav.overview}
             </a>
-          </div>
-        </header>
+            {launcher.apps.map((app) =>
+              app.href ? (
+                <a key={app.key} href={`/${locale}${app.href}`}>
+                  {app.label}
+                </a>
+              ) : (
+                <span key={app.key} className="customer-sidebar-disabled">
+                  {app.label}
+                </span>
+              )
+            )}
+            <a href={`/${locale}/account`}>Account</a>
+          </nav>
+        </aside>
 
-        <section className="metric-grid" aria-label="Customer metrics">
-          <article>
-            <span>{t.metrics.openItems}</span>
-            <strong>29</strong>
-          </article>
-          <article>
-            <span>{t.metrics.approvals}</span>
-            <strong>4</strong>
-          </article>
-          <article>
-            <span>{t.metrics.activity}</span>
-            <strong>12</strong>
-          </article>
-        </section>
+        <section className="customer-main app-launcher-main">
+          <header className="customer-topbar app-launcher-topbar">
+            <div>
+              <p className="eyebrow">{t.shell.eyebrow}</p>
+              <h1>App launcher</h1>
+              <p>Choose an enrolled Torrevie app for {launcher.tenantName}.</p>
+            </div>
+            <div className="customer-context" aria-label="Session context">
+              <span>
+                {t.shell.activeTenant}: {launcher.tenantName}
+              </span>
+              <span>
+                {t.shell.signedInAs}: {session.email ?? session.userId}
+              </span>
+              <a href={`/${otherLocale}`} hrefLang={otherLocale}>
+                {t.languageLabel}: {otherLocale.toUpperCase()}
+              </a>
+            </div>
+          </header>
 
-        <section className="customer-section" aria-labelledby="modules-title">
-          <h2 id="modules-title">{t.modules.title}</h2>
-          <div className="module-grid">
-            {modules.map((module) => (
-              <article key={module.key} className="module-card">
-                <span className={`module-status module-status-${module.status}`}>{module.status}</span>
-                <h3>{t.nav[module.key]}</h3>
-                <p>{t.modules[module.key]}</p>
-                <strong>{module.status === "inactive" ? t.modules.unavailable : module.metric}</strong>
-              </article>
-            ))}
-          </div>
-        </section>
+          <section className="metric-grid" aria-label="Customer metrics">
+            <article>
+              <span>Enrolled apps</span>
+              <strong>{launcher.apps.length}</strong>
+            </article>
+            <article>
+              <span>Open actions</span>
+              <strong>{launcher.actionCount}</strong>
+            </article>
+            <article>
+              <span>Recent activity</span>
+              <strong>{launcher.activityCount}</strong>
+            </article>
+          </section>
 
-        <section className="customer-section activity-panel" aria-labelledby="activity-title">
-          <h2 id="activity-title">{t.activity.title}</h2>
-          <p>{t.activity.empty}</p>
+          <section className="customer-section app-launcher-section" aria-labelledby="apps-title">
+            <h2 id="apps-title">Your apps</h2>
+            {launcher.apps.length === 0 ? (
+              <div className="activity-panel app-launcher-empty">
+                <p>No apps are enrolled for this tenant yet. Contact your tenant administrator.</p>
+              </div>
+            ) : (
+              <div className="app-widget-grid">
+                {launcher.apps.map((app) => (
+                  <AppWidget key={app.key} app={app} locale={locale} />
+                ))}
+              </div>
+            )}
+          </section>
         </section>
-      </section>
-    </main>
+      </main>
+    );
+  } catch (error) {
+    if (isCustomerSessionError(error)) {
+      redirect("/login");
+    }
+
+    throw error;
+  }
+}
+
+function AppWidget({ app, locale }: { app: LauncherApp; locale: Locale }) {
+  const content = (
+    <>
+      <span className={`app-widget-mark app-widget-mark-${app.accent}`} aria-hidden="true">
+        {app.key.toUpperCase()}
+      </span>
+      <span className={`module-status module-status-${app.status === "online" ? "active" : "pending"}`}>
+        {app.status === "online" ? "active" : "coming online"}
+      </span>
+      <h3>{app.label}</h3>
+      <p>{app.description}</p>
+      <footer>
+        <span>{app.metricLabel}</span>
+        <strong>{app.metricValue}</strong>
+      </footer>
+      <b>{app.href ? "Open app" : "Setup pending"}</b>
+    </>
   );
+
+  if (app.href) {
+    return (
+      <a className="app-widget app-widget-link" href={`/${locale}${app.href}`}>
+        {content}
+      </a>
+    );
+  }
+
+  return <article className="app-widget app-widget-disabled">{content}</article>;
+}
+
+async function listLauncherData(
+  client: PostgresTenantQueryClient,
+  context: ResolvedTenantContext,
+  locale: Locale
+): Promise<LauncherData> {
+  return withTenantContext(client, context, async () => {
+    const subscriptions = await client.query<SubscriptionRow>(
+      `
+        select p.key
+        from public.subscriptions s
+        join public.products p on p.id = s.product_id
+        where s.tenant_id = public.current_tenant_id()
+          and s.status in ('trial', 'active')
+          and s.starts_at <= now()
+          and (s.expires_at is null or s.expires_at > now())
+        order by p.key
+      `
+    );
+    const dashboard = await client.query<DashboardRow>(
+      `
+        select
+          coalesce((select name from public.tenants where id = public.current_tenant_id()), 'Current tenant') as tenant_name,
+          (select count(*)::int from public.tex_expenses where tenant_id = public.current_tenant_id() and status in ('pending', 'approved')) as tex_open_expenses,
+          (select count(*)::int from public.tex_expenses where tenant_id = public.current_tenant_id() and status = 'pending') as tex_pending_approvals,
+          (select count(*)::int from public.crm_opportunities where tenant_id = public.current_tenant_id()) as crm_open_opportunities,
+          (select count(*)::int from public.audit_events where tenant_id = public.current_tenant_id() and occurred_at >= now() - interval '7 days') as activity_count
+      `
+    );
+    const dashboardRow = dashboard.rows[0];
+    const subscribedKeys = subscriptions.rows.map((row) => row.key).filter(isProductKey);
+
+    return {
+      tenantName: dashboardRow?.tenant_name ?? "Current tenant",
+      apps: subscribedKeys.map((key) => ({
+        ...appCatalog[key],
+        metricValue: metricForProduct(key, dashboardRow, locale)
+      })),
+      actionCount: dashboardRow ? dashboardRow.tex_pending_approvals + dashboardRow.tex_open_expenses : 0,
+      activityCount: dashboardRow?.activity_count ?? 0
+    };
+  });
+}
+
+function metricForProduct(key: ProductKey, dashboard: DashboardRow | undefined, locale: Locale) {
+  const numberFormat = new Intl.NumberFormat(locale);
+
+  if (!dashboard) {
+    return "0";
+  }
+
+  if (key === "tex") {
+    return numberFormat.format(dashboard.tex_open_expenses);
+  }
+
+  if (key === "crm") {
+    return numberFormat.format(dashboard.crm_open_opportunities);
+  }
+
+  return "0";
+}
+
+function isProductKey(value: string): value is ProductKey {
+  return value === "crm" || value === "fsm" || value === "tex" || value === "cme" || value === "lqs";
 }
