@@ -1,5 +1,6 @@
 import { assertPermission, roleKeys, type PermissionKey, type ProductKey, type RoleKey } from "@torrevie/permissions";
 import { withTenantContext, type ResolvedTenantContext, type TenantQueryClient } from "@torrevie/tenant-context";
+import { extractReceiptWithOpenAI, type TexReceiptExtraction } from "./tex-ai";
 
 export type TexActorContext = ResolvedTenantContext & {
   roles: readonly RoleKey[];
@@ -45,6 +46,10 @@ export type TexIntegrationSettings = {
   wappflySessionId: string | null;
   metaPhoneNumberId: string | null;
   metaWhatsappBusinessAccountId: string | null;
+  aiReceiptExtractionEnabled: boolean;
+  duplicateDetectionEnabled: boolean;
+  duplicateAutoRejectEnabled: boolean;
+  duplicateSimilarityThreshold: number;
 };
 
 export type TexExpenseInput = {
@@ -76,6 +81,9 @@ export type TexExpenseListItem = TexExpenseRecord & {
   tripName: string | null;
   notes: string | null;
   createdAt: string;
+  duplicateStatus: "clear" | "suspected" | "duplicate";
+  duplicateReason: string | null;
+  managerReviewRequired: boolean;
 };
 
 export type TexTripListItem = {
@@ -179,12 +187,22 @@ export type TexWebhookSubmissionInput = {
   sessionId?: string | null;
   messageText?: string | null;
   receiptFileId?: string | null;
+  mediaUrl?: string | null;
+  mediaMimeType?: string | null;
+  extractedReceipt?: TexReceiptExtraction | null;
   payload: Record<string, unknown>;
 };
 
 export type TexWebhookSubmissionRecord = {
   id: string;
   status: "open" | "resolved" | "ignored";
+};
+
+export type TexWhatsappReceiptResult = {
+  submission: TexWebhookSubmissionRecord;
+  replyText: string;
+  expense: TexExpenseRecord | null;
+  ocrStatus: "pending" | "processing" | "extracted" | "failed" | "manual_review" | "not_applicable";
 };
 
 export async function resolveTexActorContext(
@@ -287,7 +305,11 @@ export async function listTexBootstrap(client: TenantQueryClient, actor: TexActo
             whatsapp_instance_id,
             wappfly_session_id,
             meta_phone_number_id,
-            meta_whatsapp_business_account_id
+            meta_whatsapp_business_account_id,
+            ai_receipt_extraction_enabled,
+            duplicate_detection_enabled,
+            duplicate_auto_reject_enabled,
+            duplicate_similarity_threshold::float as duplicate_similarity_threshold
           from public.tex_integration_settings
           where tenant_id = public.current_tenant_id()
           limit 1
@@ -321,7 +343,10 @@ export async function listTexExpenses(client: TenantQueryClient, actor: TexActor
           coalesce(t.name, e.trip_name) as trip_name,
           e.notes,
           e.status,
-          e.created_at::text as created_at
+          e.created_at::text as created_at,
+          e.duplicate_status,
+          e.duplicate_reason,
+          e.manager_review_required
         from public.tex_expenses e
         left join public.tex_employee_profiles ep
           on ep.tenant_id = e.tenant_id
@@ -786,6 +811,13 @@ export async function createTexExpense(
           notes,
           receipt_file_id,
           source,
+          extraction_source,
+          extraction_confidence,
+          extraction_payload,
+          duplicate_status,
+          duplicate_of_expense_id,
+          duplicate_reason,
+          manager_review_required,
           created_by,
           updated_by
         )
@@ -803,6 +835,13 @@ export async function createTexExpense(
           $10,
           $11,
           $12,
+          'manual',
+          null,
+          '{}'::jsonb,
+          'clear',
+          null,
+          null,
+          false,
           $1,
           $1
         )
@@ -898,6 +937,10 @@ export async function recordTexWebhookSubmission(
           session_id,
           message_text,
           receipt_file_id,
+          message_type,
+          media_url,
+          media_mime_type,
+          ocr_status,
           payload,
           created_by,
           updated_by
@@ -911,14 +954,21 @@ export async function recordTexWebhookSubmission(
           $5,
           $6,
           $7,
-          $8::jsonb,
+          $8,
           $9,
-          $9
+          $10,
+          $11,
+          $12::jsonb,
+          $13,
+          $13
         )
         on conflict (tenant_id, message_id)
         where message_id is not null
         do update set
           payload = excluded.payload,
+          message_type = excluded.message_type,
+          media_url = excluded.media_url,
+          media_mime_type = excluded.media_mime_type,
           updated_by = excluded.updated_by,
           updated_at = now()
         returning id, status
@@ -931,6 +981,10 @@ export async function recordTexWebhookSubmission(
         submission.sessionId,
         submission.messageText,
         submission.receiptFileId,
+        classifyWhatsappMessage(submission),
+        submission.mediaUrl,
+        submission.mediaMimeType,
+        submission.mediaUrl ? "pending" : "manual_review",
         JSON.stringify(submission.payload),
         actor.userId
       ]
@@ -945,6 +999,117 @@ export async function recordTexWebhookSubmission(
       id: row.id,
       status: row.status
     };
+  });
+}
+
+export async function processTexWhatsappSubmission(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexWebhookSubmissionInput
+): Promise<TexWhatsappReceiptResult> {
+  assertTexPermission(actor, "tex.integration.manage");
+  const submission = sanitizeWebhookSubmission(input);
+  const messageType = classifyWhatsappMessage(submission);
+
+  if (messageType === "status") {
+    return withTenantContext(client, actor, async () => {
+      const replyText = await buildWhatsappStatusReply(client, submission.senderPhone);
+      const row = await insertWhatsappSubmission(client, actor, submission, {
+        messageType,
+        ocrStatus: "not_applicable",
+        ocrResult: {},
+        replyText
+      });
+
+      return { submission: row, replyText, expense: null, ocrStatus: "not_applicable" };
+    });
+  }
+
+  let extraction: TexReceiptExtraction | null = submission.extractedReceipt;
+  let extractionError: string | null = null;
+
+  if (!extraction && submission.mediaUrl) {
+    try {
+      extraction = await extractReceiptWithOpenAI(submission.mediaUrl);
+    } catch (error) {
+      extractionError = error instanceof Error ? error.message : "Receipt extraction failed.";
+    }
+  }
+
+  return withTenantContext(client, actor, async () => {
+    const settings = await getTexIntegrationSettingsForProcessing(client);
+    const employee = await findEmployeeByPhone(client, submission.senderPhone);
+
+    if (!employee) {
+      const replyText =
+        "Receipt received, but this WhatsApp number is not enrolled for TEX. Please ask your tenant admin to enroll your number.";
+      const row = await insertWhatsappSubmission(client, actor, submission, {
+        messageType,
+        ocrStatus: "manual_review",
+        ocrResult: extraction ?? {},
+        ocrError: extractionError,
+        replyText
+      });
+
+      return { submission: row, replyText, expense: null, ocrStatus: "manual_review" };
+    }
+
+    if (!settings.ai_receipt_extraction_enabled) {
+      const replyText = "Receipt received. AI extraction is disabled for your company, so the finance team will review it manually.";
+      const row = await insertWhatsappSubmission(client, actor, submission, {
+        messageType,
+        ocrStatus: "manual_review",
+        ocrResult: extraction ?? {},
+        ocrError: extractionError,
+        replyText
+      });
+
+      return { submission: row, replyText, expense: null, ocrStatus: "manual_review" };
+    }
+
+    if (!extraction || !extraction.expenseDate || !extraction.amount || !extraction.currency) {
+      const replyText = "Receipt received, but TEX could not read the key fields. It has been sent for manual review.";
+      const row = await insertWhatsappSubmission(client, actor, submission, {
+        messageType,
+        ocrStatus: extractionError ? "failed" : "manual_review",
+        ocrResult: extraction ?? {},
+        ocrError: extractionError,
+        replyText
+      });
+
+      return { submission: row, replyText, expense: null, ocrStatus: extractionError ? "failed" : "manual_review" };
+    }
+
+    const duplicate = settings.duplicate_detection_enabled
+      ? await findDuplicateExpense(client, employee.id, extraction)
+      : null;
+    const shouldAutoReject = Boolean(duplicate && settings.duplicate_auto_reject_enabled);
+    const expense = await createExpenseFromWhatsappReceipt(client, actor, {
+      employee,
+      extraction,
+      submission,
+      duplicate,
+      shouldAutoReject
+    });
+    const replyText = shouldAutoReject
+      ? `Receipt received but auto-rejected as a likely duplicate of ${duplicate?.vendor ?? "an existing expense"}.`
+      : duplicate
+        ? "Receipt received and flagged as a possible duplicate for manager review."
+        : `Receipt received and submitted for ${formatMoney(extraction.amount, extraction.currency)}.`;
+    const row = await insertWhatsappSubmission(client, actor, submission, {
+      messageType,
+      ocrStatus: "extracted",
+      ocrResult: extraction,
+      replyText,
+      resolvedExpenseId: expense.id,
+      resolvedEmployeeProfileId: employee.id
+    });
+
+    await writeTexAuditEvent(client, actor, "tex.whatsapp.receipt_processed", "tex_expense", expense.id, {
+      duplicate_status: duplicate ? (shouldAutoReject ? "duplicate" : "suspected") : "clear"
+    });
+
+    return { submission: row, replyText, expense, ocrStatus: "extracted" };
   });
 }
 
@@ -977,6 +1142,343 @@ async function writeTexAuditEvent(
     `,
     [actor.userId, action, targetType, targetId, JSON.stringify(metadata)]
   );
+}
+
+async function insertWhatsappSubmission(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  submission: Required<TexWebhookSubmissionInput>,
+  options: {
+    messageType: "receipt" | "status" | "text";
+    ocrStatus: TexWhatsappReceiptResult["ocrStatus"];
+    ocrResult: Record<string, unknown>;
+    ocrError?: string | null;
+    replyText: string;
+    resolvedExpenseId?: string | null;
+    resolvedEmployeeProfileId?: string | null;
+  }
+): Promise<TexWebhookSubmissionRecord> {
+  const result = await client.query<TexWebhookSubmissionRow>(
+    `
+      insert into public.tex_unregistered_whatsapp_submissions (
+        tenant_id,
+        sender_raw,
+        sender_phone,
+        whatsapp_chat_jid,
+        message_id,
+        session_id,
+        message_text,
+        receipt_file_id,
+        message_type,
+        media_url,
+        media_mime_type,
+        ocr_status,
+        ocr_result,
+        ocr_error,
+        whatsapp_reply_text,
+        payload,
+        status,
+        resolved_expense_id,
+        resolved_employee_profile_id,
+        resolved_by,
+        resolved_at,
+        created_by,
+        updated_by
+      )
+      values (
+        public.current_tenant_id(),
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11,
+        $12::jsonb,
+        $13,
+        $14,
+        $15::jsonb,
+        $16,
+        $17,
+        $18,
+        $19,
+        case when $16 = 'resolved' then now() else null end,
+        $19,
+        $19
+      )
+      on conflict (tenant_id, message_id)
+      where message_id is not null
+      do update set
+        payload = excluded.payload,
+        message_type = excluded.message_type,
+        media_url = excluded.media_url,
+        media_mime_type = excluded.media_mime_type,
+        ocr_status = excluded.ocr_status,
+        ocr_result = excluded.ocr_result,
+        ocr_error = excluded.ocr_error,
+        whatsapp_reply_text = excluded.whatsapp_reply_text,
+        status = excluded.status,
+        resolved_expense_id = excluded.resolved_expense_id,
+        resolved_employee_profile_id = excluded.resolved_employee_profile_id,
+        resolved_by = excluded.resolved_by,
+        resolved_at = excluded.resolved_at,
+        updated_by = excluded.updated_by,
+        updated_at = now()
+      returning id, status
+    `,
+    [
+      submission.senderRaw,
+      submission.senderPhone,
+      submission.whatsappChatJid,
+      submission.messageId,
+      submission.sessionId,
+      submission.messageText,
+      submission.receiptFileId,
+      options.messageType,
+      submission.mediaUrl,
+      submission.mediaMimeType,
+      options.ocrStatus,
+      JSON.stringify(options.ocrResult),
+      cleanOptional(options.ocrError),
+      options.replyText,
+      JSON.stringify(submission.payload),
+      options.resolvedExpenseId ? "resolved" : "open",
+      options.resolvedExpenseId ?? null,
+      options.resolvedEmployeeProfileId ?? null,
+      actor.userId
+    ]
+  );
+  const row = requireSingleRow(result.rows, "webhook submission");
+
+  await writeTexAuditEvent(client, actor, "tex.webhook.submission_recorded", "tex_unregistered_whatsapp_submission", row.id, {
+    provider: "whatsapp",
+    message_id: submission.messageId ?? ""
+  });
+
+  return {
+    id: row.id,
+    status: row.status
+  };
+}
+
+async function getTexIntegrationSettingsForProcessing(client: TenantQueryClient): Promise<TexProcessingSettingsRow> {
+  const result = await client.query<TexProcessingSettingsRow>(
+    `
+      select
+        ai_receipt_extraction_enabled,
+        duplicate_detection_enabled,
+        duplicate_auto_reject_enabled,
+        duplicate_similarity_threshold::float as duplicate_similarity_threshold
+      from public.tex_integration_settings
+      where tenant_id = public.current_tenant_id()
+      limit 1
+    `
+  );
+
+  return (
+    result.rows[0] ?? {
+      ai_receipt_extraction_enabled: true,
+      duplicate_detection_enabled: true,
+      duplicate_auto_reject_enabled: false,
+      duplicate_similarity_threshold: 0.92
+    }
+  );
+}
+
+async function findEmployeeByPhone(client: TenantQueryClient, phone: string | null) {
+  const digits = normalizePhoneDigits(phone);
+
+  if (!digits) {
+    return null;
+  }
+
+  const result = await client.query<TexEmployeeProfileRow>(
+    `
+      select id, user_id, name, phone_number, department, is_active
+      from public.tex_employee_profiles
+      where tenant_id = public.current_tenant_id()
+        and is_active = true
+        and regexp_replace(phone_number, '[^0-9]', '', 'g') = $1
+      limit 1
+    `,
+    [digits]
+  );
+
+  return result.rows[0] ?? null;
+}
+
+async function buildWhatsappStatusReply(client: TenantQueryClient, phone: string | null) {
+  const employee = await findEmployeeByPhone(client, phone);
+
+  if (!employee) {
+    return "No TEX employee profile is enrolled for this WhatsApp number.";
+  }
+
+  const result = await client.query<{ status: TexExpenseStatus; count: number; total: number }>(
+    `
+      select status, count(*)::int as count, coalesce(sum(amount), 0)::float as total
+      from public.tex_expenses
+      where tenant_id = public.current_tenant_id()
+        and employee_profile_id = $1
+      group by status
+    `,
+    [employee.id]
+  );
+  const totals = new Map(result.rows.map((row) => [row.status, row]));
+  const pending = totals.get("pending");
+  const approved = totals.get("approved");
+  const rejected = totals.get("rejected");
+  const paid = totals.get("paid");
+
+  return [
+    `TEX status for ${employee.name}:`,
+    `Pending: ${pending?.count ?? 0} (${formatMoney(pending?.total ?? 0, "AED")})`,
+    `Approved: ${approved?.count ?? 0} (${formatMoney(approved?.total ?? 0, "AED")})`,
+    `Rejected: ${rejected?.count ?? 0} (${formatMoney(rejected?.total ?? 0, "AED")})`,
+    `Paid: ${paid?.count ?? 0} (${formatMoney(paid?.total ?? 0, "AED")})`
+  ].join("\n");
+}
+
+async function findDuplicateExpense(
+  client: TenantQueryClient,
+  employeeProfileId: string,
+  extraction: TexReceiptExtraction
+): Promise<TexDuplicateCandidateRow | null> {
+  if (!extraction.expenseDate || !extraction.amount || !extraction.currency) {
+    return null;
+  }
+
+  const result = await client.query<TexDuplicateCandidateRow>(
+    `
+      select id, vendor, amount::float as amount, currency, expense_date::text as expense_date
+      from public.tex_expenses
+      where tenant_id = public.current_tenant_id()
+        and employee_profile_id = $1
+        and expense_date = $2::date
+        and amount = $3
+        and currency = $4
+        and status <> 'rejected'
+      order by created_at desc
+      limit 1
+    `,
+    [employeeProfileId, extraction.expenseDate, extraction.amount, extraction.currency]
+  );
+
+  return result.rows[0] ?? null;
+}
+
+async function createExpenseFromWhatsappReceipt(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: {
+    employee: TexEmployeeProfileRow;
+    extraction: TexReceiptExtraction;
+    submission: Required<TexWebhookSubmissionInput>;
+    duplicate: TexDuplicateCandidateRow | null;
+    shouldAutoReject: boolean;
+  }
+): Promise<TexExpenseRecord> {
+  const duplicateStatus = input.duplicate ? (input.shouldAutoReject ? "duplicate" : "suspected") : "clear";
+  const duplicateReason = input.duplicate
+    ? `Matched ${input.duplicate.vendor ?? "existing receipt"} on employee, date, amount, and currency.`
+    : null;
+  const result = await client.query<TexExpenseRow>(
+    `
+      insert into public.tex_expenses (
+        tenant_id,
+        submitter_user_id,
+        employee_profile_id,
+        employee_name,
+        employee_phone,
+        whatsapp_chat_jid,
+        vendor,
+        expense_date,
+        amount,
+        currency,
+        category,
+        notes,
+        tax_id_number,
+        tax_amount,
+        receipt_file_id,
+        source,
+        extraction_source,
+        extraction_confidence,
+        extraction_payload,
+        duplicate_status,
+        duplicate_of_expense_id,
+        duplicate_reason,
+        manager_review_required,
+        status,
+        rejected_by,
+        rejected_at,
+        rejected_reason,
+        created_by,
+        updated_by
+      )
+      values (
+        public.current_tenant_id(),
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11,
+        $12,
+        $13,
+        $14,
+        'whatsapp',
+        'whatsapp_ai',
+        $15,
+        $16::jsonb,
+        $17,
+        $18,
+        $19,
+        $20,
+        $21,
+        case when $21 = 'rejected' then $1 else null end,
+        case when $21 = 'rejected' then now() else null end,
+        case when $21 = 'rejected' then $19 else null end,
+        $1,
+        $1
+      )
+      returning id, status, amount::float as amount, currency
+    `,
+    [
+      actor.userId,
+      input.employee.id,
+      input.employee.name,
+      input.employee.phone_number,
+      input.submission.whatsappChatJid,
+      input.extraction.vendor,
+      input.extraction.expenseDate,
+      input.extraction.amount,
+      input.extraction.currency,
+      input.extraction.category,
+      input.extraction.notes,
+      input.extraction.taxIdNumber,
+      input.extraction.taxAmount,
+      input.submission.receiptFileId,
+      input.extraction.confidence,
+      JSON.stringify(input.extraction),
+      duplicateStatus,
+      input.duplicate?.id ?? null,
+      duplicateReason,
+      Boolean(input.duplicate && !input.shouldAutoReject),
+      input.shouldAutoReject ? "rejected" : "pending"
+    ]
+  );
+  const row = requireSingleRow(result.rows, "expense");
+
+  return mapExpense(row);
 }
 
 function sanitizeExpense(input: TexExpenseInput): Required<TexExpenseInput> {
@@ -1017,6 +1519,9 @@ function sanitizeWebhookSubmission(input: TexWebhookSubmissionInput): Required<T
     sessionId: cleanOptional(input.sessionId),
     messageText: cleanOptional(input.messageText),
     receiptFileId: cleanOptional(input.receiptFileId),
+    mediaUrl: cleanOptional(input.mediaUrl),
+    mediaMimeType: cleanOptional(input.mediaMimeType),
+    extractedReceipt: input.extractedReceipt ?? null,
     payload: input.payload ?? {}
   };
 }
@@ -1159,6 +1664,23 @@ function cleanOptional(value: string | null | undefined) {
   return clean ? clean : null;
 }
 
+function classifyWhatsappMessage(submission: Required<TexWebhookSubmissionInput>): "receipt" | "status" | "text" {
+  if (submission.messageText?.trim().toUpperCase() === "STATUS") {
+    return "status";
+  }
+
+  return submission.mediaUrl || submission.receiptFileId ? "receipt" : "text";
+}
+
+function normalizePhoneDigits(value: string | null) {
+  const digits = value?.replace(/\D/g, "") ?? "";
+  return digits || null;
+}
+
+function formatMoney(amount: number, currency: string) {
+  return `${new Intl.NumberFormat("en", { maximumFractionDigits: 2 }).format(amount)} ${currency}`;
+}
+
 function requireSingleRow<Row>(rows: readonly Row[], label: string) {
   const [row] = rows;
 
@@ -1203,7 +1725,11 @@ function mapIntegrationSettings(row: TexIntegrationSettingsRow): TexIntegrationS
     whatsappInstanceId: row.whatsapp_instance_id,
     wappflySessionId: row.wappfly_session_id,
     metaPhoneNumberId: row.meta_phone_number_id,
-    metaWhatsappBusinessAccountId: row.meta_whatsapp_business_account_id
+    metaWhatsappBusinessAccountId: row.meta_whatsapp_business_account_id,
+    aiReceiptExtractionEnabled: row.ai_receipt_extraction_enabled,
+    duplicateDetectionEnabled: row.duplicate_detection_enabled,
+    duplicateAutoRejectEnabled: row.duplicate_auto_reject_enabled,
+    duplicateSimilarityThreshold: row.duplicate_similarity_threshold
   };
 }
 
@@ -1228,7 +1754,10 @@ function mapExpenseListItem(row: TexExpenseListRow): TexExpenseListItem {
     category: row.category,
     tripName: row.trip_name,
     notes: row.notes,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    duplicateStatus: row.duplicate_status,
+    duplicateReason: row.duplicate_reason,
+    managerReviewRequired: row.manager_review_required
   };
 }
 
@@ -1321,6 +1850,10 @@ type TexIntegrationSettingsRow = {
   wappfly_session_id: string | null;
   meta_phone_number_id: string | null;
   meta_whatsapp_business_account_id: string | null;
+  ai_receipt_extraction_enabled: boolean;
+  duplicate_detection_enabled: boolean;
+  duplicate_auto_reject_enabled: boolean;
+  duplicate_similarity_threshold: number;
 };
 
 type TexExpenseRow = {
@@ -1338,6 +1871,9 @@ type TexExpenseListRow = TexExpenseRow & {
   trip_name: string | null;
   notes: string | null;
   created_at: string;
+  duplicate_status: "clear" | "suspected" | "duplicate";
+  duplicate_reason: string | null;
+  manager_review_required: boolean;
 };
 
 type TexTripListRow = {
@@ -1398,6 +1934,21 @@ type TexFinanceTripPayoutRow = {
 type TexWebhookSubmissionRow = {
   id: string;
   status: "open" | "resolved" | "ignored";
+};
+
+type TexProcessingSettingsRow = {
+  ai_receipt_extraction_enabled: boolean;
+  duplicate_detection_enabled: boolean;
+  duplicate_auto_reject_enabled: boolean;
+  duplicate_similarity_threshold: number;
+};
+
+type TexDuplicateCandidateRow = {
+  id: string;
+  vendor: string | null;
+  amount: number;
+  currency: string;
+  expense_date: string;
 };
 
 type TexMembershipValidationRow = {

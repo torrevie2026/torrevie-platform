@@ -32,7 +32,10 @@ export async function updateTenantWhatsappSettingsAction(formData: FormData) {
       googleMapsEnabled: formData.get("googleMapsEnabled") === "on",
       apiKey: stringValue(formData, "apiKey"),
       appSecret: stringValue(formData, "appSecret"),
-      webhookVerifyToken: stringValue(formData, "webhookVerifyToken")
+      webhookVerifyToken: stringValue(formData, "webhookVerifyToken"),
+      aiReceiptExtractionEnabled: formData.get("aiReceiptExtractionEnabled") === "on",
+      duplicateDetectionEnabled: formData.get("duplicateDetectionEnabled") === "on",
+      duplicateAutoRejectEnabled: formData.get("duplicateAutoRejectEnabled") === "on"
     };
 
     await updateTenantWhatsappSettings(client, actor, input);

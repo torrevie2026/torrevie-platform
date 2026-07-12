@@ -9,6 +9,7 @@ import {
   listTexTrips,
   listTexBootstrap,
   payTexFinanceItems,
+  processTexWhatsappSubmission,
   recordTexWebhookSubmission,
   resolveTexActorContext,
   updateTexTrip,
@@ -94,7 +95,11 @@ class RecordingTexClient implements TenantQueryClient {
             whatsapp_instance_id: null,
             wappfly_session_id: "session-a",
             meta_phone_number_id: null,
-            meta_whatsapp_business_account_id: null
+            meta_whatsapp_business_account_id: null,
+            ai_receipt_extraction_enabled: true,
+            duplicate_detection_enabled: true,
+            duplicate_auto_reject_enabled: false,
+            duplicate_similarity_threshold: 0.92
           }
         ] as Row[]
       };
@@ -131,6 +136,43 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("select status, count(*)::int as count")) {
+      return {
+        rows: [
+          { status: "pending", count: 2, total: 220 },
+          { status: "approved", count: 1, total: 120 },
+          { status: "rejected", count: 1, total: 80 }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("select id, vendor, amount::float as amount")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000006099",
+            vendor: "Airport Cafe",
+            expense_date: "2026-07-12",
+            amount: 120,
+            currency: "AED"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_expenses") && sql.includes("'whatsapp_ai'")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000006001",
+            status: values[20],
+            amount: values[7],
+            currency: values[8]
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("insert into public.tex_expenses") && sql.includes("returning id, status")) {
       return {
         rows: [
@@ -158,7 +200,10 @@ class RecordingTexClient implements TenantQueryClient {
             trip_name: "Dubai run",
             notes: "Lunch",
             status: "pending",
-            created_at: "2026-07-12T10:00:00.000Z"
+            created_at: "2026-07-12T10:00:00.000Z",
+            duplicate_status: "clear",
+            duplicate_reason: null,
+            manager_review_required: false
           }
         ] as Row[]
       };
@@ -515,6 +560,44 @@ async function main() {
     assert.equal(client.hasSql("on conflict (tenant_id, message_id)"), true);
     assert.equal(client.valuesContain("wamid.abc"), true);
     assert.equal(client.valuesContain("tex.webhook.submission_recorded"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const result = await processTexWhatsappSubmission(client, integrationActor, {
+      senderPhone: "+971500000001",
+      messageId: "wamid.status",
+      messageText: "STATUS",
+      payload: { provider: "meta" }
+    });
+    assert.equal(result.ocrStatus, "not_applicable");
+    assert.match(result.replyText, /Pending: 2/);
+    assert.equal(client.valuesContain("status"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const result = await processTexWhatsappSubmission(client, integrationActor, {
+      senderPhone: "+971500000001",
+      messageId: "wamid.receipt",
+      mediaUrl: "https://example.test/receipt.jpg",
+      extractedReceipt: {
+        vendor: "Airport Cafe",
+        expenseDate: "2026-07-12",
+        amount: 120,
+        currency: "AED",
+        category: "Meals",
+        taxAmount: 0,
+        taxIdNumber: null,
+        confidence: 0.94,
+        notes: "Lunch"
+      },
+      payload: { provider: "meta" }
+    });
+    assert.equal(result.ocrStatus, "extracted");
+    assert.match(result.replyText, /possible duplicate/);
+    assert.equal(client.valuesContain("suspected"), true);
+    assert.equal(client.valuesContain(true), true);
   }
 
   {

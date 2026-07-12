@@ -42,6 +42,9 @@ export type TenantWhatsappSettings = {
   appSecretLast4: string;
   webhookVerifyTokenConfigured: boolean;
   webhookVerifyTokenLast4: string;
+  aiReceiptExtractionEnabled: boolean;
+  duplicateDetectionEnabled: boolean;
+  duplicateAutoRejectEnabled: boolean;
 };
 
 export type TenantWhatsappSettingsInput = {
@@ -55,6 +58,9 @@ export type TenantWhatsappSettingsInput = {
   apiKey?: string | null;
   appSecret?: string | null;
   webhookVerifyToken?: string | null;
+  aiReceiptExtractionEnabled?: boolean;
+  duplicateDetectionEnabled?: boolean;
+  duplicateAutoRejectEnabled?: boolean;
 };
 
 export async function listCustomerMembers(
@@ -167,7 +173,10 @@ export async function getTenantWhatsappSettings(
           whatsapp_webhook_verify_token_last4,
           whatsapp_api_key_last4,
           whatsapp_app_secret_last4,
-          whatsapp_keys_configured
+          whatsapp_keys_configured,
+          ai_receipt_extraction_enabled,
+          duplicate_detection_enabled,
+          duplicate_auto_reject_enabled
         from public.tex_integration_settings
         where tenant_id = public.current_tenant_id()
         limit 1
@@ -229,6 +238,9 @@ export async function updateTenantWhatsappSettings(
           whatsapp_app_secret_last4,
           whatsapp_webhook_verify_token_last4,
           whatsapp_keys_configured,
+          ai_receipt_extraction_enabled,
+          duplicate_detection_enabled,
+          duplicate_auto_reject_enabled,
           created_by,
           updated_by
         )
@@ -246,7 +258,11 @@ export async function updateTenantWhatsappSettings(
           $10,
           $11,
           $12,
-          $12
+          $13,
+          $14,
+          $15,
+          $16,
+          $16
         )
         on conflict (tenant_id)
         do update set
@@ -264,6 +280,9 @@ export async function updateTenantWhatsappSettings(
             public.tex_integration_settings.whatsapp_webhook_verify_token_last4
           ),
           whatsapp_keys_configured = public.tex_integration_settings.whatsapp_keys_configured or excluded.whatsapp_keys_configured,
+          ai_receipt_extraction_enabled = excluded.ai_receipt_extraction_enabled,
+          duplicate_detection_enabled = excluded.duplicate_detection_enabled,
+          duplicate_auto_reject_enabled = excluded.duplicate_auto_reject_enabled,
           updated_by = excluded.updated_by
         returning
           whatsapp_provider,
@@ -276,7 +295,10 @@ export async function updateTenantWhatsappSettings(
           whatsapp_webhook_verify_token_last4,
           whatsapp_api_key_last4,
           whatsapp_app_secret_last4,
-          whatsapp_keys_configured
+          whatsapp_keys_configured,
+          ai_receipt_extraction_enabled,
+          duplicate_detection_enabled,
+          duplicate_auto_reject_enabled
       `,
       [
         provider,
@@ -290,6 +312,9 @@ export async function updateTenantWhatsappSettings(
         appSecretLast4 ?? null,
         webhookVerifyTokenLast4 ?? null,
         Boolean(apiKey || appSecret || webhookVerifyToken),
+        input.aiReceiptExtractionEnabled ?? true,
+        input.duplicateDetectionEnabled ?? true,
+        input.duplicateAutoRejectEnabled ?? false,
         actor.userId
       ]
     );
@@ -587,7 +612,10 @@ function mapWhatsappSettings(row: WhatsappSettingsRow | undefined): TenantWhatsa
     appSecretConfigured: Boolean(row?.whatsapp_app_secret_last4 || row?.whatsapp_keys_configured),
     appSecretLast4: row?.whatsapp_app_secret_last4 ?? "",
     webhookVerifyTokenConfigured: Boolean(row?.whatsapp_webhook_verify_token_last4 || row?.whatsapp_keys_configured),
-    webhookVerifyTokenLast4: row?.whatsapp_webhook_verify_token_last4 ?? ""
+    webhookVerifyTokenLast4: row?.whatsapp_webhook_verify_token_last4 ?? "",
+    aiReceiptExtractionEnabled: row?.ai_receipt_extraction_enabled ?? true,
+    duplicateDetectionEnabled: row?.duplicate_detection_enabled ?? true,
+    duplicateAutoRejectEnabled: row?.duplicate_auto_reject_enabled ?? false
   };
 }
 
@@ -635,4 +663,7 @@ type WhatsappSettingsRow = {
   whatsapp_api_key_last4: string | null;
   whatsapp_app_secret_last4: string | null;
   whatsapp_keys_configured: boolean | null;
+  ai_receipt_extraction_enabled: boolean | null;
+  duplicate_detection_enabled: boolean | null;
+  duplicate_auto_reject_enabled: boolean | null;
 };

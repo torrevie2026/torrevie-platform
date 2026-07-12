@@ -140,6 +140,18 @@ export default async function CustomerUsersPage({
                   <input name="googleMapsEnabled" type="checkbox" defaultChecked={whatsappSettings.googleMapsEnabled} />
                   Enable Google Maps enrichment for WhatsApp trip messages
                 </label>
+                <label className="tex-checkbox-row">
+                  <input name="aiReceiptExtractionEnabled" type="checkbox" defaultChecked={whatsappSettings.aiReceiptExtractionEnabled} />
+                  Enable AI receipt OCR from WhatsApp media
+                </label>
+                <label className="tex-checkbox-row">
+                  <input name="duplicateDetectionEnabled" type="checkbox" defaultChecked={whatsappSettings.duplicateDetectionEnabled} />
+                  Flag likely duplicate receipts for manager review
+                </label>
+                <label className="tex-checkbox-row">
+                  <input name="duplicateAutoRejectEnabled" type="checkbox" defaultChecked={whatsappSettings.duplicateAutoRejectEnabled} />
+                  Auto-reject likely duplicates instead of sending them to manager review
+                </label>
                 <button type="submit">Save WhatsApp setup</button>
               </form>
             </section>
