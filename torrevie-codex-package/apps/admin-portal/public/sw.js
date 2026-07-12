@@ -1,3 +1,5 @@
+/* global self, caches, URL */
+
 const CACHE_NAME = "torrevie-admin-static-v1";
 const STATIC_PATHS = ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/apple-touch-icon.png"];
 

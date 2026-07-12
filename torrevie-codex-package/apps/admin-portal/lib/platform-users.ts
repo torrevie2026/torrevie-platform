@@ -27,15 +27,6 @@ export type PlatformUserRecord = {
   createdAt: string;
 };
 
-type PlatformUserRow = {
-  user_id: string;
-  email: string;
-  user_status: string;
-  membership_status: string;
-  role_key: string;
-  created_at: string;
-};
-
 type PlatformTenantRow = {
   id: string;
   name: string;
