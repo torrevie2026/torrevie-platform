@@ -1,4 +1,5 @@
 import { withTenantContext, type ResolvedTenantContext, type TenantQueryClient } from "@torrevie/tenant-context";
+import { buildVoiceProvisioningPlan, summarizeVoiceUsage, type VoiceSetupInput, type VoiceSetupPath } from "./voice";
 
 export type ChannelType = "whatsapp" | "voice" | "email" | "portal";
 export type ChannelStatus = "active" | "pending" | "suspended";
@@ -9,6 +10,7 @@ export type OrgChannel = {
   channelType: ChannelType;
   provider: string;
   displayName: string;
+  config: Record<string, unknown>;
   status: ChannelStatus;
   createdAt: string;
 };
@@ -35,10 +37,18 @@ export type CallLog = {
   startedAt: string;
 };
 
+export type VoiceUsage = {
+  monthlyMinuteCap: number;
+  minutesUsed: number;
+  warningAtMinutes: number;
+  warningReached: boolean;
+};
+
 export type ChannelHubSnapshot = {
   channels: OrgChannel[];
   intakeRequests: IntakeRequest[];
   callLogs: CallLog[];
+  voiceUsage: VoiceUsage;
 };
 
 export type WhatsAppProvider = {
@@ -65,6 +75,7 @@ type ChannelRow = {
   channel_type: ChannelType;
   provider: string;
   display_name: string;
+  config: Record<string, unknown> | null;
   status: ChannelStatus;
   created_at: string;
 };
@@ -91,15 +102,24 @@ type CallLogRow = {
   started_at: string;
 };
 
+type EntitlementRow = {
+  feature_key: string;
+  enabled: boolean;
+};
+
+type VoiceUsageRow = {
+  duration_seconds: number | null;
+};
+
 export async function listChannelHubSnapshot(
   client: TenantQueryClient,
   context: ResolvedTenantContext
 ): Promise<ChannelHubSnapshot> {
   return withTenantContext(client, context, async () => {
-    const [channels, intakeRequests, callLogs] = await Promise.all([
+    const [channels, intakeRequests, callLogs, voiceUsage] = await Promise.all([
       client.query<ChannelRow>(
         `
-          select id, channel_type, provider, display_name, status, created_at
+          select id, channel_type, provider, display_name, config, status, created_at
           from public.org_channels
           where tenant_id = public.current_tenant_id()
           order by created_at desc
@@ -123,13 +143,27 @@ export async function listChannelHubSnapshot(
           order by started_at desc
           limit 10
         `
+      ),
+      client.query<VoiceUsageRow>(
+        `
+          select coalesce(sum(duration_seconds), 0)::int as duration_seconds
+          from public.call_logs
+          where tenant_id = public.current_tenant_id()
+            and started_at >= date_trunc('month', now())
+        `
       )
     ]);
+    const voiceChannel = channels.rows.find((channel) => channel.channel_type === "voice");
+    const monthlyMinuteCap = readNumber(voiceChannel?.config?.["monthlyMinuteCap"], 500);
 
     return {
       channels: channels.rows.map(mapChannel),
       intakeRequests: intakeRequests.rows.map(mapIntake),
-      callLogs: callLogs.rows.map(mapCallLog)
+      callLogs: callLogs.rows.map(mapCallLog),
+      voiceUsage: summarizeVoiceUsage({
+        monthlyMinuteCap,
+        durationSeconds: voiceUsage.rows[0]?.duration_seconds ?? 0
+      })
     };
   });
 }
@@ -189,12 +223,84 @@ export async function createManualIntakeRequest(
   });
 }
 
+export async function requestVoiceChannelSetup(
+  client: TenantQueryClient,
+  context: ResolvedTenantContext,
+  input: VoiceSetupInput & { tenantName: string; segment: "SOLO" | "TRADE" | "FM" | "COMMUNITY" | "OEM" }
+) {
+  return withTenantContext(client, context, async () => {
+    await assertVoiceEntitled(client);
+
+    const provisioningPlan = buildVoiceProvisioningPlan({
+      segment: input.segment,
+      tenantName: input.tenantName,
+      setupPath: input.path,
+      monthlyMinuteCap: input.monthlyMinuteCap
+    });
+
+    await client.query(
+      `
+        insert into public.org_channels (
+          tenant_id,
+          channel_type,
+          provider,
+          display_name,
+          config,
+          status,
+          created_by,
+          updated_by
+        )
+        values (
+          public.current_tenant_id(),
+          'voice',
+          $1,
+          'Voice Hotline',
+          $2::jsonb,
+          'pending',
+          $3,
+          $3
+        )
+        on conflict (tenant_id, channel_type, display_name)
+        do update set
+          provider = excluded.provider,
+          config = excluded.config,
+          status = 'pending',
+          updated_by = excluded.updated_by
+      `,
+      [provisioningPlan.provider, JSON.stringify(provisioningPlan), context.userId]
+    );
+
+    await client.query(
+      `
+        insert into public.audit_events (tenant_id, actor_user_id, action, target_type, target_id, metadata)
+        values (
+          public.current_tenant_id(),
+          $1,
+          'fsm.voice.setup_requested',
+          'org_channel',
+          public.current_tenant_id(),
+          $2::jsonb
+        )
+      `,
+      [
+        context.userId,
+        JSON.stringify({
+          provider: provisioningPlan.provider,
+          setup_path: provisioningPlan.setupPath,
+          monthly_minute_cap: provisioningPlan.monthlyMinuteCap
+        })
+      ]
+    );
+  });
+}
+
 function mapChannel(row: ChannelRow): OrgChannel {
   return {
     id: row.id,
     channelType: row.channel_type,
     provider: row.provider,
     displayName: row.display_name,
+    config: row.config ?? {},
     status: row.status,
     createdAt: row.created_at
   };
@@ -225,3 +331,25 @@ function mapCallLog(row: CallLogRow): CallLog {
     startedAt: row.started_at
   };
 }
+
+async function assertVoiceEntitled(client: TenantQueryClient) {
+  const entitlements = await client.query<EntitlementRow>(
+    `
+      select feature_key, enabled
+      from public.get_org_entitlements(public.current_tenant_id())
+      where feature_key in ('fsm.channel.voice.enabled', 'fsm.voice.addon.available')
+    `
+  );
+  const allowed = entitlements.rows.some((row) => row.enabled);
+
+  if (!allowed) {
+    throw new Error("Voice setup requires Enterprise voice or the Growth voice add-on.");
+  }
+}
+
+function readNumber(value: unknown, fallback: number) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+export type { VoiceSetupPath };

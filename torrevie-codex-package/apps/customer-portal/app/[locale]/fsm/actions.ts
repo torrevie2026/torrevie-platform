@@ -4,7 +4,9 @@ import { isLocale } from "@torrevie/localization";
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { buildOnboardingInput, saveFsmOnboarding } from "../../../lib/fsm";
-import { createManualIntakeRequest, type ChannelType } from "../../../lib/fsm/channels";
+import { createManualIntakeRequest, requestVoiceChannelSetup, type ChannelType } from "../../../lib/fsm/channels";
+import { normalizeBusinessSegment } from "../../../config/fsmSegments";
+import { normalizeVoiceSetupInput } from "../../../lib/fsm/voice";
 import {
   getCustomerAccessRequirements,
   requireVerifiedCustomerSession,
@@ -82,6 +84,35 @@ export async function createManualIntakeRequestAction(formData: FormData) {
 
   revalidatePath(`/${locale}/fsm`);
   redirect(`/${locale}/fsm?section=channels&intake=created`);
+}
+
+export async function requestVoiceChannelSetupAction(formData: FormData) {
+  const locale = stringValue(formData, "locale");
+
+  if (!isLocale(locale)) {
+    notFound();
+  }
+
+  const session = await requireVerifiedCustomerSession();
+  const client = new PostgresTenantQueryClient(session.userId);
+  const tenantContext = await resolveCustomerTenantContext(client, session);
+  const requirements = await getCustomerAccessRequirements(client, tenantContext);
+
+  if (requirements.requireProfileCompletion && !requirements.profileComplete) {
+    redirect(`/${locale}/account?profile=required`);
+  }
+
+  await requestVoiceChannelSetup(client, tenantContext, {
+    ...normalizeVoiceSetupInput({
+      path: stringValue(formData, "voiceSetupPath"),
+      monthlyMinuteCap: stringValue(formData, "monthlyMinuteCap")
+    }),
+    tenantName: stringValue(formData, "tenantName"),
+    segment: normalizeBusinessSegment(stringValue(formData, "segment"))
+  });
+
+  revalidatePath(`/${locale}/fsm`);
+  redirect(`/${locale}/fsm?section=channels&voice=requested`);
 }
 
 function stringValue(formData: FormData, key: string) {

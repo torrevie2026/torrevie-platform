@@ -12,7 +12,7 @@ import { PostgresTenantQueryClient } from "../../../lib/server/tenant-query-clie
 import { resolveFsmWorkspace, type FsmWorkspace } from "../../../lib/fsm";
 import { listChannelHubSnapshot, type ChannelHubSnapshot } from "../../../lib/fsm/channels";
 import { CustomerSessionActions } from "../CustomerSessionActions";
-import { createManualIntakeRequestAction, saveFsmOnboardingAction } from "./actions";
+import { createManualIntakeRequestAction, requestVoiceChannelSetupAction, saveFsmOnboardingAction } from "./actions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ export default async function FsmPage({
   searchParams
 }: {
   params: Promise<{ locale: string }>;
-  searchParams?: Promise<{ section?: string; saved?: string; intake?: string }>;
+  searchParams?: Promise<{ section?: string; saved?: string; intake?: string; voice?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const resolvedSearchParams = await searchParams;
@@ -101,11 +101,12 @@ export default async function FsmPage({
 
           {resolvedSearchParams?.saved === "1" ? <p className="tex-notice">FSM onboarding settings saved.</p> : null}
           {resolvedSearchParams?.intake === "created" ? <p className="tex-notice">Intake request created.</p> : null}
+          {resolvedSearchParams?.voice === "requested" ? <p className="tex-notice">Voice setup request created.</p> : null}
 
           {section === "onboarding" ? (
             <FsmOnboarding workspace={workspace} locale={locale} />
           ) : section === "channels" ? (
-            <ChannelHub snapshot={channelHub} locale={locale} />
+            <ChannelHub snapshot={channelHub} workspace={workspace} locale={locale} />
           ) : (
             <FsmDashboard workspace={workspace} locale={locale} />
           )}
@@ -121,8 +122,15 @@ export default async function FsmPage({
   }
 }
 
-function ChannelHub({ snapshot, locale }: { snapshot: ChannelHubSnapshot | null; locale: Locale }) {
-  const data = snapshot ?? { channels: [], intakeRequests: [], callLogs: [] };
+function ChannelHub({ snapshot, workspace, locale }: { snapshot: ChannelHubSnapshot | null; workspace: FsmWorkspace; locale: Locale }) {
+  const data = snapshot ?? {
+    channels: [],
+    intakeRequests: [],
+    callLogs: [],
+    voiceUsage: { monthlyMinuteCap: 500, minutesUsed: 0, warningAtMinutes: 400, warningReached: false }
+  };
+  const voiceChannel = data.channels.find((channel) => channel.channelType === "voice");
+  const voiceConfig = voiceChannel?.config ?? {};
 
   return (
     <section className="fsm-workspace-grid fsm-channel-hub" aria-label="Channel Hub">
@@ -150,6 +158,40 @@ function ChannelHub({ snapshot, locale }: { snapshot: ChannelHubSnapshot | null;
       </article>
 
       <aside className="fsm-panel">
+        <h2>Voice hotline</h2>
+        <div className="fsm-channel-summary">
+          <div>
+            <strong>{voiceChannel ? voiceChannel.status : "Not requested"}</strong>
+            <span>{voiceChannel ? `${voiceChannel.provider} using ${voiceSetupLabel(voiceConfig["setupPath"])}` : "Growth add-on or Enterprise feature"}</span>
+          </div>
+          <div>
+            <strong>{data.voiceUsage.minutesUsed} minutes used</strong>
+            <span>Monthly cap {data.voiceUsage.monthlyMinuteCap}. Warning at {data.voiceUsage.warningAtMinutes}.</span>
+          </div>
+          {data.voiceUsage.warningReached ? <p className="empty">Voice usage is above the warning level.</p> : null}
+        </div>
+        <form action={requestVoiceChannelSetupAction} className="fsm-channel-form">
+          <input type="hidden" name="locale" value={locale} />
+          <input type="hidden" name="tenantName" value={workspace.tenantName} />
+          <input type="hidden" name="segment" value={workspace.segment} />
+          <label>
+            Setup path
+            <select name="voiceSetupPath" defaultValue={readString(voiceConfig["setupPath"], "forward_existing_number")}>
+              <option value="forward_existing_number">Forward existing number</option>
+              <option value="licensed_sip">Licensed SIP partner</option>
+              <option value="missed_call_deflection">Missed-call deflection</option>
+            </select>
+          </label>
+          <label>
+            Monthly minute cap
+            <input name="monthlyMinuteCap" type="number" min="50" max="100000" defaultValue={data.voiceUsage.monthlyMinuteCap} />
+          </label>
+          <p className="empty">
+            UAE telecom regulation restricts unlicensed VoIP origination. Use customer-side call forwarding or a licensed local telephony partner.
+          </p>
+          <button type="submit" className="tex-primary-button">Request voice setup</button>
+        </form>
+
         <h2>Create intake request</h2>
         <form action={createManualIntakeRequestAction} className="fsm-channel-form">
           <input type="hidden" name="locale" value={locale} />
@@ -409,4 +451,16 @@ function readString(value: unknown, fallback: string) {
   }
 
   return fallback;
+}
+
+function voiceSetupLabel(value: unknown) {
+  if (value === "licensed_sip") {
+    return "licensed SIP partner";
+  }
+
+  if (value === "missed_call_deflection") {
+    return "missed-call deflection";
+  }
+
+  return "forwarded existing number";
 }

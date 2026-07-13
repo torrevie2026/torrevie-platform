@@ -589,3 +589,34 @@ Status: Completed on 2026-07-13.
   - Manual intake requests land in `intake_requests`.
 - Report:
   - `docs/fsm/reports/PHASE_3.md`
+
+## WP-30: FSM voice agent core
+
+Status: Completed on 2026-07-13.
+
+- Scope:
+  - Added provider-neutral voice utilities for assistant scripts, setup path selection, Vapi webhook normalization, Twilio missed-call deflection XML, and minute-cap warnings.
+  - Added a Channel Hub voice setup request flow that creates a pending voice channel without provisioning external resources.
+  - Added monthly voice usage display from `call_logs`.
+  - Added `supabase/functions/voice-webhook` for Vapi tool calls and end-of-call reports.
+  - Added webhook handling for caller identification, service request creation, job-status requests, and human escalation.
+  - Added linked `intake_requests` and `call_logs` writes for completed calls.
+  - Added `pnpm test:fsm-voice-core` and included it in the normal test chain.
+- Decisions:
+  - Reused WP-29 channel and intake tables instead of adding new voice-specific tables.
+  - Kept all live Vapi, Twilio, phone-number, and SIP provisioning behind a manual checkpoint.
+  - Required per-channel webhook secrets through `org_channel_credentials`.
+  - Used CRM contacts for caller matching by phone number.
+  - Returned `not_available` for job-status checks until the FSM jobs table exists.
+- Verification:
+  - `pnpm test:fsm-voice-core`
+  - `pnpm lint`
+  - `pnpm typecheck`
+- Acceptance:
+  - Channel Hub can create a pending voice setup request for entitled tenants.
+  - Voice assistant scripts adapt by segment.
+  - Vapi tool-call and end-of-call payloads normalize into the unified intake model.
+  - Call logs carry transcript, recording URL, estimated cost, and intake linkage when the webhook receives an end-of-call report.
+  - Minute-cap warning behavior is covered by smoke tests.
+- Report:
+  - `docs/fsm/reports/PHASE_4.md`
