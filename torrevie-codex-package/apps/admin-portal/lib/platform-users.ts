@@ -268,21 +268,17 @@ async function createSupabaseInviteLink(client: SupabaseClient, email: string): 
     type: "invite",
     email,
     options: {
-      redirectTo: `${adminPortalUrl()}/login`
+      redirectTo: `${adminPortalUrl()}/auth/callback?next=/account`
     }
   });
 
   if (error) {
     if (isAlreadyRegisteredError(error.message)) {
-      const existingUser = await findAuthUserByEmail(client, email);
-
-      if (!existingUser) {
-        throw new Error("Supabase reported an existing Auth user, but the user could not be found.");
-      }
+      const { userId, actionLink } = await createExistingUserAccessLink(client, email);
 
       return {
-        userId: existingUser.id,
-        actionLink: `${adminPortalUrl()}/login`,
+        userId,
+        actionLink,
         kind: "existing_user"
       };
     }
@@ -301,6 +297,31 @@ async function createSupabaseInviteLink(client: SupabaseClient, email: string): 
     userId,
     actionLink,
     kind: "new_invitation"
+  };
+}
+
+async function createExistingUserAccessLink(client: SupabaseClient, email: string) {
+  const existingUser = await findAuthUserByEmail(client, email);
+
+  if (!existingUser) {
+    throw new Error("Supabase reported an existing Auth user, but the user could not be found.");
+  }
+
+  const { data, error } = await client.auth.admin.generateLink({
+    type: "recovery",
+    email,
+    options: {
+      redirectTo: `${adminPortalUrl()}/auth/callback?next=/account`
+    }
+  });
+
+  if (error || !data.properties?.action_link) {
+    throw new Error(`Unable to create existing user access link: ${error?.message ?? "missing action link"}`);
+  }
+
+  return {
+    userId: existingUser.id,
+    actionLink: data.properties.action_link
   };
 }
 
