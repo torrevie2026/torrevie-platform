@@ -46,12 +46,10 @@ export default async function CustomerUsersPage({
 
   try {
     const { actor, client, tenantName } = await resolveActor();
-    const [members, whatsappSettings, usageLimits, providerProfiles] = await Promise.all([
-      listCustomerMembers(client, actor),
-      getTenantWhatsappSettings(client, actor),
-      getTenantUsageLimits(client, actor),
-      listWhatsappProviderProfiles(client, actor)
-    ]);
+    const members = await listCustomerMembers(client, actor);
+    const whatsappSettings = await getTenantWhatsappSettings(client, actor);
+    const usageLimits = await getTenantUsageLimits(client, actor);
+    const providerProfiles = await listWhatsappProviderProfiles(client, actor);
 
     return (
       <main className="customer-shell admin-users-shell" data-visual-check="customer-admin-users">

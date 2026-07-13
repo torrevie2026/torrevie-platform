@@ -118,15 +118,17 @@ export async function withTenantContext<Result>(
 ): Promise<Result> {
   await client.query("begin");
 
+  let result: Result;
   try {
     await setTenantContext(client, context.tenantId);
-    const result = await work();
-    await client.query("commit");
-    return result;
+    result = await work();
   } catch (error) {
     await client.query("rollback");
     throw error;
   }
+
+  await client.query("commit");
+  return result;
 }
 
 function compareMembershipRows(left: TenantMembershipRow, right: TenantMembershipRow) {
