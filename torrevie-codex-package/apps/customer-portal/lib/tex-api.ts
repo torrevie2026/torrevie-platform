@@ -36,6 +36,25 @@ export type TexApiResponse = {
   body: unknown;
 };
 
+type ResolvedGoogleRouteEstimateInput = {
+  origin: string;
+  originPlaceId: string | null;
+  destination: string;
+  destinationPlaceId: string | null;
+  returnToOrigin: boolean;
+};
+
+type GoogleRouteEstimate = {
+  distanceKm: number;
+  durationSeconds: number | null;
+  routePolyline: string | null;
+  source: string;
+  isReturnTrip: boolean;
+  returnDistanceKm: number | null;
+  returnDurationSeconds: number | null;
+  totalDistanceKm: number;
+};
+
 export async function handleTexApiRequest(
   client: TenantQueryClient,
   actor: TexActorContext,
@@ -82,6 +101,13 @@ export async function handleTexApiRequest(
         legs: Array.isArray(body.legs) ? (body.legs as TexTripLegInput[]) : []
       })
     });
+  }
+
+  const tripLegEstimateMatch = path.match(/^\/trips\/([0-9a-f-]+)\/legs\/estimate$/i);
+  if (tripLegEstimateMatch && method === "POST") {
+    await listTexTripLegs(client, actor, tripLegEstimateMatch[1] ?? "");
+    const estimate = await googleReturnRouteEstimate(readGoogleEstimateInput(request.body));
+    return json(200, { estimate });
   }
 
   if (path === "/finance-review" && method === "GET") {
@@ -150,6 +176,18 @@ function readRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
+function readGoogleEstimateInput(value: unknown): ResolvedGoogleRouteEstimateInput {
+  const body = readRecord(value);
+
+  return {
+    origin: readOptionalString(body.origin) ?? "",
+    originPlaceId: readOptionalString(body.originPlaceId) ?? readOptionalString(body.origin_place_id),
+    destination: readOptionalString(body.destination) ?? "",
+    destinationPlaceId: readOptionalString(body.destinationPlaceId) ?? readOptionalString(body.destination_place_id),
+    returnToOrigin: body.returnToOrigin === true || body.return_to_origin === true
+  };
+}
+
 function readExpenseStatus(value: unknown): Exclude<TexExpenseStatus, "pending"> {
   if (value === "approved" || value === "rejected" || value === "paid") {
     return value;
@@ -170,4 +208,121 @@ function readInteger(value: unknown) {
   }
 
   return parsed;
+}
+
+function googleMapsApiKey() {
+  return (
+    process.env.GOOGLE_MAPS_API_KEY ||
+    process.env.GOOGLE_MAPS_PLATFORM_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GOOGLE_AI_KEY ||
+    ""
+  );
+}
+
+function googleWaypoint(input: { placeId?: string | null; address: string }) {
+  if (input.placeId) {
+    return { placeId: input.placeId };
+  }
+
+  return { address: input.address };
+}
+
+async function googleRouteEstimate(input: ResolvedGoogleRouteEstimateInput): Promise<Omit<GoogleRouteEstimate, "isReturnTrip" | "returnDistanceKm" | "returnDurationSeconds" | "totalDistanceKm">> {
+  const key = googleMapsApiKey();
+
+  if (!input.origin.trim() || !input.destination.trim()) {
+    throw new Error("Origin and destination are required.");
+  }
+
+  if (!key) {
+    const error = new Error("Google Maps API key is not configured.");
+    (error as Error & { statusCode?: number }).statusCode = 501;
+    throw error;
+  }
+
+  const response = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": key,
+      "X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline"
+    },
+    body: JSON.stringify({
+      origin: googleWaypoint({ placeId: input.originPlaceId, address: input.origin }),
+      destination: googleWaypoint({ placeId: input.destinationPlaceId, address: input.destination }),
+      travelMode: "DRIVE",
+      routingPreference: "TRAFFIC_UNAWARE",
+      units: "METRIC"
+    })
+  });
+  const result = (await response.json().catch(() => ({}))) as {
+    error?: { message?: string };
+    routes?: Array<{ distanceMeters?: number; duration?: string; polyline?: { encodedPolyline?: string } }>;
+  };
+
+  if (!response.ok) {
+    const error = new Error(result.error?.message || `Google Routes rejected the request (${response.status}).`);
+    (error as Error & { statusCode?: number }).statusCode = response.status === 401 || response.status === 403 ? 502 : response.status;
+    throw error;
+  }
+
+  const route = result.routes?.[0];
+
+  if (!route?.distanceMeters) {
+    const error = new Error("Google Maps could not estimate this route.");
+    (error as Error & { statusCode?: number }).statusCode = 404;
+    throw error;
+  }
+
+  const durationSeconds = route.duration ? Number(String(route.duration).replace(/s$/, "")) : null;
+
+  return {
+    distanceKm: Math.round((route.distanceMeters / 1000) * 10) / 10,
+    durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : null,
+    routePolyline: route.polyline?.encodedPolyline || null,
+    source: "google_maps_routes"
+  };
+}
+
+async function googleReturnRouteEstimate(input: ResolvedGoogleRouteEstimateInput): Promise<GoogleRouteEstimate> {
+  const outbound = await googleRouteEstimate(input);
+
+  if (!input.returnToOrigin) {
+    return {
+      ...outbound,
+      isReturnTrip: false,
+      returnDistanceKm: null,
+      returnDurationSeconds: null,
+      totalDistanceKm: outbound.distanceKm
+    };
+  }
+
+  try {
+    const inbound = await googleRouteEstimate({
+      origin: input.destination,
+      originPlaceId: input.destinationPlaceId,
+      destination: input.origin,
+      destinationPlaceId: input.originPlaceId,
+      returnToOrigin: false
+    });
+
+    return {
+      ...outbound,
+      isReturnTrip: true,
+      returnDistanceKm: inbound.distanceKm,
+      returnDurationSeconds: inbound.durationSeconds,
+      totalDistanceKm: Math.round((outbound.distanceKm + inbound.distanceKm) * 10) / 10,
+      source: "google_maps_routes_return"
+    };
+  } catch {
+    return {
+      ...outbound,
+      isReturnTrip: true,
+      returnDistanceKm: outbound.distanceKm,
+      returnDurationSeconds: outbound.durationSeconds,
+      totalDistanceKm: Math.round(outbound.distanceKm * 2 * 10) / 10,
+      source: "google_maps_routes_return_estimated"
+    };
+  }
 }

@@ -411,6 +411,47 @@ async function main() {
 
   {
     const client = new RecordingTexApiClient();
+    const previousKey = process.env.GOOGLE_MAPS_API_KEY;
+    const previousFetch = globalThis.fetch;
+    process.env.GOOGLE_MAPS_API_KEY = "test-google-key";
+    let callCount = 0;
+    globalThis.fetch = async () => {
+      callCount += 1;
+      return new Response(
+        JSON.stringify({
+          routes: [
+            {
+              distanceMeters: callCount === 1 ? 105000 : 106000,
+              duration: callCount === 1 ? "7200s" : "7500s",
+              polyline: { encodedPolyline: "encoded" }
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    };
+    const response = await handleTexApiRequest(client, actor, {
+      method: "POST",
+      path: "/trips/00000000-0000-4000-8000-000000008001/legs/estimate",
+      body: {
+        origin: "Jebel Ali",
+        destination: "Riyadh",
+        returnToOrigin: true
+      }
+    });
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) {
+      delete process.env.GOOGLE_MAPS_API_KEY;
+    } else {
+      process.env.GOOGLE_MAPS_API_KEY = previousKey;
+    }
+    assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /211/);
+    assert.equal(callCount, 2);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
     const response = await handleTexApiRequest(client, actor, {
       method: "PUT",
       path: "/trips/00000000-0000-4000-8000-000000008001/legs",

@@ -28,6 +28,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   return handle(request, context);
 }
 
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  return handle(request, context);
+}
+
 async function handle(request: NextRequest, context: RouteContext) {
   try {
     const session = await requireVerifiedCustomerSession();
@@ -69,6 +73,10 @@ function json(status: number, body: unknown) {
 function statusForError(error: unknown) {
   if (isCustomerSessionError(error)) {
     return 401;
+  }
+
+  if (error instanceof Error && "statusCode" in error && typeof error.statusCode === "number") {
+    return error.statusCode;
   }
 
   const message = messageForError(error);

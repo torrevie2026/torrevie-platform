@@ -46,6 +46,8 @@ type LegFormState = {
   returnDistanceKm: string;
   totalDistanceKm: string;
   durationSeconds: string;
+  distanceSource: string;
+  routePolyline: string;
   budgetAmount: string;
   containerRef: string;
   notes: string;
@@ -88,6 +90,8 @@ const blankLeg = (sequence: number): LegFormState => ({
   returnDistanceKm: "",
   totalDistanceKm: "",
   durationSeconds: "",
+  distanceSource: "",
+  routePolyline: "",
   budgetAmount: "",
   containerRef: "",
   notes: ""
@@ -100,6 +104,7 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
   const [legs, setLegs] = useState<LegFormState[]>([]);
   const [legsLoading, setLegsLoading] = useState(false);
   const [legsSaving, setLegsSaving] = useState(false);
+  const [estimatingLegIndex, setEstimatingLegIndex] = useState<number | null>(null);
   const [showClosed, setShowClosed] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [busyTripId, setBusyTripId] = useState<string | null>(null);
@@ -262,6 +267,69 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
       setError(errorMessage(caught));
     } finally {
       setLegsSaving(false);
+    }
+  }
+
+  async function estimateLeg(index: number) {
+    const leg = legs[index];
+
+    if (!leg) {
+      return;
+    }
+
+    if (!leg.origin.trim() || !leg.destination.trim()) {
+      setError("Origin and destination are required before estimating a leg.");
+      return;
+    }
+
+    if (leg.mode && leg.mode !== "road") {
+      setError("Google Maps route estimates are available for road legs.");
+      return;
+    }
+
+    if (!legsTrip) {
+      return;
+    }
+
+    setEstimatingLegIndex(index);
+    setNotice(null);
+    setError(null);
+
+    try {
+      const response = await texFetch<{
+        estimate: {
+          distanceKm: number;
+          durationSeconds: number | null;
+          routePolyline: string | null;
+          source: string;
+          isReturnTrip: boolean;
+          returnDistanceKm: number | null;
+          returnDurationSeconds: number | null;
+          totalDistanceKm: number;
+        };
+      }>(`/trips/${legsTrip.id}/legs/estimate`, {
+        method: "POST",
+        body: JSON.stringify({
+          origin: leg.origin,
+          destination: leg.destination,
+          returnToOrigin: leg.isReturnTrip
+        })
+      });
+      updateLeg(setLegs, index, {
+        mode: "road",
+        distanceKm: String(response.estimate.distanceKm),
+        isReturnTrip: response.estimate.isReturnTrip,
+        returnDistanceKm: response.estimate.returnDistanceKm === null ? "" : String(response.estimate.returnDistanceKm),
+        totalDistanceKm: String(response.estimate.totalDistanceKm),
+        durationSeconds: response.estimate.durationSeconds === null ? "" : String(response.estimate.durationSeconds),
+        distanceSource: response.estimate.source,
+        routePolyline: response.estimate.routePolyline ?? ""
+      });
+      setNotice("Google Maps distance estimated.");
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setEstimatingLegIndex(null);
     }
   }
 
@@ -485,6 +553,10 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
                     />
                   </label>
                   <label>
+                    Duration
+                    <input value={durationLabel(leg.durationSeconds)} disabled placeholder="Estimated" />
+                  </label>
+                  <label>
                     Return distance km
                     <input
                       inputMode="decimal"
@@ -501,7 +573,19 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
                     Container / BL
                     <input value={leg.containerRef} onChange={(event) => updateLeg(setLegs, index, { containerRef: event.target.value })} />
                   </label>
+                  <label>
+                    Distance source
+                    <input value={leg.distanceSource} disabled placeholder="Manual or Google Maps" />
+                  </label>
                 </div>
+                <button
+                  type="button"
+                  className="tex-secondary-button tex-inline-button"
+                  disabled={estimatingLegIndex === index || !leg.origin.trim() || !leg.destination.trim()}
+                  onClick={() => estimateLeg(index)}
+                >
+                  {estimatingLegIndex === index ? "Estimating..." : "Estimate with Google Maps"}
+                </button>
                 <label className="tex-checkbox-row">
                   <input
                     type="checkbox"
@@ -592,11 +676,9 @@ function TripCards({
               {trip.tripType === "logistics" ? <span>{trip.containerNumber ?? "No container"}</span> : null}
             </div>
             <footer>
-              {trip.tripType === "logistics" ? (
-                <button type="button" onClick={() => onLegs(trip)}>
-                  Legs
-                </button>
-              ) : null}
+              <button type="button" onClick={() => onLegs(trip)}>
+                Manage legs
+              </button>
               <button type="button" onClick={() => onEdit(trip)}>
                 Edit
               </button>
@@ -630,6 +712,8 @@ function mapLegForForm(leg: TexTripLeg): LegFormState {
     returnDistanceKm: leg.returnDistanceKm === null ? "" : String(leg.returnDistanceKm),
     totalDistanceKm: leg.totalDistanceKm === null ? "" : String(leg.totalDistanceKm),
     durationSeconds: leg.durationSeconds === null ? "" : String(leg.durationSeconds),
+    distanceSource: leg.distanceSource ?? "",
+    routePolyline: leg.routePolyline ?? "",
     budgetAmount: leg.budgetAmount === null ? "" : String(leg.budgetAmount),
     containerRef: leg.containerRef ?? "",
     notes: leg.notes ?? ""
@@ -653,6 +737,8 @@ function mapLegForApi(leg: LegFormState): TexTripLegInput {
     returnDistanceKm: leg.isReturnTrip ? readOptionalNumber(leg.returnDistanceKm) : null,
     totalDistanceKm: readOptionalNumber(leg.totalDistanceKm) ?? legTotalDistance(leg),
     durationSeconds: readOptionalNumber(leg.durationSeconds),
+    distanceSource: leg.distanceSource || null,
+    routePolyline: leg.routePolyline || null,
     budgetAmount: readOptionalNumber(leg.budgetAmount),
     containerRef: leg.containerRef || null,
     notes: leg.notes || null
@@ -726,6 +812,23 @@ function resequence(legs: LegFormState[]) {
 
 function dateInputValue(value: string | null) {
   return value ? value.slice(0, 10) : "";
+}
+
+function durationLabel(value: string) {
+  const seconds = readOptionalNumber(value);
+
+  if (!seconds || seconds <= 0) {
+    return "";
+  }
+
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.round((seconds % 3600) / 60);
+
+  if (!hours) {
+    return `${minutes} min`;
+  }
+
+  return `${hours}h ${minutes}m`;
 }
 
 function legDistanceTotal(legs: LegFormState[]) {
