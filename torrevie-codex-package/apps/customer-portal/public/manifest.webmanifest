@@ -1,7 +1,7 @@
 {
-  "name": "Torrevie FSM",
-  "short_name": "Torrevie FSM",
-  "description": "Optimize. Execute. Scale.",
+  "name": "Torrevie",
+  "short_name": "Torrevie",
+  "description": "Torrevie customer app workspace.",
   "start_url": "/en",
   "scope": "/",
   "display": "standalone",
