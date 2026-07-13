@@ -1359,6 +1359,71 @@ form.member-row {
   text-transform: capitalize;
 }
 
+.fsm-channel-hub {
+  align-items: start;
+}
+
+.fsm-intake-list,
+.fsm-channel-summary,
+.fsm-channel-form {
+  display: grid;
+  gap: 12px;
+  margin-block-start: 16px;
+}
+
+.fsm-intake-card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.fsm-intake-card header,
+.fsm-intake-card footer,
+.fsm-channel-summary div {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.fsm-intake-card p,
+.fsm-intake-card footer,
+.fsm-channel-summary span {
+  color: var(--color-text-muted);
+}
+
+.fsm-channel-form label {
+  color: var(--color-text-primary);
+  display: grid;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.fsm-channel-form input,
+.fsm-channel-form select,
+.fsm-channel-form textarea {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  min-block-size: 42px;
+  padding: 10px 12px;
+}
+
+.fsm-channel-summary h3 {
+  color: var(--color-text-primary);
+  font-size: 16px;
+  margin: 0;
+}
+
+.fsm-channel-summary div {
+  border-block-end: 1px solid var(--color-border);
+  padding-block-end: 10px;
+}
+
 .crm-workspace {
   align-items: start;
   display: grid;

@@ -10,8 +10,9 @@ import {
 } from "../../../lib/server/customer-session";
 import { PostgresTenantQueryClient } from "../../../lib/server/tenant-query-client";
 import { resolveFsmWorkspace, type FsmWorkspace } from "../../../lib/fsm";
+import { listChannelHubSnapshot, type ChannelHubSnapshot } from "../../../lib/fsm/channels";
 import { CustomerSessionActions } from "../CustomerSessionActions";
-import { saveFsmOnboardingAction } from "./actions";
+import { createManualIntakeRequestAction, saveFsmOnboardingAction } from "./actions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export default async function FsmPage({
   searchParams
 }: {
   params: Promise<{ locale: string }>;
-  searchParams?: Promise<{ section?: string; saved?: string }>;
+  searchParams?: Promise<{ section?: string; saved?: string; intake?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const resolvedSearchParams = await searchParams;
@@ -55,6 +56,7 @@ export default async function FsmPage({
     }
 
     const workspace = await resolveFsmWorkspace(client, tenantContext, locale);
+    const channelHub = section === "channels" ? await listChannelHubSnapshot(client, tenantContext) : null;
 
     return (
       <main className="customer-shell fsm-shell" data-visual-check="fsm-module-shell" lang={locale} dir={dirForLocale(locale)}>
@@ -98,9 +100,12 @@ export default async function FsmPage({
           </header>
 
           {resolvedSearchParams?.saved === "1" ? <p className="tex-notice">FSM onboarding settings saved.</p> : null}
+          {resolvedSearchParams?.intake === "created" ? <p className="tex-notice">Intake request created.</p> : null}
 
           {section === "onboarding" ? (
             <FsmOnboarding workspace={workspace} locale={locale} />
+          ) : section === "channels" ? (
+            <ChannelHub snapshot={channelHub} locale={locale} />
           ) : (
             <FsmDashboard workspace={workspace} locale={locale} />
           )}
@@ -114,6 +119,92 @@ export default async function FsmPage({
 
     throw error;
   }
+}
+
+function ChannelHub({ snapshot, locale }: { snapshot: ChannelHubSnapshot | null; locale: Locale }) {
+  const data = snapshot ?? { channels: [], intakeRequests: [], callLogs: [] };
+
+  return (
+    <section className="fsm-workspace-grid fsm-channel-hub" aria-label="Channel Hub">
+      <article className="fsm-panel">
+        <div className="section-heading-row">
+          <h2>Unified triage</h2>
+          <span className="module-status module-status-active">{data.intakeRequests.length} requests</span>
+        </div>
+        <div className="fsm-intake-list">
+          {data.intakeRequests.length === 0 ? <p className="empty">No intake requests yet.</p> : null}
+          {data.intakeRequests.map((request) => (
+            <article key={request.id} className="fsm-intake-card">
+              <header>
+                <span className="tex-status tex-status-open">{request.channelType}</span>
+                <strong>{request.contactName || request.contactPhone || request.contactEmail || "Unknown contact"}</strong>
+              </header>
+              <p>{request.aiSummary || "No summary yet."}</p>
+              <footer>
+                <span>{request.status}</span>
+                <time dateTime={request.createdAt}>{new Intl.DateTimeFormat(locale).format(new Date(request.createdAt))}</time>
+              </footer>
+            </article>
+          ))}
+        </div>
+      </article>
+
+      <aside className="fsm-panel">
+        <h2>Create intake request</h2>
+        <form action={createManualIntakeRequestAction} className="fsm-channel-form">
+          <input type="hidden" name="locale" value={locale} />
+          <label>
+            Channel
+            <select name="channelType" defaultValue="portal">
+              <option value="whatsapp">WhatsApp</option>
+              <option value="voice">Voice</option>
+              <option value="email">Email</option>
+              <option value="portal">Portal</option>
+            </select>
+          </label>
+          <label>
+            Contact name
+            <input name="contactName" placeholder="Customer name" />
+          </label>
+          <label>
+            Phone
+            <input name="contactPhone" placeholder="+971" />
+          </label>
+          <label>
+            Email
+            <input name="contactEmail" type="email" placeholder="customer@example.com" />
+          </label>
+          <label>
+            Summary
+            <textarea name="summary" rows={4} required placeholder="Request summary" />
+          </label>
+          <button type="submit" className="tex-primary-button">Create request</button>
+        </form>
+
+        <div className="fsm-channel-summary">
+          <h3>Channels</h3>
+          {data.channels.length === 0 ? <p className="empty">No channels connected yet.</p> : null}
+          {data.channels.map((channel) => (
+            <div key={channel.id}>
+              <strong>{channel.displayName}</strong>
+              <span>{channel.channelType} via {channel.provider}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="fsm-channel-summary">
+          <h3>Recent calls</h3>
+          {data.callLogs.length === 0 ? <p className="empty">No call logs yet.</p> : null}
+          {data.callLogs.map((call) => (
+            <div key={call.id}>
+              <strong>{call.outcome}</strong>
+              <span>{call.fromNumber ?? "Unknown"} to {call.toNumber ?? "Unknown"}</span>
+            </div>
+          ))}
+        </div>
+      </aside>
+    </section>
+  );
 }
 
 function FsmDashboard({ workspace, locale }: { workspace: FsmWorkspace; locale: Locale }) {
