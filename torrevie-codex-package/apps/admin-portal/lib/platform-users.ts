@@ -81,6 +81,7 @@ type PlatformInviteLinkRow = {
   role_key: PlatformRoleKey;
   status: string;
   expires_at: string;
+  auth_user_id: string | null;
   created_by: string;
 };
 
@@ -202,7 +203,7 @@ export async function redeemPlatformInvitationLink(client: SupabaseClient, token
   const tokenHash = hashInvitationToken(token);
   const { data, error } = await client
     .from("platform_invitation_links")
-    .select("id,tenant_id,email,role_key,status,expires_at,created_by")
+    .select("id,tenant_id,email,role_key,status,expires_at,auth_user_id,created_by")
     .eq("token_hash", tokenHash)
     .maybeSingle();
 
@@ -212,7 +213,32 @@ export async function redeemPlatformInvitationLink(client: SupabaseClient, token
 
   const invitation = data as PlatformInviteLinkRow | null;
 
-  if (!invitation || invitation.status !== "pending" || new Date(invitation.expires_at).getTime() <= Date.now()) {
+  if (!invitation || new Date(invitation.expires_at).getTime() <= Date.now()) {
+    throw new Error("This invitation link is invalid or has expired.");
+  }
+
+  if (invitation.status === "accepted") {
+    if (!invitation.auth_user_id) {
+      throw new Error("This invitation link is invalid or has expired.");
+    }
+
+    const { actionLink } = await createExistingUserAccessLink(client, invitation.email);
+    await writePlatformUserAuditEvent(
+      client,
+      invitation.tenant_id,
+      invitation.created_by,
+      "platform.user.invite_reopened",
+      invitation.auth_user_id,
+      {
+        email: invitation.email,
+        invitationId: invitation.id
+      }
+    );
+
+    return actionLink;
+  }
+
+  if (invitation.status !== "pending") {
     throw new Error("This invitation link is invalid or has expired.");
   }
 
