@@ -394,8 +394,14 @@ function renderTexSection(
 ) {
   if (section === "expenses") {
     return (
-      <section className="customer-section activity-panel" aria-labelledby="tex-expenses-title">
-        <h2 id="tex-expenses-title">Expenses</h2>
+      <section className="customer-section activity-panel tex-section-panel" aria-labelledby="tex-expenses-title">
+        <TexSectionIntro
+          icon="receipt"
+          eyebrow="Expense workspace"
+          title="Expenses"
+          id="tex-expenses-title"
+          text="Capture receipts, review AI extracted fields, and follow each claim through approval and payout."
+        />
         <TexExpensesClient
           categories={bootstrap.categories}
           employees={bootstrap.employeeProfiles}
@@ -408,8 +414,14 @@ function renderTexSection(
 
   if (section === "trips") {
     return (
-      <section className="customer-section activity-panel" aria-labelledby="tex-trips-title">
-        <h2 id="tex-trips-title">Trips</h2>
+      <section className="customer-section activity-panel tex-section-panel" aria-labelledby="tex-trips-title">
+        <TexSectionIntro
+          icon="route"
+          eyebrow="Trip control"
+          title="Trips"
+          id="tex-trips-title"
+          text="Plan trips, manage route legs, track advances against spend, and keep driver costs visible."
+        />
         <TexTripsClient teams={bootstrap.teams} employees={bootstrap.employeeProfiles} initialTrips={dashboard.tripsList.map(mapTripForClient)} />
       </section>
     );
@@ -417,8 +429,14 @@ function renderTexSection(
 
   if (section === "finance") {
     return (
-      <section className="customer-section activity-panel" aria-labelledby="tex-finance-title">
-        <h2 id="tex-finance-title">Finance review</h2>
+      <section className="customer-section activity-panel tex-section-panel" aria-labelledby="tex-finance-title">
+        <TexSectionIntro
+          icon="finance"
+          eyebrow="Finance desk"
+          title="Finance review"
+          id="tex-finance-title"
+          text="Approve payment-ready expenses, spot missing documentation, and keep settlement work moving."
+        />
         {financeReview ? <TexFinanceClient initialReview={financeReview} /> : <p>Finance review is not available.</p>}
       </section>
     );
@@ -426,8 +444,14 @@ function renderTexSection(
 
   if (section === "people") {
     return (
-      <section className="customer-section activity-panel" aria-labelledby="tex-people-title">
-        <h2 id="tex-people-title">People</h2>
+      <section className="customer-section activity-panel tex-section-panel" aria-labelledby="tex-people-title">
+        <TexSectionIntro
+          icon="team"
+          eyebrow="Team access"
+          title="People"
+          id="tex-people-title"
+          text="Maintain the tenant's TEX users, WhatsApp numbers, departments, and app access."
+        />
         {status?.people === "updated" ? <p className="tex-notice">Team member access updated.</p> : null}
         {status?.people === "deleted" ? <p className="tex-notice">Team member deleted.</p> : null}
         {status?.people === "failed" ? <p className="tex-error">{status.message ?? "Team member update failed."}</p> : null}
@@ -440,9 +464,15 @@ function renderTexSection(
     const settings = bootstrap.integrationSettings;
 
     return (
-      <section className="customer-section activity-panel" aria-labelledby="tex-whatsapp-title">
-        <div className="section-heading-row">
-          <h2 id="tex-whatsapp-title">WhatsApp configuration</h2>
+      <section className="customer-section activity-panel tex-section-panel" aria-labelledby="tex-whatsapp-title">
+        <div className="tex-section-intro-row">
+          <TexSectionIntro
+            icon="whatsapp"
+            eyebrow="Receipt intake"
+            title="WhatsApp configuration"
+            id="tex-whatsapp-title"
+            text="Configure provider profiles, webhook security, AI OCR, duplicate handling, and automated replies."
+          />
           <a className="tex-action-link" href={`/${locale}/admin/users#tex-whatsapp-settings`}>
             Open setup panel
           </a>
@@ -489,8 +519,14 @@ function renderTexSection(
 
   if (section === "notifications") {
     return (
-      <section className="customer-section activity-panel" aria-labelledby="tex-notifications-title">
-        <h2 id="tex-notifications-title">Notifications</h2>
+      <section className="customer-section activity-panel tex-section-panel" aria-labelledby="tex-notifications-title">
+        <TexSectionIntro
+          icon="bell"
+          eyebrow="Alerts"
+          title="Notifications"
+          id="tex-notifications-title"
+          text="Review email and app notifications generated for this tenant's TEX activity."
+        />
         <TexTable
           empty="No notifications are available for this tenant."
           rows={dashboard.notificationList.map((notification) => [
@@ -506,8 +542,14 @@ function renderTexSection(
 
   if (section === "settings") {
     return (
-      <section className="customer-section activity-panel" aria-labelledby="tex-settings-title">
-        <h2 id="tex-settings-title">Settings</h2>
+      <section className="customer-section activity-panel tex-section-panel" aria-labelledby="tex-settings-title">
+        <TexSectionIntro
+          icon="settings"
+          eyebrow="Tenant setup"
+          title="Settings"
+          id="tex-settings-title"
+          text="A quick operational summary for the current tenant's TEX setup and connected admin controls."
+        />
         <div className="tex-settings-grid">
           <article>
             <span>WhatsApp provider</span>
@@ -527,6 +569,33 @@ function renderTexSection(
   }
 
   return <TexDashboardHome dashboard={dashboard} />;
+}
+
+function TexSectionIntro({
+  icon,
+  eyebrow,
+  title,
+  text,
+  id
+}: {
+  icon: TexIconName;
+  eyebrow: string;
+  title: string;
+  text: string;
+  id: string;
+}) {
+  return (
+    <header className="tex-section-intro">
+      <span className="tex-section-intro-icon" aria-hidden="true">
+        <TexIcon name={icon} />
+      </span>
+      <div>
+        <span>{eyebrow}</span>
+        <h2 id={id}>{title}</h2>
+        <p>{text}</p>
+      </div>
+    </header>
+  );
 }
 
 function TexPeopleEditor({ locale, employees }: { locale: Locale; employees: TexEmployee[] }) {

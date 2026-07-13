@@ -1038,7 +1038,12 @@ form.member-row {
 }
 
 .tex-people-table {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--color-text-primary) 4%, transparent);
   min-inline-size: 920px;
+  overflow: hidden;
 }
 
 .tex-people-row {
@@ -1099,18 +1104,32 @@ form.member-row {
 }
 
 .tex-settings-summary article {
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 14%, var(--color-border));
   border-radius: 8px;
   display: grid;
   gap: 6px;
   padding: 14px;
+  position: relative;
+}
+
+.tex-settings-summary article::before,
+.tex-settings-grid article::before {
+  background: var(--color-accent);
+  border-radius: 999px;
+  content: "";
+  inline-size: 28px;
+  block-size: 3px;
+  position: absolute;
+  inset-block-start: 10px;
+  inset-inline-start: 14px;
 }
 
 .tex-settings-summary span {
   color: var(--color-text-muted);
   font-size: 12px;
   font-weight: 800;
+  padding-block-start: 8px;
   text-transform: uppercase;
 }
 
@@ -1997,6 +2016,72 @@ form.member-row {
   min-inline-size: 720px;
 }
 
+.tex-section-panel {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 4%, transparent), transparent 180px),
+    var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--color-text-primary) 6%, transparent);
+  display: grid;
+  gap: 18px;
+}
+
+.tex-section-intro-row {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.tex-section-intro {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+}
+
+.tex-section-intro-icon {
+  align-items: center;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 16%, white), var(--color-bg-primary));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 22%, var(--color-border));
+  border-radius: 8px;
+  color: var(--color-accent);
+  display: inline-flex;
+  flex: 0 0 auto;
+  inline-size: 48px;
+  justify-content: center;
+  block-size: 48px;
+}
+
+.tex-section-intro-icon svg {
+  block-size: 23px;
+  inline-size: 23px;
+}
+
+.tex-section-intro span {
+  color: var(--color-accent);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.tex-section-intro h2 {
+  color: var(--color-text-primary);
+  font-size: 24px;
+  line-height: 1.1;
+  margin-block: 3px 0;
+}
+
+.tex-section-intro p {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 5px 0 0;
+  max-inline-size: 760px;
+}
+
 .tex-settings-grid {
   display: grid;
   gap: 16px;
@@ -2004,18 +2089,20 @@ form.member-row {
 }
 
 .tex-settings-grid article {
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 14%, var(--color-border));
   border-radius: 8px;
   display: grid;
   gap: 8px;
   padding: 16px;
+  position: relative;
 }
 
 .tex-settings-grid span {
   color: var(--color-text-muted);
   font-size: 13px;
   font-weight: 700;
+  padding-block-start: 8px;
   text-transform: uppercase;
 }
 
@@ -2050,6 +2137,13 @@ form.member-row {
   display: grid;
   gap: 16px;
   padding: 18px;
+}
+
+.tex-form-panel,
+.tex-expense-card,
+.tex-trip-card,
+.tex-finance-summary article {
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--color-text-primary) 4%, transparent);
 }
 
 .tex-wide-label {
@@ -2108,7 +2202,7 @@ form.member-row {
 
 .tex-drawer {
   background: var(--color-bg-primary);
-  border: 1px solid var(--color-border);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 16%, var(--color-border));
   border-radius: 8px;
   display: grid;
   gap: 16px;
@@ -2116,6 +2210,7 @@ form.member-row {
   max-block-size: 100%;
   overflow: auto;
   padding: 18px;
+  box-shadow: -20px 0 42px color-mix(in srgb, var(--color-text-primary) 16%, transparent);
 }
 
 .tex-drawer-wide {
@@ -2173,6 +2268,16 @@ form.member-row {
   padding-inline: 10px;
 }
 
+.tex-form-grid input:focus,
+.tex-form-grid select:focus,
+.tex-place-field input:focus,
+.tex-wide-label input:focus,
+.tex-people-row input:not([type="checkbox"]):focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 14%, transparent);
+  outline: none;
+}
+
 .tex-place-suggestions {
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
@@ -2214,7 +2319,7 @@ form.member-row {
 }
 
 .tex-primary-button {
-  background: var(--color-bg-inverse);
+  background: var(--color-accent);
   border: 0;
   color: var(--color-text-inverse);
   min-block-size: 42px;
@@ -2275,7 +2380,8 @@ form.member-row {
 
 .tex-expense-card {
   align-items: center;
-  border: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 10%, var(--color-border));
   border-radius: 8px;
   display: grid;
   gap: 12px;
@@ -2350,7 +2456,8 @@ form.member-row {
 }
 
 .tex-trip-card {
-  border: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 10%, var(--color-border));
   border-radius: 8px;
   display: grid;
   gap: 12px;
@@ -2649,6 +2756,7 @@ form.member-row {
   .tenant-integration-grid,
   .tenant-secret-grid,
   .tex-dashboard-hero,
+  .tex-section-intro-row,
   .tex-kpi-grid,
   .tex-flow-strip,
   .tex-analytics-grid,
@@ -2670,6 +2778,14 @@ form.member-row {
   .tex-hero-signal {
     justify-items: start;
     text-align: start;
+  }
+
+  .tex-section-intro {
+    align-items: flex-start;
+  }
+
+  .tex-section-intro h2 {
+    font-size: 21px;
   }
 
   .tex-flow-strip article + article {
