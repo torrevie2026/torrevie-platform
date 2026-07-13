@@ -35,9 +35,11 @@ type TexNavItem = {
   section: TexSection;
   label: string;
   href: string;
-  icon: string;
+  icon: TexIconName;
   primary?: boolean;
 };
+
+type TexIconName = "dashboard" | "plus" | "receipt" | "route" | "team" | "finance" | "whatsapp" | "bell" | "settings";
 
 type TexDashboard = {
   tenantName: string;
@@ -255,7 +257,7 @@ export default async function TexPage({
                 aria-current={section === item.section ? "page" : undefined}
               >
                 <span className="tex-nav-icon" aria-hidden="true">
-                  {item.icon}
+                  <TexIcon name={item.icon} />
                 </span>
                 <span>{item.label}</span>
               </a>
@@ -302,7 +304,7 @@ export default async function TexPage({
               .map((item) => (
                 <a key={`mobile-${item.section}-${item.label}`} href={item.href} aria-current={section === item.section ? "page" : undefined}>
                   <span className="tex-nav-icon" aria-hidden="true">
-                    {item.icon}
+                    <TexIcon name={item.icon} />
                   </span>
                   <span>{item.label.replace("New ", "")}</span>
                 </a>
@@ -324,15 +326,15 @@ function texNavItems(locale: Locale): TexNavItem[] {
   const base = `/${locale}/tex`;
 
   return [
-    { section: "dashboard", label: "Dashboard", href: base, icon: "DB" },
-    { section: "expenses", label: "New Expense", href: `${base}?section=expenses#tex-new-expense-title`, icon: "+", primary: true },
-    { section: "expenses", label: "My Expenses", href: `${base}?section=expenses#tex-expense-list-title`, icon: "EX" },
-    { section: "trips", label: "Trips", href: `${base}?section=trips`, icon: "TR" },
-    { section: "people", label: "My Team", href: `${base}?section=people`, icon: "TM" },
-    { section: "finance", label: "Finance Review", href: `${base}?section=finance`, icon: "FN" },
-    { section: "whatsapp", label: "WhatsApp Config", href: `${base}?section=whatsapp`, icon: "WA" },
-    { section: "notifications", label: "Notifications", href: `${base}?section=notifications`, icon: "NT" },
-    { section: "settings", label: "Settings", href: `${base}?section=settings`, icon: "ST" }
+    { section: "dashboard", label: "Dashboard", href: base, icon: "dashboard" },
+    { section: "expenses", label: "New Expense", href: `${base}?section=expenses#tex-new-expense-title`, icon: "plus", primary: true },
+    { section: "expenses", label: "My Expenses", href: `${base}?section=expenses#tex-expense-list-title`, icon: "receipt" },
+    { section: "trips", label: "Trips", href: `${base}?section=trips`, icon: "route" },
+    { section: "people", label: "My Team", href: `${base}?section=people`, icon: "team" },
+    { section: "finance", label: "Finance Review", href: `${base}?section=finance`, icon: "finance" },
+    { section: "whatsapp", label: "WhatsApp Config", href: `${base}?section=whatsapp`, icon: "whatsapp" },
+    { section: "notifications", label: "Notifications", href: `${base}?section=notifications`, icon: "bell" },
+    { section: "settings", label: "Settings", href: `${base}?section=settings`, icon: "settings" }
   ];
 }
 
@@ -587,7 +589,7 @@ function TexDashboardHome({ dashboard }: { dashboard: TexDashboard }) {
     <>
       <section className="tex-dashboard-hero" aria-label="TEX command summary">
         <div className="tex-hero-copy">
-          <p className="eyebrow">Live operating center</p>
+          <p className="eyebrow">TEX control center</p>
           <h2>{dashboard.tenantName} expense flow</h2>
           <p>Track WhatsApp receipts, employee spend, trips, approvals, and finance payout readiness in one focused TEX cockpit.</p>
           <div className="tex-hero-actions">
@@ -600,6 +602,9 @@ function TexDashboardHome({ dashboard }: { dashboard: TexDashboard }) {
           </div>
         </div>
         <div className="tex-hero-signal" aria-label="Operational signal">
+          <span className="tex-signal-icon" aria-hidden="true">
+            <TexIcon name="receipt" />
+          </span>
           <span>Spend captured</span>
           <strong>{formatAmount(dashboard.totalSpend)} AED</strong>
           <div className="tex-signal-ring" aria-hidden="true">
@@ -610,17 +615,17 @@ function TexDashboardHome({ dashboard }: { dashboard: TexDashboard }) {
       </section>
 
       <section className="tex-kpi-grid" aria-label="TEX metrics">
-        <KpiCard label="Open expenses" value={dashboard.openExpenses} detail={`${formatAmount(dashboard.approvedSpend)} AED approved`} tone="teal" />
-        <KpiCard label="Pending approvals" value={dashboard.pendingApprovals} detail="Waiting for manager or finance action" tone="gold" />
-        <KpiCard label="Active trips" value={dashboard.trips} detail={`${formatAmount(dashboard.openTripSpend)} AED open trip spend`} tone="blue" />
-        <KpiCard label="WhatsApp queue" value={dashboard.whatsappOpen} detail={`${dashboard.receiptFiles} receipt records available`} tone="green" />
+        <KpiCard icon="receipt" label="Open expenses" value={dashboard.openExpenses} detail={`${formatAmount(dashboard.approvedSpend)} AED approved`} tone="teal" />
+        <KpiCard icon="bell" label="Pending approvals" value={dashboard.pendingApprovals} detail="Waiting for manager or finance action" tone="gold" />
+        <KpiCard icon="route" label="Active trips" value={dashboard.trips} detail={`${formatAmount(dashboard.openTripSpend)} AED open trip spend`} tone="blue" />
+        <KpiCard icon="whatsapp" label="WhatsApp queue" value={dashboard.whatsappOpen} detail={`${dashboard.receiptFiles} receipt records available`} tone="green" />
       </section>
 
       <section className="tex-flow-strip" aria-label="TEX process flow">
-        <FlowStep label="WhatsApp intake" value={dashboard.whatsappOpen} />
-        <FlowStep label="Expense capture" value={dashboard.openExpenses} />
-        <FlowStep label="Approval" value={dashboard.pendingApprovals} />
-        <FlowStep label="Finance payout" value={`${formatAmount(dashboard.approvedSpend)} AED`} />
+        <FlowStep icon="whatsapp" label="WhatsApp intake" value={dashboard.whatsappOpen} />
+        <FlowStep icon="receipt" label="Expense capture" value={dashboard.openExpenses} />
+        <FlowStep icon="team" label="Approval" value={dashboard.pendingApprovals} />
+        <FlowStep icon="finance" label="Finance payout" value={`${formatAmount(dashboard.approvedSpend)} AED`} />
       </section>
 
       <section className="tex-analytics-grid" aria-label="TEX analytics">
@@ -722,21 +727,23 @@ function TexDashboardHome({ dashboard }: { dashboard: TexDashboard }) {
           </a>
         </div>
         <div className="module-grid tex-action-grid">
-          <ModuleCard title="My Expenses" text="Expense queue, status, and approvals." value={dashboard.openExpenses} href="?section=expenses" />
-          <ModuleCard title="Trips" text="Trip files, budget use, and driver context." value={dashboard.trips} href="?section=trips" />
-          <ModuleCard title="Finance Review" text="Approved spend and payouts ready for settlement." value={dashboard.pendingApprovals} href="?section=finance" />
-          <ModuleCard title="My Team" text="Employee records linked to TEX submissions." value={dashboard.employees.length} href="?section=people" />
-          <ModuleCard title="WhatsApp Config" text="Provider setup, AI OCR, duplicate rules, and intake." value={dashboard.whatsappOpen} href="?section=whatsapp" />
+          <ModuleCard icon="receipt" title="My Expenses" text="Expense queue, status, and approvals." value={dashboard.openExpenses} href="?section=expenses" />
+          <ModuleCard icon="route" title="Trips" text="Trip files, budget use, and driver context." value={dashboard.trips} href="?section=trips" />
+          <ModuleCard icon="finance" title="Finance Review" text="Approved spend and payouts ready for settlement." value={dashboard.pendingApprovals} href="?section=finance" />
+          <ModuleCard icon="team" title="My Team" text="Employee records linked to TEX submissions." value={dashboard.employees.length} href="?section=people" />
+          <ModuleCard icon="whatsapp" title="WhatsApp Config" text="Provider setup, AI OCR, duplicate rules, and intake." value={dashboard.whatsappOpen} href="?section=whatsapp" />
         </div>
       </section>
     </>
   );
 }
 
-function ModuleCard({ title, text, value, href }: { title: string; text: string; value: number; href: string }) {
+function ModuleCard({ icon, title, text, value, href }: { icon: TexIconName; title: string; text: string; value: number; href: string }) {
   return (
     <a className="module-card module-card-link" href={href}>
-      <span className="module-status module-status-active">active</span>
+      <span className="tex-module-icon" aria-hidden="true">
+        <TexIcon name={icon} />
+      </span>
       <h3>{title}</h3>
       <p>{text}</p>
       <strong>{value}</strong>
@@ -744,9 +751,24 @@ function ModuleCard({ title, text, value, href }: { title: string; text: string;
   );
 }
 
-function KpiCard({ label, value, detail, tone }: { label: string; value: number; detail: string; tone: "teal" | "gold" | "blue" | "green" }) {
+function KpiCard({
+  icon,
+  label,
+  value,
+  detail,
+  tone
+}: {
+  icon: TexIconName;
+  label: string;
+  value: number;
+  detail: string;
+  tone: "teal" | "gold" | "blue" | "green";
+}) {
   return (
     <article className={`tex-kpi-card tex-kpi-${tone}`}>
+      <span className="tex-kpi-icon" aria-hidden="true">
+        <TexIcon name={icon} />
+      </span>
       <span>{label}</span>
       <strong>{value}</strong>
       <small>{detail}</small>
@@ -754,12 +776,95 @@ function KpiCard({ label, value, detail, tone }: { label: string; value: number;
   );
 }
 
-function FlowStep({ label, value }: { label: string; value: number | string }) {
+function FlowStep({ icon, label, value }: { icon: TexIconName; label: string; value: number | string }) {
   return (
     <article>
+      <span className="tex-flow-icon" aria-hidden="true">
+        <TexIcon name={icon} />
+      </span>
       <span>{label}</span>
       <strong>{value}</strong>
     </article>
+  );
+}
+
+function TexIcon({ name }: { name: TexIconName }) {
+  const common = {
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    strokeWidth: 2,
+    viewBox: "0 0 24 24"
+  };
+
+  return (
+    <svg aria-hidden="true" {...common}>
+      {name === "dashboard" ? (
+        <>
+          <rect x="3" y="3" width="7" height="8" rx="1.5" />
+          <rect x="14" y="3" width="7" height="5" rx="1.5" />
+          <rect x="14" y="12" width="7" height="9" rx="1.5" />
+          <rect x="3" y="15" width="7" height="6" rx="1.5" />
+        </>
+      ) : null}
+      {name === "plus" ? (
+        <>
+          <path d="M12 5v14" />
+          <path d="M5 12h14" />
+        </>
+      ) : null}
+      {name === "receipt" ? (
+        <>
+          <path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z" />
+          <path d="M9 8h6" />
+          <path d="M9 12h6" />
+          <path d="M9 16h3" />
+        </>
+      ) : null}
+      {name === "route" ? (
+        <>
+          <circle cx="6" cy="6" r="2" />
+          <circle cx="18" cy="18" r="2" />
+          <path d="M8 6h5a3 3 0 0 1 0 6h-2a3 3 0 0 0 0 6h5" />
+        </>
+      ) : null}
+      {name === "team" ? (
+        <>
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </>
+      ) : null}
+      {name === "finance" ? (
+        <>
+          <path d="M4 19V5" />
+          <path d="M4 19h16" />
+          <path d="M8 15v-4" />
+          <path d="M12 15V8" />
+          <path d="M16 15v-6" />
+        </>
+      ) : null}
+      {name === "whatsapp" ? (
+        <>
+          <path d="M20 11.5a8 8 0 0 1-11.7 7.1L4 20l1.4-4.1A8 8 0 1 1 20 11.5z" />
+          <path d="M9 8.5c.4 2 2.1 3.9 4.2 4.7l1.3-1.1 2 1.1c-.3 1.4-1.4 2.2-2.8 2-3.8-.4-6.8-3.4-7.2-7.2-.2-1.4.6-2.5 2-2.8l1.1 2-1.1 1.3z" />
+        </>
+      ) : null}
+      {name === "bell" ? (
+        <>
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+          <path d="M10 21h4" />
+        </>
+      ) : null}
+      {name === "settings" ? (
+        <>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.1 2.1-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V20h-3v-.2a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-2.1-2.1.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H4v-3h.2a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 2.1-2.1.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V4h3v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 2.1 2.1-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v3h-.2a1.7 1.7 0 0 0-1.6 1z" />
+        </>
+      ) : null}
+    </svg>
   );
 }
 
