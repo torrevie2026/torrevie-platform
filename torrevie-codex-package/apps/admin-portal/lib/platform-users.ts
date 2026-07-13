@@ -62,6 +62,14 @@ type RoleAssignmentRow = {
   roles?: { key?: string; scope?: string } | Array<{ key?: string; scope?: string }>;
 };
 
+type PlatformInviteKind = "new_invitation" | "existing_user";
+
+type PlatformInviteIdentity = {
+  userId: string;
+  actionLink: string;
+  kind: PlatformInviteKind;
+};
+
 export async function listPlatformUsers(client: SupabaseClient): Promise<PlatformUserRecord[]> {
   const tenant = await getPlatformTenant(client);
   const { data: memberships, error: membershipsError } = await client
@@ -152,7 +160,7 @@ export async function invitePlatformUser(
   const tenant = await getPlatformTenant(client);
   const email = sanitizeEmail(input.email);
   const role = sanitizePlatformRole(input.role);
-  const { userId, actionLink } = await createSupabaseInviteLink(client, email);
+  const { userId, actionLink, kind } = await createSupabaseInviteLink(client, email);
   const roleRow = await getPlatformRole(client, role);
 
   await upsertPlatformUser(client, userId, email, input.actorUserId);
@@ -166,7 +174,8 @@ export async function invitePlatformUser(
     email,
     tenantName: tenant.name,
     role,
-    actionLink
+    actionLink,
+    kind
   });
   await writePlatformUserAuditEvent(client, tenant.id, input.actorUserId, "platform.user.invitation_sent", userId, {
     email,
@@ -198,7 +207,7 @@ async function getPlatformRole(client: SupabaseClient, role: PlatformRoleKey) {
   return data as RoleRow;
 }
 
-async function createSupabaseInviteLink(client: SupabaseClient, email: string) {
+async function createSupabaseInviteLink(client: SupabaseClient, email: string): Promise<PlatformInviteIdentity> {
   const { data, error } = await client.auth.admin.generateLink({
     type: "invite",
     email,
@@ -208,6 +217,20 @@ async function createSupabaseInviteLink(client: SupabaseClient, email: string) {
   });
 
   if (error) {
+    if (isAlreadyRegisteredError(error.message)) {
+      const existingUser = await findAuthUserByEmail(client, email);
+
+      if (!existingUser) {
+        throw new Error("Supabase reported an existing Auth user, but the user could not be found.");
+      }
+
+      return {
+        userId: existingUser.id,
+        actionLink: `${adminPortalUrl()}/login`,
+        kind: "existing_user"
+      };
+    }
+
     throw new Error(`Unable to create Supabase invitation link: ${error.message}`);
   }
 
@@ -220,8 +243,35 @@ async function createSupabaseInviteLink(client: SupabaseClient, email: string) {
 
   return {
     userId,
-    actionLink
+    actionLink,
+    kind: "new_invitation"
   };
+}
+
+async function findAuthUserByEmail(client: SupabaseClient, email: string) {
+  for (let page = 1; page <= 20; page += 1) {
+    const { data, error } = await client.auth.admin.listUsers({
+      page,
+      perPage: 1000
+    });
+
+    if (error) {
+      throw new Error(`Unable to find existing Supabase Auth user: ${error.message}`);
+    }
+
+    const users = data.users ?? [];
+    const existingUser = users.find((user) => user.email?.toLowerCase() === email);
+
+    if (existingUser) {
+      return existingUser;
+    }
+
+    if (users.length < 1000) {
+      return null;
+    }
+  }
+
+  throw new Error("Unable to find existing Supabase Auth user: Auth user list exceeded the search limit.");
 }
 
 async function upsertPlatformUser(client: SupabaseClient, userId: string, email: string, actorUserId: string) {
@@ -319,6 +369,7 @@ async function sendPlatformUserInviteEmail(input: {
   tenantName: string;
   role: PlatformRoleKey;
   actionLink: string;
+  kind: PlatformInviteKind;
 }) {
   const resendApiKey = process.env.RESEND_API_KEY ?? process.env.EMAIL_PROVIDER_API_KEY;
 
@@ -331,7 +382,7 @@ async function sendPlatformUserInviteEmail(input: {
   const { error } = await resend.emails.send({
     from,
     to: input.email,
-    subject: "Your Torrevie Admin Portal invitation",
+    subject: input.kind === "existing_user" ? "Your Torrevie Admin Portal access" : "Your Torrevie Admin Portal invitation",
     html: renderPlatformInviteHtml(input),
     text: renderPlatformInviteText(input)
   });
@@ -363,14 +414,26 @@ async function writePlatformUserAuditEvent(
   }
 }
 
-function renderPlatformInviteHtml(input: { tenantName: string; role: PlatformRoleKey; actionLink: string }) {
+function renderPlatformInviteHtml(input: {
+  tenantName: string;
+  role: PlatformRoleKey;
+  actionLink: string;
+  kind: PlatformInviteKind;
+}) {
+  const isExistingUser = input.kind === "existing_user";
+  const title = isExistingUser ? "Torrevie Admin Portal access" : "Torrevie Admin Portal invitation";
+  const body = isExistingUser
+    ? `Your existing account has been granted access to ${escapeHtml(input.tenantName)} with the ${escapeHtml(input.role)} role.`
+    : `You have been invited to ${escapeHtml(input.tenantName)} with the ${escapeHtml(input.role)} role.`;
+  const cta = isExistingUser ? "Open Admin Portal" : "Accept invitation";
+
   return `
     <div style="font-family: Inter, Arial, sans-serif; color: #162449; line-height: 1.5;">
-      <h1 style="font-size: 22px;">Torrevie Admin Portal invitation</h1>
-      <p>You have been invited to ${escapeHtml(input.tenantName)} with the ${escapeHtml(input.role)} role.</p>
+      <h1 style="font-size: 22px;">${title}</h1>
+      <p>${body}</p>
       <p>
         <a href="${escapeHtml(input.actionLink)}" style="background: #0D9488; color: #FFFFFF; padding: 12px 18px; text-decoration: none; border-radius: 6px; display: inline-block;">
-          Accept invitation
+          ${cta}
         </a>
       </p>
       <p>If the button does not work, open this link:</p>
@@ -379,13 +442,22 @@ function renderPlatformInviteHtml(input: { tenantName: string; role: PlatformRol
   `;
 }
 
-function renderPlatformInviteText(input: { tenantName: string; role: PlatformRoleKey; actionLink: string }) {
+function renderPlatformInviteText(input: {
+  tenantName: string;
+  role: PlatformRoleKey;
+  actionLink: string;
+  kind: PlatformInviteKind;
+}) {
+  const isExistingUser = input.kind === "existing_user";
+
   return [
-    "Torrevie Admin Portal invitation",
+    isExistingUser ? "Torrevie Admin Portal access" : "Torrevie Admin Portal invitation",
     "",
-    `You have been invited to ${input.tenantName} with the ${input.role} role.`,
+    isExistingUser
+      ? `Your existing account has been granted access to ${input.tenantName} with the ${input.role} role.`
+      : `You have been invited to ${input.tenantName} with the ${input.role} role.`,
     "",
-    `Accept your invitation: ${input.actionLink}`
+    `${isExistingUser ? "Open Admin Portal" : "Accept your invitation"}: ${input.actionLink}`
   ].join("\n");
 }
 
@@ -409,6 +481,10 @@ function sanitizePlatformRole(role: PlatformRoleKey) {
   }
 
   return role;
+}
+
+function isAlreadyRegisteredError(message: string) {
+  return message.toLowerCase().includes("already been registered");
 }
 
 function normalizeRoleKey(value: RoleAssignmentRow["roles"]) {
