@@ -268,7 +268,7 @@ async function createSupabaseInviteLink(client: SupabaseClient, email: string): 
     type: "invite",
     email,
     options: {
-      redirectTo: `${adminPortalUrl()}/auth/callback?next=/account`
+      redirectTo: adminInviteRedirectUrl()
     }
   });
 
@@ -311,7 +311,7 @@ async function createExistingUserAccessLink(client: SupabaseClient, email: strin
     type: "recovery",
     email,
     options: {
-      redirectTo: `${adminPortalUrl()}/auth/callback?next=/account`
+      redirectTo: adminInviteRedirectUrl()
     }
   });
 
@@ -561,6 +561,10 @@ function renderPlatformInviteText(input: {
 
 function adminPortalUrl() {
   return (process.env.NEXT_PUBLIC_ADMIN_PORTAL_URL ?? "https://admin.torrevie.com").replace(/\/+$/, "");
+}
+
+function adminInviteRedirectUrl() {
+  return `${adminPortalUrl()}/auth/callback?next=${encodeURIComponent("/account?setup=password")}`;
 }
 
 function sanitizeEmail(value: string) {

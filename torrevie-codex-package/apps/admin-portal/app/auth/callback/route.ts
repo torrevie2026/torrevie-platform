@@ -43,6 +43,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/login?error=unauthorized", requestUrl.origin));
   }
 
+  if (nextPath === "/account?setup=password") {
+    cookieStore.set("torrevie_admin_password_setup", "1", {
+      httpOnly: true,
+      maxAge: 60 * 60,
+      path: "/",
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production"
+    });
+  }
+
   return NextResponse.redirect(new URL(nextPath, requestUrl.origin));
 }
 

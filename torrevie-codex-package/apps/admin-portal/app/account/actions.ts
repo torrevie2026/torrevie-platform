@@ -51,6 +51,36 @@ export async function changePasswordAction(formData: FormData) {
   redirect("/account?password=updated");
 }
 
+export async function setInitialPasswordAction(formData: FormData) {
+  const cookieStore = await cookies();
+
+  if (cookieStore.get("torrevie_admin_password_setup")?.value !== "1") {
+    redirect("/account?password=setup_expired");
+  }
+
+  const supabase = await createWritableSupabaseServerClient();
+  await requireAuthorizedSession(supabase);
+  const newPassword = stringValue(formData, "newPassword");
+  const confirmPassword = stringValue(formData, "confirmPassword");
+
+  if (newPassword.length < 8) {
+    redirect("/account?setup=password&password=too_short");
+  }
+
+  if (newPassword !== confirmPassword) {
+    redirect("/account?setup=password&password=mismatch");
+  }
+
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+  if (error) {
+    redirect("/account?setup=password&password=failed");
+  }
+
+  cookieStore.delete("torrevie_admin_password_setup");
+  redirect("/account?password=setup_updated");
+}
+
 export async function updateTimezoneAction(formData: FormData) {
   const supabase = await createWritableSupabaseServerClient();
   await requireAuthorizedSession(supabase);

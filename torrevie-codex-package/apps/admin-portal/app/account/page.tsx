@@ -1,7 +1,13 @@
 import { redirect } from "next/navigation";
 import { AdminSidebar } from "../components/AdminSidebar";
 import { getPlatformSession } from "../../lib/session";
-import { changePasswordAction, signOutAction, updateProfileAction, updateTimezoneAction } from "./actions";
+import {
+  changePasswordAction,
+  setInitialPasswordAction,
+  signOutAction,
+  updateProfileAction,
+  updateTimezoneAction
+} from "./actions";
 import { MfaSettings } from "./MfaSettings";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +29,8 @@ const passwordMessages: Record<string, string> = {
   mismatch: "The new passwords do not match.",
   invalid_current: "Current password is incorrect.",
   missing_email: "The signed-in account is missing an email address.",
+  setup_expired: "Open the latest invitation email to set your first password.",
+  setup_updated: "Password set. Use it for your next sign-in.",
   failed: "Password update failed. Try again."
 };
 
@@ -44,7 +52,7 @@ const profileMessages: Record<string, string> = {
 export default async function AccountPage({
   searchParams
 }: {
-  searchParams: Promise<{ password?: string; profile?: string; timezone?: string }>;
+  searchParams: Promise<{ password?: string; profile?: string; setup?: string; timezone?: string }>;
 }) {
   const session = await getPlatformSession();
 
@@ -54,6 +62,7 @@ export default async function AccountPage({
 
   const params = await searchParams;
   const timezoneOptions = timezones.includes(session.timezone) ? timezones : [session.timezone, ...timezones];
+  const showPasswordSetup = params.setup === "password";
 
   return (
     <main className="admin-shell">
@@ -85,6 +94,27 @@ export default async function AccountPage({
             <strong>{session.timezone}</strong>
           </div>
         </section>
+
+        {showPasswordSetup ? (
+          <section className="panel" aria-label="First login password setup">
+            <h2>Set your password</h2>
+            <p className="empty">Create the password you will use for future Admin Portal sign-ins.</p>
+            {params.password ? (
+              <p className="notice">{passwordMessages[params.password] ?? passwordMessages.failed}</p>
+            ) : null}
+            <form action={setInitialPasswordAction} className="account-form">
+              <label>
+                New password
+                <input name="newPassword" type="password" autoComplete="new-password" required minLength={8} />
+              </label>
+              <label>
+                Confirm new password
+                <input name="confirmPassword" type="password" autoComplete="new-password" required minLength={8} />
+              </label>
+              <button type="submit">Set password</button>
+            </form>
+          </section>
+        ) : null}
 
         <section className="panel" aria-label="Profile settings">
           <h2>Profile</h2>
