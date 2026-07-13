@@ -150,6 +150,8 @@ class RecordingTexApiClient implements TenantQueryClient {
             subcontractor_driver_name: null,
             subcontractor_amount: 0,
             driver_payout_status: "unpaid",
+            leg_count: 1,
+            total_distance_km: 210,
             expense_count: 2,
             spend_amount: 300
           }
@@ -182,6 +184,8 @@ class RecordingTexApiClient implements TenantQueryClient {
             subcontractor_driver_name: null,
             subcontractor_amount: 0,
             driver_payout_status: "unpaid",
+            leg_count: 1,
+            total_distance_km: 210,
             expense_count: 0,
             spend_amount: 0
           }
@@ -214,6 +218,8 @@ class RecordingTexApiClient implements TenantQueryClient {
             subcontractor_driver_name: values[14] ?? null,
             subcontractor_amount: values[15] ?? 0,
             driver_payout_status: "unpaid",
+            leg_count: 0,
+            total_distance_km: 0,
             expense_count: 0,
             spend_amount: 0
           }
@@ -260,6 +266,58 @@ class RecordingTexApiClient implements TenantQueryClient {
           {
             id: "00000000-0000-4000-8000-000000007001",
             status: "open"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("from public.tex_trips") && sql.includes("limit 1")) {
+      return { rows: [{ id: "00000000-0000-4000-8000-000000008001" }] as Row[] };
+    }
+
+    if (sql.includes("from public.tex_trip_legs") && sql.includes("order by sequence")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000009001",
+            sequence: 1,
+            origin: "Jebel Ali",
+            origin_place_id: null,
+            origin_lat: null,
+            origin_lng: null,
+            origin_country: "AE",
+            destination: "Riyadh",
+            destination_place_id: null,
+            destination_lat: null,
+            destination_lng: null,
+            destination_country: "SA",
+            mode: "road",
+            status: "planned",
+            planned_start: "2026-07-12",
+            planned_end: null,
+            actual_start: null,
+            actual_end: null,
+            distance_km: 105,
+            is_return_trip: true,
+            return_distance_km: 105,
+            return_duration_seconds: null,
+            total_distance_km: 210,
+            duration_seconds: null,
+            distance_source: "manual",
+            route_polyline: null,
+            budget_amount: 700,
+            container_ref: "MSKU123",
+            notes: null
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_trip_legs") || sql.includes("update public.tex_trip_legs")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000009001"
           }
         ] as Row[]
       };
@@ -337,7 +395,49 @@ async function main() {
     });
     assert.equal(response.status, 200);
     assert.match(JSON.stringify(response.body), /Dubai run/);
+    assert.match(JSON.stringify(response.body), /legCount/);
     assert.equal(client.hasSql("from public.tex_trips"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "GET",
+      path: "/trips/00000000-0000-4000-8000-000000008001/legs"
+    });
+    assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /Jebel Ali/);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "PUT",
+      path: "/trips/00000000-0000-4000-8000-000000008001/legs",
+      body: {
+        legs: [
+          {
+            origin: "Jebel Ali",
+            destination: "Riyadh",
+            mode: "road",
+            distanceKm: 105,
+            isReturnTrip: true
+          }
+        ]
+      }
+    });
+    assert.equal(response.status, 200);
+    assert.equal(client.valuesContain("tex.trip.legs_updated"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "DELETE",
+      path: "/trips/00000000-0000-4000-8000-000000008001/legs/00000000-0000-4000-8000-000000009001"
+    });
+    assert.equal(response.status, 200);
+    assert.equal(client.valuesContain("tex.trip.leg_deleted"), true);
   }
 
   {

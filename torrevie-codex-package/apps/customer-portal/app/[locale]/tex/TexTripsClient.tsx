@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import type { TexBootstrap, TexTripInput, TexTripListItem } from "../../../lib/tex";
+import type { TexBootstrap, TexTripInput, TexTripLeg, TexTripLegInput, TexTripListItem } from "../../../lib/tex";
 
 type TexTripsClientProps = {
   teams: TexBootstrap["teams"];
@@ -30,6 +30,27 @@ type TripFormState = {
   subcontractorNotes: string;
 };
 
+type LegFormState = {
+  id: string | null;
+  sequence: number;
+  origin: string;
+  destination: string;
+  mode: "road" | "sea" | "air" | "rail" | "";
+  status: "planned" | "in_transit" | "completed" | "cancelled";
+  plannedStart: string;
+  plannedEnd: string;
+  actualStart: string;
+  actualEnd: string;
+  distanceKm: string;
+  isReturnTrip: boolean;
+  returnDistanceKm: string;
+  totalDistanceKm: string;
+  durationSeconds: string;
+  budgetAmount: string;
+  containerRef: string;
+  notes: string;
+};
+
 const blankTripForm = (): TripFormState => ({
   id: null,
   name: "",
@@ -51,9 +72,34 @@ const blankTripForm = (): TripFormState => ({
   subcontractorNotes: ""
 });
 
+const blankLeg = (sequence: number): LegFormState => ({
+  id: null,
+  sequence,
+  origin: "",
+  destination: "",
+  mode: "road",
+  status: "planned",
+  plannedStart: "",
+  plannedEnd: "",
+  actualStart: "",
+  actualEnd: "",
+  distanceKm: "",
+  isReturnTrip: false,
+  returnDistanceKm: "",
+  totalDistanceKm: "",
+  durationSeconds: "",
+  budgetAmount: "",
+  containerRef: "",
+  notes: ""
+});
+
 export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClientProps) {
   const [trips, setTrips] = useState(initialTrips);
   const [form, setForm] = useState<TripFormState>(blankTripForm);
+  const [legsTrip, setLegsTrip] = useState<TexTripListItem | null>(null);
+  const [legs, setLegs] = useState<LegFormState[]>([]);
+  const [legsLoading, setLegsLoading] = useState(false);
+  const [legsSaving, setLegsSaving] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [busyTripId, setBusyTripId] = useState<string | null>(null);
@@ -145,6 +191,77 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
       setError(errorMessage(caught));
     } finally {
       setBusyTripId(null);
+    }
+  }
+
+  async function openLegs(trip: TexTripListItem) {
+    setLegsTrip(trip);
+    setLegs([]);
+    setLegsLoading(true);
+    setNotice(null);
+    setError(null);
+
+    try {
+      const response = await texFetch<{ legs: TexTripLeg[] }>(`/trips/${trip.id}/legs`);
+      setLegs(response.legs.map(mapLegForForm));
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setLegsLoading(false);
+    }
+  }
+
+  function addLeg() {
+    setLegs((current) => [...current, blankLeg((current[current.length - 1]?.sequence ?? current.length) + 1)]);
+  }
+
+  function removeLeg(index: number) {
+    setLegs((current) => resequence(current.filter((_, currentIndex) => currentIndex !== index)));
+  }
+
+  function moveLeg(index: number, direction: -1 | 1) {
+    setLegs((current) => {
+      const nextIndex = index + direction;
+
+      if (nextIndex < 0 || nextIndex >= current.length) {
+        return current;
+      }
+
+      const next = [...current];
+      const currentLeg = next[index];
+      const swapLeg = next[nextIndex];
+
+      if (!currentLeg || !swapLeg) {
+        return current;
+      }
+
+      next[index] = swapLeg;
+      next[nextIndex] = currentLeg;
+      return resequence(next);
+    });
+  }
+
+  async function saveLegs() {
+    if (!legsTrip) {
+      return;
+    }
+
+    setLegsSaving(true);
+    setNotice(null);
+    setError(null);
+
+    try {
+      const response = await texFetch<{ legs: TexTripLeg[] }>(`/trips/${legsTrip.id}/legs`, {
+        method: "PUT",
+        body: JSON.stringify({ legs: legs.map(mapLegForApi) })
+      });
+      setLegs(response.legs.map(mapLegForForm));
+      setNotice("Trip legs saved.");
+      await refreshTrips();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setLegsSaving(false);
     }
   }
 
@@ -274,16 +391,154 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
             Refresh
           </button>
         </div>
-        <TripCards trips={openTrips} busyTripId={busyTripId} onEdit={editTrip} onClose={closeTrip} />
+        <TripCards trips={openTrips} busyTripId={busyTripId} onEdit={editTrip} onClose={closeTrip} onLegs={openLegs} />
         {closedTrips.length > 0 ? (
           <>
             <button type="button" className="tex-secondary-button tex-inline-button" onClick={() => setShowClosed((current) => !current)}>
               {showClosed ? "Hide" : "Show"} closed trips ({closedTrips.length})
             </button>
-            {showClosed ? <TripCards trips={closedTrips} busyTripId={busyTripId} onEdit={editTrip} onClose={closeTrip} /> : null}
+            {showClosed ? <TripCards trips={closedTrips} busyTripId={busyTripId} onEdit={editTrip} onClose={closeTrip} onLegs={openLegs} /> : null}
           </>
         ) : null}
       </section>
+
+      {legsTrip ? (
+        <section className="tex-form-panel" aria-labelledby="tex-trip-legs-title">
+          <div className="section-heading-row">
+            <div>
+              <h3 id="tex-trip-legs-title">Legs - {legsTrip.name}</h3>
+              <p>
+                {legs.length} legs
+                {legDistanceTotal(legs) > 0 ? ` - ${formatAmount(legDistanceTotal(legs))} km total` : ""}
+              </p>
+            </div>
+            <button type="button" className="tex-secondary-button" onClick={() => setLegsTrip(null)}>
+              Close
+            </button>
+          </div>
+
+          {legsLoading ? <p>Loading legs...</p> : null}
+          {!legsLoading && legs.length === 0 ? <p>No legs yet. Add the first route leg below.</p> : null}
+          <div className="tex-trip-list">
+            {legs.map((leg, index) => (
+              <article key={leg.id ?? `new-${index}`} className="tex-trip-card">
+                <header>
+                  <div>
+                    <span className={`tex-status tex-status-${leg.status}`}>Leg {index + 1}</span>
+                    <h4>{leg.origin || "Origin"} to {leg.destination || "Destination"}</h4>
+                  </div>
+                  <strong>{formatAmount(legTotalDistance(leg))} km</strong>
+                </header>
+                <div className="tex-form-grid">
+                  <label>
+                    Origin
+                    <input value={leg.origin} onChange={(event) => updateLeg(setLegs, index, { origin: event.target.value })} />
+                  </label>
+                  <label>
+                    Destination
+                    <input value={leg.destination} onChange={(event) => updateLeg(setLegs, index, { destination: event.target.value })} />
+                  </label>
+                  <label>
+                    Mode
+                    <select value={leg.mode} onChange={(event) => updateLeg(setLegs, index, { mode: event.target.value as LegFormState["mode"] })}>
+                      <option value="">None</option>
+                      <option value="road">Road</option>
+                      <option value="sea">Sea</option>
+                      <option value="air">Air</option>
+                      <option value="rail">Rail</option>
+                    </select>
+                  </label>
+                  <label>
+                    Status
+                    <select
+                      value={leg.status}
+                      onChange={(event) => updateLeg(setLegs, index, { status: event.target.value as LegFormState["status"] })}
+                    >
+                      <option value="planned">Planned</option>
+                      <option value="in_transit">In transit</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </label>
+                  <label>
+                    Planned start
+                    <input type="date" value={leg.plannedStart} onChange={(event) => updateLeg(setLegs, index, { plannedStart: event.target.value })} />
+                  </label>
+                  <label>
+                    Planned end
+                    <input type="date" value={leg.plannedEnd} onChange={(event) => updateLeg(setLegs, index, { plannedEnd: event.target.value })} />
+                  </label>
+                  <label>
+                    Actual start
+                    <input type="date" value={leg.actualStart} onChange={(event) => updateLeg(setLegs, index, { actualStart: event.target.value })} />
+                  </label>
+                  <label>
+                    Actual end
+                    <input type="date" value={leg.actualEnd} onChange={(event) => updateLeg(setLegs, index, { actualEnd: event.target.value })} />
+                  </label>
+                  <label>
+                    Outbound distance km
+                    <input
+                      inputMode="decimal"
+                      value={leg.distanceKm}
+                      onChange={(event) => updateLegDistance(setLegs, index, event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Return distance km
+                    <input
+                      inputMode="decimal"
+                      disabled={!leg.isReturnTrip}
+                      value={leg.returnDistanceKm}
+                      onChange={(event) => updateLegReturnDistance(setLegs, index, event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Budget
+                    <input inputMode="decimal" value={leg.budgetAmount} onChange={(event) => updateLeg(setLegs, index, { budgetAmount: event.target.value })} />
+                  </label>
+                  <label>
+                    Container / BL
+                    <input value={leg.containerRef} onChange={(event) => updateLeg(setLegs, index, { containerRef: event.target.value })} />
+                  </label>
+                </div>
+                <label className="tex-checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={leg.isReturnTrip}
+                    onChange={(event) => updateLegReturnToggle(setLegs, index, event.target.checked)}
+                  />
+                  Return to origin
+                </label>
+                <label className="tex-wide-label">
+                  Notes
+                  <input value={leg.notes} onChange={(event) => updateLeg(setLegs, index, { notes: event.target.value })} />
+                </label>
+                <footer>
+                  <button type="button" disabled={index === 0} onClick={() => moveLeg(index, -1)}>
+                    Move up
+                  </button>
+                  <button type="button" disabled={index === legs.length - 1} onClick={() => moveLeg(index, 1)}>
+                    Move down
+                  </button>
+                  <button type="button" onClick={() => removeLeg(index)}>
+                    Remove
+                  </button>
+                </footer>
+              </article>
+            ))}
+          </div>
+
+          <div className="tex-hero-actions">
+            <button type="button" className="tex-secondary-button" onClick={addLeg}>
+              Add leg
+            </button>
+            <button type="button" className="tex-primary-button" disabled={legsSaving || legs.length === 0} onClick={saveLegs}>
+              {legsSaving ? "Saving..." : "Save legs"}
+            </button>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -292,12 +547,14 @@ function TripCards({
   trips,
   busyTripId,
   onEdit,
-  onClose
+  onClose,
+  onLegs
 }: {
   trips: TexTripListItem[];
   busyTripId: string | null;
   onEdit: (trip: TexTripListItem) => void;
   onClose: (tripId: string) => void;
+  onLegs: (trip: TexTripListItem) => void;
 }) {
   if (trips.length === 0) {
     return <p>No trips in this view.</p>;
@@ -328,11 +585,18 @@ function TripCards({
             ) : null}
             <div className="tex-trip-meta">
               <span>{trip.expenseCount} expenses</span>
+              <span>{trip.legCount} legs</span>
+              <span>{trip.totalDistanceKm ? `${formatAmount(trip.totalDistanceKm)} km` : "No distance"}</span>
               <span>{trip.budgetAmount ? `${formatAmount(trip.budgetAmount)} budget` : "No budget"}</span>
               <span>{trip.driverName ?? "No driver"}</span>
               {trip.tripType === "logistics" ? <span>{trip.containerNumber ?? "No container"}</span> : null}
             </div>
             <footer>
+              {trip.tripType === "logistics" ? (
+                <button type="button" onClick={() => onLegs(trip)}>
+                  Legs
+                </button>
+              ) : null}
               <button type="button" onClick={() => onEdit(trip)}>
                 Edit
               </button>
@@ -347,6 +611,136 @@ function TripCards({
       })}
     </div>
   );
+}
+
+function mapLegForForm(leg: TexTripLeg): LegFormState {
+  return {
+    id: leg.id,
+    sequence: leg.sequence,
+    origin: leg.origin,
+    destination: leg.destination,
+    mode: leg.mode ?? "",
+    status: leg.status,
+    plannedStart: dateInputValue(leg.plannedStart),
+    plannedEnd: dateInputValue(leg.plannedEnd),
+    actualStart: dateInputValue(leg.actualStart),
+    actualEnd: dateInputValue(leg.actualEnd),
+    distanceKm: leg.distanceKm === null ? "" : String(leg.distanceKm),
+    isReturnTrip: leg.isReturnTrip,
+    returnDistanceKm: leg.returnDistanceKm === null ? "" : String(leg.returnDistanceKm),
+    totalDistanceKm: leg.totalDistanceKm === null ? "" : String(leg.totalDistanceKm),
+    durationSeconds: leg.durationSeconds === null ? "" : String(leg.durationSeconds),
+    budgetAmount: leg.budgetAmount === null ? "" : String(leg.budgetAmount),
+    containerRef: leg.containerRef ?? "",
+    notes: leg.notes ?? ""
+  };
+}
+
+function mapLegForApi(leg: LegFormState): TexTripLegInput {
+  return {
+    id: leg.id,
+    sequence: leg.sequence,
+    origin: leg.origin,
+    destination: leg.destination,
+    mode: leg.mode || null,
+    status: leg.status,
+    plannedStart: leg.plannedStart || null,
+    plannedEnd: leg.plannedEnd || null,
+    actualStart: leg.actualStart || null,
+    actualEnd: leg.actualEnd || null,
+    distanceKm: readOptionalNumber(leg.distanceKm),
+    isReturnTrip: leg.isReturnTrip,
+    returnDistanceKm: leg.isReturnTrip ? readOptionalNumber(leg.returnDistanceKm) : null,
+    totalDistanceKm: readOptionalNumber(leg.totalDistanceKm) ?? legTotalDistance(leg),
+    durationSeconds: readOptionalNumber(leg.durationSeconds),
+    budgetAmount: readOptionalNumber(leg.budgetAmount),
+    containerRef: leg.containerRef || null,
+    notes: leg.notes || null
+  };
+}
+
+function updateLeg(setLegs: Dispatch<SetStateAction<LegFormState[]>>, index: number, patch: Partial<LegFormState>) {
+  setLegs((current) => current.map((leg, currentIndex) => (currentIndex === index ? { ...leg, ...patch } : leg)));
+}
+
+function updateLegDistance(setLegs: Dispatch<SetStateAction<LegFormState[]>>, index: number, distanceKm: string) {
+  setLegs((current) =>
+    current.map((leg, currentIndex) => {
+      if (currentIndex !== index) {
+        return leg;
+      }
+
+      const outbound = readOptionalNumber(distanceKm);
+      const returnDistance = leg.isReturnTrip ? readOptionalNumber(leg.returnDistanceKm) ?? outbound : null;
+      const totalDistance = outbound === null ? "" : String(leg.isReturnTrip ? outbound + (returnDistance ?? outbound) : outbound);
+      return {
+        ...leg,
+        distanceKm,
+        returnDistanceKm: leg.isReturnTrip && !leg.returnDistanceKm ? distanceKm : leg.returnDistanceKm,
+        totalDistanceKm: totalDistance
+      };
+    })
+  );
+}
+
+function updateLegReturnDistance(setLegs: Dispatch<SetStateAction<LegFormState[]>>, index: number, returnDistanceKm: string) {
+  setLegs((current) =>
+    current.map((leg, currentIndex) => {
+      if (currentIndex !== index) {
+        return leg;
+      }
+
+      const outbound = readOptionalNumber(leg.distanceKm);
+      const returnDistance = readOptionalNumber(returnDistanceKm);
+      return {
+        ...leg,
+        returnDistanceKm,
+        totalDistanceKm: outbound === null ? "" : String(outbound + (returnDistance ?? outbound))
+      };
+    })
+  );
+}
+
+function updateLegReturnToggle(setLegs: Dispatch<SetStateAction<LegFormState[]>>, index: number, isReturnTrip: boolean) {
+  setLegs((current) =>
+    current.map((leg, currentIndex) => {
+      if (currentIndex !== index) {
+        return leg;
+      }
+
+      const outbound = readOptionalNumber(leg.distanceKm);
+      const returnDistance = isReturnTrip ? readOptionalNumber(leg.returnDistanceKm) ?? outbound : null;
+      return {
+        ...leg,
+        isReturnTrip,
+        returnDistanceKm: isReturnTrip ? leg.returnDistanceKm || leg.distanceKm : "",
+        totalDistanceKm: outbound === null ? "" : String(isReturnTrip ? outbound + (returnDistance ?? outbound) : outbound)
+      };
+    })
+  );
+}
+
+function resequence(legs: LegFormState[]) {
+  return legs.map((leg, index) => ({ ...leg, sequence: index + 1 }));
+}
+
+function dateInputValue(value: string | null) {
+  return value ? value.slice(0, 10) : "";
+}
+
+function legDistanceTotal(legs: LegFormState[]) {
+  return legs.reduce((total, leg) => total + legTotalDistance(leg), 0);
+}
+
+function legTotalDistance(leg: LegFormState) {
+  const explicitTotal = readOptionalNumber(leg.totalDistanceKm);
+
+  if (explicitTotal !== null) {
+    return explicitTotal;
+  }
+
+  const outbound = readOptionalNumber(leg.distanceKm) ?? 0;
+  return leg.isReturnTrip ? outbound + (readOptionalNumber(leg.returnDistanceKm) ?? outbound) : outbound;
 }
 
 function setFormValue(

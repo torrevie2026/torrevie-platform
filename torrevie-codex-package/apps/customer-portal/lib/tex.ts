@@ -108,8 +108,77 @@ export type TexTripListItem = {
   subcontractorDriverName: string | null;
   subcontractorAmount: number;
   driverPayoutStatus: string;
+  legCount: number;
+  totalDistanceKm: number;
   expenseCount: number;
   spendAmount: number;
+};
+
+export type TexTripLegMode = "road" | "sea" | "air" | "rail";
+export type TexTripLegStatus = "planned" | "in_transit" | "completed" | "cancelled";
+
+export type TexTripLeg = {
+  id: string;
+  sequence: number;
+  origin: string;
+  originPlaceId: string | null;
+  originLat: number | null;
+  originLng: number | null;
+  originCountry: string | null;
+  destination: string;
+  destinationPlaceId: string | null;
+  destinationLat: number | null;
+  destinationLng: number | null;
+  destinationCountry: string | null;
+  mode: TexTripLegMode | null;
+  status: TexTripLegStatus;
+  plannedStart: string | null;
+  plannedEnd: string | null;
+  actualStart: string | null;
+  actualEnd: string | null;
+  distanceKm: number | null;
+  isReturnTrip: boolean;
+  returnDistanceKm: number | null;
+  returnDurationSeconds: number | null;
+  totalDistanceKm: number | null;
+  durationSeconds: number | null;
+  distanceSource: string | null;
+  routePolyline: string | null;
+  budgetAmount: number | null;
+  containerRef: string | null;
+  notes: string | null;
+};
+
+export type TexTripLegInput = {
+  id?: string | null;
+  sequence?: number | null;
+  origin: string;
+  originPlaceId?: string | null;
+  originLat?: number | null;
+  originLng?: number | null;
+  originCountry?: string | null;
+  destination: string;
+  destinationPlaceId?: string | null;
+  destinationLat?: number | null;
+  destinationLng?: number | null;
+  destinationCountry?: string | null;
+  mode?: TexTripLegMode | null;
+  status?: TexTripLegStatus | null;
+  plannedStart?: string | null;
+  plannedEnd?: string | null;
+  actualStart?: string | null;
+  actualEnd?: string | null;
+  distanceKm?: number | null;
+  isReturnTrip?: boolean | null;
+  returnDistanceKm?: number | null;
+  returnDurationSeconds?: number | null;
+  totalDistanceKm?: number | null;
+  durationSeconds?: number | null;
+  distanceSource?: string | null;
+  routePolyline?: string | null;
+  budgetAmount?: number | null;
+  containerRef?: string | null;
+  notes?: string | null;
 };
 
 export type TexTripInput = {
@@ -392,6 +461,13 @@ export async function listTexTrips(client: TenantQueryClient, actor: TexActorCon
           t.subcontractor_driver_name,
           t.subcontractor_amount::float as subcontractor_amount,
           t.driver_payout_status,
+          (select count(*)::int from public.tex_trip_legs leg where leg.tenant_id = t.tenant_id and leg.trip_id = t.id) as leg_count,
+          (
+            select coalesce(sum(coalesce(leg.total_distance_km, leg.distance_km, 0)), 0)::float
+            from public.tex_trip_legs leg
+            where leg.tenant_id = t.tenant_id
+              and leg.trip_id = t.id
+          ) as total_distance_km,
           count(e.id)::int as expense_count,
           coalesce(sum(e.amount), 0)::float as spend_amount
         from public.tex_trips t
@@ -492,6 +568,8 @@ export async function createTexTrip(
           subcontractor_driver_name,
           subcontractor_amount::float as subcontractor_amount,
           driver_payout_status,
+          0::int as leg_count,
+          0::float as total_distance_km,
           0::int as expense_count,
           0::float as spend_amount
       `,
@@ -562,6 +640,8 @@ export async function updateTexTrip(
           subcontractor_driver_name,
           subcontractor_amount::float as subcontractor_amount,
           driver_payout_status,
+          0::int as leg_count,
+          0::float as total_distance_km,
           0::int as expense_count,
           0::float as spend_amount
       `,
@@ -614,6 +694,8 @@ export async function closeTexTrip(
           subcontractor_driver_name,
           subcontractor_amount::float as subcontractor_amount,
           driver_payout_status,
+          (select count(*)::int from public.tex_trip_legs where tenant_id = public.current_tenant_id() and trip_id = public.tex_trips.id) as leg_count,
+          (select coalesce(sum(coalesce(total_distance_km, distance_km, 0)), 0)::float from public.tex_trip_legs where tenant_id = public.current_tenant_id() and trip_id = public.tex_trips.id) as total_distance_km,
           0::int as expense_count,
           0::float as spend_amount
       `,
@@ -625,6 +707,249 @@ export async function closeTexTrip(
     });
 
     return mapTripListItem(row);
+  });
+}
+
+export async function listTexTripLegs(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  tripId: string
+): Promise<TexTripLeg[]> {
+  assertTexPermission(actor, "tex.expense.read");
+  assertUuid(tripId, "trip id");
+
+  return withTenantContext(client, actor, async () => {
+    await assertTripExists(client, tripId);
+    const result = await client.query<TexTripLegRow>(
+      `
+        select
+          id,
+          sequence,
+          origin,
+          origin_place_id,
+          origin_lat::float as origin_lat,
+          origin_lng::float as origin_lng,
+          origin_country,
+          destination,
+          destination_place_id,
+          destination_lat::float as destination_lat,
+          destination_lng::float as destination_lng,
+          destination_country,
+          mode,
+          status,
+          planned_start::text as planned_start,
+          planned_end::text as planned_end,
+          actual_start::text as actual_start,
+          actual_end::text as actual_end,
+          distance_km::float as distance_km,
+          is_return_trip,
+          return_distance_km::float as return_distance_km,
+          return_duration_seconds,
+          total_distance_km::float as total_distance_km,
+          duration_seconds,
+          distance_source,
+          route_polyline,
+          budget_amount::float as budget_amount,
+          container_ref,
+          notes
+        from public.tex_trip_legs
+        where tenant_id = public.current_tenant_id()
+          and trip_id = $1
+        order by sequence asc, created_at asc
+      `,
+      [tripId]
+    );
+
+    return result.rows.map(mapTripLeg);
+  });
+}
+
+export async function replaceTexTripLegs(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  tripId: string,
+  input: { legs?: TexTripLegInput[] }
+): Promise<TexTripLeg[]> {
+  assertTexPermission(actor, "tex.trip.manage");
+  assertUuid(tripId, "trip id");
+  const legs = sanitizeTripLegs(input.legs ?? []);
+
+  return withTenantContext(client, actor, async () => {
+    await assertTripExists(client, tripId);
+    const savedIds: string[] = [];
+
+    for (const leg of legs) {
+      const result = leg.id
+        ? await client.query<{ id: string }>(
+            `
+              update public.tex_trip_legs
+                 set sequence = $1,
+                     origin = $2,
+                     origin_place_id = $3,
+                     origin_lat = $4,
+                     origin_lng = $5,
+                     origin_country = $6,
+                     destination = $7,
+                     destination_place_id = $8,
+                     destination_lat = $9,
+                     destination_lng = $10,
+                     destination_country = $11,
+                     mode = $12,
+                     status = $13,
+                     planned_start = $14,
+                     planned_end = $15,
+                     actual_start = $16,
+                     actual_end = $17,
+                     distance_km = $18,
+                     is_return_trip = $19,
+                     return_distance_km = $20,
+                     return_duration_seconds = $21,
+                     total_distance_km = $22,
+                     duration_seconds = $23,
+                     distance_source = $24,
+                     route_polyline = $25,
+                     budget_amount = $26,
+                     container_ref = $27,
+                     notes = $28,
+                     updated_by = $29
+               where tenant_id = public.current_tenant_id()
+                 and trip_id = $30
+                 and id = $31
+              returning id
+            `,
+            [...tripLegValues(leg), actor.userId, tripId, leg.id]
+          )
+        : await client.query<{ id: string }>(
+            `
+              insert into public.tex_trip_legs (
+                tenant_id,
+                trip_id,
+                sequence,
+                origin,
+                origin_place_id,
+                origin_lat,
+                origin_lng,
+                origin_country,
+                destination,
+                destination_place_id,
+                destination_lat,
+                destination_lng,
+                destination_country,
+                mode,
+                status,
+                planned_start,
+                planned_end,
+                actual_start,
+                actual_end,
+                distance_km,
+                is_return_trip,
+                return_distance_km,
+                return_duration_seconds,
+                total_distance_km,
+                duration_seconds,
+                distance_source,
+                route_polyline,
+                budget_amount,
+                container_ref,
+                notes,
+                created_by,
+                updated_by
+              )
+              values (
+                public.current_tenant_id(),
+                $29,
+                $1,
+                $2,
+                $3,
+                $4,
+                $5,
+                $6,
+                $7,
+                $8,
+                $9,
+                $10,
+                $11,
+                $12,
+                $13,
+                $14,
+                $15,
+                $16,
+                $17,
+                $18,
+                $19,
+                $20,
+                $21,
+                $22,
+                $23,
+                $24,
+                $25,
+                $26,
+                $27,
+                $28,
+                $30,
+                $30
+              )
+              returning id
+            `,
+            [...tripLegValues(leg), tripId, actor.userId]
+          );
+      const row = requireSingleRow(result.rows, "trip leg");
+      savedIds.push(row.id);
+    }
+
+    if (savedIds.length > 0) {
+      await client.query(
+        `
+          delete from public.tex_trip_legs
+           where tenant_id = public.current_tenant_id()
+             and trip_id = $1
+             and not (id = any(string_to_array($2, ',')::uuid[]))
+        `,
+        [tripId, savedIds.join(",")]
+      );
+    } else {
+      await client.query(
+        `
+          delete from public.tex_trip_legs
+           where tenant_id = public.current_tenant_id()
+             and trip_id = $1
+        `,
+        [tripId]
+      );
+    }
+
+    await writeTexAuditEvent(client, actor, "tex.trip.legs_updated", "tex_trip", tripId, {
+      leg_count: String(savedIds.length)
+    });
+
+    return listTexTripLegs(client, actor, tripId);
+  });
+}
+
+export async function deleteTexTripLeg(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  tripId: string,
+  legId: string
+): Promise<void> {
+  assertTexPermission(actor, "tex.trip.manage");
+  assertUuid(tripId, "trip id");
+  assertUuid(legId, "trip leg id");
+
+  await withTenantContext(client, actor, async () => {
+    await assertTripExists(client, tripId);
+    await client.query(
+      `
+        delete from public.tex_trip_legs
+         where tenant_id = public.current_tenant_id()
+           and trip_id = $1
+           and id = $2
+      `,
+      [tripId, legId]
+    );
+    await writeTexAuditEvent(client, actor, "tex.trip.leg_deleted", "tex_trip_leg", legId, {
+      trip_id: tripId
+    });
   });
 }
 
@@ -1481,6 +1806,23 @@ async function createExpenseFromWhatsappReceipt(
   return mapExpense(row);
 }
 
+async function assertTripExists(client: TenantQueryClient, tripId: string) {
+  const result = await client.query<{ id: string }>(
+    `
+      select id
+      from public.tex_trips
+      where tenant_id = public.current_tenant_id()
+        and id = $1
+      limit 1
+    `,
+    [tripId]
+  );
+
+  if (result.rows.length !== 1) {
+    throw new Error("Unable to find trip.");
+  }
+}
+
 function sanitizeExpense(input: TexExpenseInput): Required<TexExpenseInput> {
   const amount = Number(input.amount);
 
@@ -1565,6 +1907,122 @@ function sanitizeTrip(input: TexTripInput): Required<TexTripInput> {
   };
 }
 
+function sanitizeTripLegs(input: TexTripLegInput[]): Required<TexTripLegInput>[] {
+  return input.map((leg, index) => sanitizeTripLeg(leg, index + 1));
+}
+
+function sanitizeTripLeg(input: TexTripLegInput, fallbackSequence: number): Required<TexTripLegInput> {
+  const origin = input.origin.trim();
+  const destination = input.destination.trim();
+
+  if (!origin || !destination) {
+    throw new Error("Every trip leg needs an origin and destination.");
+  }
+
+  const sequence = Number(input.sequence ?? fallbackSequence);
+
+  if (!Number.isInteger(sequence) || sequence < 1) {
+    throw new Error("Trip leg sequence must be a positive integer.");
+  }
+
+  const mode = sanitizeTripLegMode(input.mode);
+  const status = sanitizeTripLegStatus(input.status);
+  const distanceKm = optionalNonNegative(input.distanceKm, "leg distance");
+  const returnDistanceKm = optionalNonNegative(input.returnDistanceKm, "leg return distance");
+  const totalDistanceKm =
+    optionalNonNegative(input.totalDistanceKm, "leg total distance") ??
+    (distanceKm === null ? null : input.isReturnTrip ? distanceKm + (returnDistanceKm ?? distanceKm) : distanceKm);
+
+  return {
+    id: cleanOptional(input.id),
+    sequence,
+    origin,
+    originPlaceId: cleanOptional(input.originPlaceId),
+    originLat: optionalNumber(input.originLat, "origin latitude"),
+    originLng: optionalNumber(input.originLng, "origin longitude"),
+    originCountry: cleanOptional(input.originCountry),
+    destination,
+    destinationPlaceId: cleanOptional(input.destinationPlaceId),
+    destinationLat: optionalNumber(input.destinationLat, "destination latitude"),
+    destinationLng: optionalNumber(input.destinationLng, "destination longitude"),
+    destinationCountry: cleanOptional(input.destinationCountry),
+    mode,
+    status,
+    plannedStart: input.plannedStart ? parseIsoDate(input.plannedStart.slice(0, 10), "planned start") : null,
+    plannedEnd: input.plannedEnd ? parseIsoDate(input.plannedEnd.slice(0, 10), "planned end") : null,
+    actualStart: input.actualStart ? parseIsoDate(input.actualStart.slice(0, 10), "actual start") : null,
+    actualEnd: input.actualEnd ? parseIsoDate(input.actualEnd.slice(0, 10), "actual end") : null,
+    distanceKm,
+    isReturnTrip: Boolean(input.isReturnTrip),
+    returnDistanceKm: input.isReturnTrip ? returnDistanceKm : null,
+    returnDurationSeconds: input.isReturnTrip ? optionalInteger(input.returnDurationSeconds, "return duration") : null,
+    totalDistanceKm,
+    durationSeconds: optionalInteger(input.durationSeconds, "duration"),
+    distanceSource: cleanOptional(input.distanceSource),
+    routePolyline: cleanOptional(input.routePolyline),
+    budgetAmount: optionalNonNegative(input.budgetAmount, "leg budget"),
+    containerRef: cleanOptional(input.containerRef),
+    notes: cleanOptional(input.notes)
+  };
+}
+
+function tripLegValues(leg: Required<TexTripLegInput>) {
+  return [
+    leg.sequence,
+    leg.origin,
+    leg.originPlaceId,
+    leg.originLat,
+    leg.originLng,
+    leg.originCountry,
+    leg.destination,
+    leg.destinationPlaceId,
+    leg.destinationLat,
+    leg.destinationLng,
+    leg.destinationCountry,
+    leg.mode,
+    leg.status,
+    leg.plannedStart,
+    leg.plannedEnd,
+    leg.actualStart,
+    leg.actualEnd,
+    leg.distanceKm,
+    leg.isReturnTrip,
+    leg.returnDistanceKm,
+    leg.returnDurationSeconds,
+    leg.totalDistanceKm,
+    leg.durationSeconds,
+    leg.distanceSource,
+    leg.routePolyline,
+    leg.budgetAmount,
+    leg.containerRef,
+    leg.notes
+  ];
+}
+
+function sanitizeTripLegMode(value: string | null | undefined): TexTripLegMode | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  if (value === "road" || value === "sea" || value === "air" || value === "rail") {
+    return value;
+  }
+
+  throw new Error(`Unsupported trip leg mode: ${value}`);
+}
+
+function sanitizeTripLegStatus(value: string | null | undefined): TexTripLegStatus {
+  if (!value) {
+    return "planned";
+  }
+
+  if (value === "planned" || value === "in_transit" || value === "completed" || value === "cancelled") {
+    return value;
+  }
+
+  throw new Error(`Unsupported trip leg status: ${value}`);
+}
+
 function optionalNonNegative(value: number | null | undefined, label: string) {
   if (value === null || value === undefined || value === 0) {
     return null;
@@ -1574,6 +2032,34 @@ function optionalNonNegative(value: number | null | undefined, label: string) {
 
   if (!Number.isFinite(parsed) || parsed < 0) {
     throw new Error(`Trip ${label} cannot be negative.`);
+  }
+
+  return parsed;
+}
+
+function optionalNumber(value: number | null | undefined, label: string) {
+  if (value === null || value === undefined || value === 0) {
+    return null;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Trip ${label} must be numeric.`);
+  }
+
+  return parsed;
+}
+
+function optionalInteger(value: number | null | undefined, label: string) {
+  if (value === null || value === undefined || value === 0) {
+    return null;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`Trip ${label} must be a non-negative integer.`);
   }
 
   return parsed;
@@ -1784,8 +2270,44 @@ function mapTripListItem(row: TexTripListRow): TexTripListItem {
     subcontractorDriverName: row.subcontractor_driver_name,
     subcontractorAmount: row.subcontractor_amount,
     driverPayoutStatus: row.driver_payout_status,
+    legCount: row.leg_count,
+    totalDistanceKm: row.total_distance_km,
     expenseCount: row.expense_count,
     spendAmount: row.spend_amount
+  };
+}
+
+function mapTripLeg(row: TexTripLegRow): TexTripLeg {
+  return {
+    id: row.id,
+    sequence: row.sequence,
+    origin: row.origin,
+    originPlaceId: row.origin_place_id,
+    originLat: row.origin_lat,
+    originLng: row.origin_lng,
+    originCountry: row.origin_country,
+    destination: row.destination,
+    destinationPlaceId: row.destination_place_id,
+    destinationLat: row.destination_lat,
+    destinationLng: row.destination_lng,
+    destinationCountry: row.destination_country,
+    mode: row.mode,
+    status: row.status,
+    plannedStart: row.planned_start,
+    plannedEnd: row.planned_end,
+    actualStart: row.actual_start,
+    actualEnd: row.actual_end,
+    distanceKm: row.distance_km,
+    isReturnTrip: row.is_return_trip,
+    returnDistanceKm: row.return_distance_km,
+    returnDurationSeconds: row.return_duration_seconds,
+    totalDistanceKm: row.total_distance_km,
+    durationSeconds: row.duration_seconds,
+    distanceSource: row.distance_source,
+    routePolyline: row.route_polyline,
+    budgetAmount: row.budget_amount,
+    containerRef: row.container_ref,
+    notes: row.notes
   };
 }
 
@@ -1898,8 +2420,42 @@ type TexTripListRow = {
   subcontractor_driver_name: string | null;
   subcontractor_amount: number;
   driver_payout_status: string;
+  leg_count: number;
+  total_distance_km: number;
   expense_count: number;
   spend_amount: number;
+};
+
+type TexTripLegRow = {
+  id: string;
+  sequence: number;
+  origin: string;
+  origin_place_id: string | null;
+  origin_lat: number | null;
+  origin_lng: number | null;
+  origin_country: string | null;
+  destination: string;
+  destination_place_id: string | null;
+  destination_lat: number | null;
+  destination_lng: number | null;
+  destination_country: string | null;
+  mode: TexTripLegMode | null;
+  status: TexTripLegStatus;
+  planned_start: string | null;
+  planned_end: string | null;
+  actual_start: string | null;
+  actual_end: string | null;
+  distance_km: number | null;
+  is_return_trip: boolean;
+  return_distance_km: number | null;
+  return_duration_seconds: number | null;
+  total_distance_km: number | null;
+  duration_seconds: number | null;
+  distance_source: string | null;
+  route_polyline: string | null;
+  budget_amount: number | null;
+  container_ref: string | null;
+  notes: string | null;
 };
 
 type TexFinanceExpenseRow = {
