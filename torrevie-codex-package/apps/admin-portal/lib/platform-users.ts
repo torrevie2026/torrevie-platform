@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 
@@ -71,6 +72,16 @@ type PlatformInviteIdentity = {
   userId: string;
   actionLink: string;
   kind: PlatformInviteKind;
+};
+
+type PlatformInviteLinkRow = {
+  id: string;
+  tenant_id: string;
+  email: string;
+  role_key: PlatformRoleKey;
+  status: string;
+  expires_at: string;
+  created_by: string;
 };
 
 export async function listPlatformUsers(client: SupabaseClient): Promise<PlatformUserRecord[]> {
@@ -163,13 +174,14 @@ export async function invitePlatformUser(
   const tenant = await getPlatformTenant(client);
   const email = sanitizeEmail(input.email);
   const role = sanitizePlatformRole(input.role);
-  const { userId, actionLink, kind } = await createSupabaseInviteLink(client, email);
-  const roleRow = await getPlatformRole(client, role);
+  const { invitationId, actionLink } = await createPlatformInvitationLink(client, {
+    tenantId: tenant.id,
+    email,
+    role,
+    actorUserId: input.actorUserId
+  });
 
-  await upsertPlatformUser(client, userId, email, input.actorUserId);
-  await upsertActivePlatformMembership(client, tenant.id, userId, input.actorUserId);
-  await replacePlatformRole(client, tenant.id, userId, roleRow.id, input.actorUserId);
-  await writePlatformUserAuditEvent(client, tenant.id, input.actorUserId, "platform.user.invited", userId, {
+  await writePlatformInvitationAuditEvent(client, tenant.id, input.actorUserId, "platform.user.invited", invitationId, {
     email,
     role
   });
@@ -178,12 +190,61 @@ export async function invitePlatformUser(
     tenantName: tenant.name,
     role,
     actionLink,
-    kind
+    kind: "new_invitation"
   });
-  await writePlatformUserAuditEvent(client, tenant.id, input.actorUserId, "platform.user.invitation_sent", userId, {
+  await writePlatformInvitationAuditEvent(client, tenant.id, input.actorUserId, "platform.user.invitation_sent", invitationId, {
     email,
     provider: "resend"
   });
+}
+
+export async function redeemPlatformInvitationLink(client: SupabaseClient, token: string) {
+  const tokenHash = hashInvitationToken(token);
+  const { data, error } = await client
+    .from("platform_invitation_links")
+    .select("id,tenant_id,email,role_key,status,expires_at,created_by")
+    .eq("token_hash", tokenHash)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Unable to load invitation: ${error.message}`);
+  }
+
+  const invitation = data as PlatformInviteLinkRow | null;
+
+  if (!invitation || invitation.status !== "pending" || new Date(invitation.expires_at).getTime() <= Date.now()) {
+    throw new Error("This invitation link is invalid or has expired.");
+  }
+
+  const role = sanitizePlatformRole(invitation.role_key);
+  const { userId, actionLink, kind } = await createSupabaseInviteLink(client, invitation.email);
+  const roleRow = await getPlatformRole(client, role);
+
+  await upsertPlatformUser(client, userId, invitation.email, invitation.created_by);
+  await upsertActivePlatformMembership(client, invitation.tenant_id, userId, invitation.created_by);
+  await replacePlatformRole(client, invitation.tenant_id, userId, roleRow.id, invitation.created_by);
+  await writePlatformUserAuditEvent(client, invitation.tenant_id, invitation.created_by, "platform.user.invite_accepted", userId, {
+    email: invitation.email,
+    invitationId: invitation.id,
+    inviteKind: kind
+  });
+
+  const { error: updateError } = await client
+    .from("platform_invitation_links")
+    .update({
+      auth_user_id: userId,
+      redeemed_at: new Date().toISOString(),
+      status: "accepted",
+      updated_by: invitation.created_by,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", invitation.id);
+
+  if (updateError) {
+    throw new Error(`Unable to mark invitation accepted: ${updateError.message}`);
+  }
+
+  return actionLink;
 }
 
 export async function updatePlatformUserAccess(
@@ -261,6 +322,40 @@ async function getPlatformRole(client: SupabaseClient, role: PlatformRoleKey) {
   }
 
   return data as RoleRow;
+}
+
+async function createPlatformInvitationLink(
+  client: SupabaseClient,
+  input: {
+    tenantId: string;
+    email: string;
+    role: PlatformRoleKey;
+    actorUserId: string;
+  }
+) {
+  const token = randomBytes(32).toString("base64url");
+  const { data, error } = await client
+    .from("platform_invitation_links")
+    .insert({
+      tenant_id: input.tenantId,
+      email: input.email,
+      role_key: input.role,
+      token_hash: hashInvitationToken(token),
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      created_by: input.actorUserId,
+      updated_by: input.actorUserId
+    })
+    .select("id")
+    .single();
+
+  if (error || !data?.id) {
+    throw new Error(`Unable to create invitation acceptance link: ${error?.message ?? "missing invitation id"}`);
+  }
+
+  return {
+    invitationId: data.id as string,
+    actionLink: `${adminPortalUrl()}/accept-invite?token=${encodeURIComponent(token)}`
+  };
 }
 
 async function createSupabaseInviteLink(client: SupabaseClient, email: string): Promise<PlatformInviteIdentity> {
@@ -512,6 +607,28 @@ async function writePlatformUserAuditEvent(
   }
 }
 
+async function writePlatformInvitationAuditEvent(
+  client: SupabaseClient,
+  tenantId: string,
+  actorUserId: string,
+  action: string,
+  targetId: string,
+  metadata: Record<string, string>
+) {
+  const { error } = await client.from("audit_events").insert({
+    tenant_id: tenantId,
+    actor_user_id: actorUserId,
+    action,
+    target_type: "platform_invitation",
+    target_id: targetId,
+    metadata
+  });
+
+  if (error) {
+    throw new Error(`Unable to write platform invitation audit event: ${error.message}`);
+  }
+}
+
 function renderPlatformInviteHtml(input: {
   tenantName: string;
   role: PlatformRoleKey;
@@ -529,6 +646,7 @@ function renderPlatformInviteHtml(input: {
     <div style="font-family: Inter, Arial, sans-serif; color: #162449; line-height: 1.5;">
       <h1 style="font-size: 22px;">${title}</h1>
       <p>${body}</p>
+      <p>This opens a Torrevie confirmation page first. Select continue there to create your secure sign-in session.</p>
       <p>
         <a href="${escapeHtml(input.actionLink)}" style="background: #0D9488; color: #FFFFFF; padding: 12px 18px; text-decoration: none; border-radius: 6px; display: inline-block;">
           ${cta}
@@ -555,6 +673,8 @@ function renderPlatformInviteText(input: {
       ? `Your existing account has been granted access to ${input.tenantName} with the ${input.role} role.`
       : `You have been invited to ${input.tenantName} with the ${input.role} role.`,
     "",
+    "This opens a Torrevie confirmation page first. Select continue there to create your secure sign-in session.",
+    "",
     `${isExistingUser ? "Open Admin Portal" : "Accept your invitation"}: ${input.actionLink}`
   ].join("\n");
 }
@@ -565,6 +685,16 @@ function adminPortalUrl() {
 
 function adminInviteRedirectUrl() {
   return `${adminPortalUrl()}/auth/callback?next=${encodeURIComponent("/account?setup=password")}`;
+}
+
+function hashInvitationToken(token: string) {
+  const normalizedToken = token.trim();
+
+  if (normalizedToken.length < 32) {
+    throw new Error("Invalid invitation token.");
+  }
+
+  return createHash("sha256").update(normalizedToken).digest("hex");
 }
 
 function sanitizeEmail(value: string) {
