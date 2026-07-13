@@ -558,3 +558,34 @@ Status: Completed on 2026-07-13.
   - Onboarding writes tenant adaptive settings and audit events.
 - Report:
   - `docs/fsm/reports/PHASE_2.md`
+
+## WP-29: FSM Channel Hub core
+
+Status: Completed on 2026-07-13.
+
+- Scope:
+  - Added Channel Hub schema for `org_channels`, `org_channel_credentials`, `intake_requests`, and `call_logs`.
+  - Added channel enums, indexes, triggers, grants, RLS policies, and tenant-isolation tests.
+  - Added `get_org_channel_usage(org_id)`.
+  - Added provider-neutral TypeScript interfaces for WhatsApp, voice, and email adapters.
+  - Added Channel Hub data access and a Torrevie FSM Channel Hub section for triage, channels, calls, and manual intake request creation.
+- Decisions:
+  - Used `tenant_id` and platform RLS patterns for all new tables.
+  - Restricted `org_channel_credentials` to service-role database access.
+  - Deferred `jobs.source_channel` and `jobs.intake_request_id` because this repository does not yet contain the FSM jobs table.
+  - Added manual intake creation as a bridge until WP-29 webhook handlers are expanded.
+- Verification:
+  - `pnpm supabase:reset`
+  - `pnpm test:isolation`
+  - `pnpm exec supabase db advisors --local`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Acceptance:
+  - New Channel Hub tenant tables have RLS in the same migration.
+  - Cross-tenant reads and writes fail in isolation tests.
+  - Torrevie FSM has a Channel Hub section reading from the unified intake tables.
+  - Manual intake requests land in `intake_requests`.
+- Report:
+  - `docs/fsm/reports/PHASE_3.md`
