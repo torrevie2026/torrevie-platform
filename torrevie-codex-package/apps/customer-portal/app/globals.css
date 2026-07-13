@@ -1522,17 +1522,13 @@ form.member-row {
 }
 
 .tex-expense-workspace {
-  align-items: start;
   display: grid;
   gap: 20px;
-  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
 }
 
 .tex-trip-workspace {
-  align-items: start;
   display: grid;
   gap: 20px;
-  grid-template-columns: minmax(320px, 460px) minmax(0, 1fr);
 }
 
 .tex-finance-workspace {
@@ -1584,6 +1580,38 @@ form.member-row {
 .tex-form-panel h3 {
   font-size: 18px;
   margin: 0;
+}
+
+.tex-panel-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.tex-drawer-backdrop {
+  align-items: stretch;
+  background: color-mix(in srgb, var(--color-text-primary) 32%, transparent);
+  display: flex;
+  inset: 0;
+  justify-content: flex-end;
+  padding: 14px;
+  position: fixed;
+  z-index: 40;
+}
+
+.tex-drawer {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 24px 70px color-mix(in srgb, var(--color-text-primary) 24%, transparent);
+  display: grid;
+  gap: 16px;
+  inline-size: min(560px, 100%);
+  max-block-size: 100%;
+  overflow: auto;
+  padding: 18px;
 }
 
 .tex-form-grid {
@@ -2212,6 +2240,17 @@ form.member-row {
 
   .tex-mobile-nav a[aria-current="page"] {
     color: var(--color-text-primary);
+  }
+
+  .tex-drawer-backdrop {
+    padding: 0;
+  }
+
+  .tex-drawer {
+    border-block: 0;
+    border-inline-end: 0;
+    border-radius: 0;
+    inline-size: 100%;
   }
 
   .customer-topbar {

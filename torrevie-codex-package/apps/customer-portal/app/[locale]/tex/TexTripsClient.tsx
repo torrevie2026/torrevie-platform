@@ -127,6 +127,7 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
   const [estimatingLegIndex, setEstimatingLegIndex] = useState<number | null>(null);
   const [showClosed, setShowClosed] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isTripDrawerOpen, setIsTripDrawerOpen] = useState(false);
   const [busyTripId, setBusyTripId] = useState<string | null>(null);
   const [tripNotice, setTripNotice] = useState<string | null>(null);
   const [tripError, setTripError] = useState<string | null>(null);
@@ -183,6 +184,21 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
     });
     setTripNotice(null);
     setTripError(null);
+    setIsTripDrawerOpen(true);
+  }
+
+  function openNewTripDrawer() {
+    setForm(blankTripForm());
+    setTripNotice(null);
+    setTripError(null);
+    setPlaceSearchError(null);
+    setIsTripDrawerOpen(true);
+  }
+
+  function closeTripDrawer() {
+    setIsTripDrawerOpen(false);
+    setForm(blankTripForm());
+    setPlaceSearchError(null);
   }
 
   async function saveTrip() {
@@ -217,6 +233,7 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
       const legNotice = form.id ? "" : await createInitialTripLeg(response.trip.id);
       setTripNotice(form.id ? "Trip updated." : ["Trip created.", legNotice].filter(Boolean).join(" "));
       setForm(blankTripForm());
+      setIsTripDrawerOpen(false);
       await refreshTrips();
     } catch (caught) {
       setTripError(errorMessage(caught));
@@ -443,149 +460,165 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
 
   return (
     <div className="tex-trip-workspace">
-      <section className="tex-form-panel" aria-labelledby="tex-trip-form-title">
-        <div className="section-heading-row">
-          <h3 id="tex-trip-form-title">{form.id ? "Edit trip" : "New trip"}</h3>
-          <button type="button" className="tex-secondary-button" onClick={() => setForm(blankTripForm())}>
-            Clear
-          </button>
+      {isTripDrawerOpen ? (
+        <div className="tex-drawer-backdrop" role="presentation" onMouseDown={closeTripDrawer}>
+          <aside
+            className="tex-drawer"
+            aria-labelledby="tex-trip-form-title"
+            aria-modal="true"
+            role="dialog"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="section-heading-row">
+              <h3 id="tex-trip-form-title">{form.id ? "Edit trip" : "New trip"}</h3>
+              <button type="button" className="tex-secondary-button" onClick={closeTripDrawer}>
+                Close
+              </button>
+            </div>
+
+            <div className="tex-form-grid">
+              <label>
+                Trip name
+                <input value={form.name} onChange={(event) => setFormValue(setForm, "name", event.target.value)} />
+              </label>
+              <label>
+                Type
+                <select value={form.tripType} onChange={(event) => setFormValue(setForm, "tripType", event.target.value)}>
+                  <option value="general">General</option>
+                  <option value="logistics">Logistics</option>
+                </select>
+              </label>
+              <label>
+                Origin
+                <input
+                  value={form.origin}
+                  list="tex-origin-suggestions"
+                  placeholder="Search Google Maps"
+                  onChange={(event) => updateTripPlace("origin", event.target.value, originSuggestions)}
+                />
+              </label>
+              <label>
+                Destination
+                <input
+                  value={form.destination}
+                  list="tex-destination-suggestions"
+                  placeholder="Search Google Maps"
+                  onChange={(event) => updateTripPlace("destination", event.target.value, destinationSuggestions)}
+                />
+              </label>
+              <datalist id="tex-origin-suggestions">
+                {originSuggestions.map((suggestion) => (
+                  <option key={suggestion.placeId} value={suggestion.text} />
+                ))}
+              </datalist>
+              <datalist id="tex-destination-suggestions">
+                {destinationSuggestions.map((suggestion) => (
+                  <option key={suggestion.placeId} value={suggestion.text} />
+                ))}
+              </datalist>
+              <label>
+                Start
+                <input type="date" value={form.startDate} onChange={(event) => setFormValue(setForm, "startDate", event.target.value)} />
+              </label>
+              <label>
+                End
+                <input type="date" value={form.endDate} onChange={(event) => setFormValue(setForm, "endDate", event.target.value)} />
+              </label>
+              <label>
+                Budget
+                <input inputMode="decimal" value={form.budgetAmount} onChange={(event) => setFormValue(setForm, "budgetAmount", event.target.value)} />
+              </label>
+              <label>
+                Trip currency
+                <input
+                  value={form.enforcedCurrency}
+                  maxLength={3}
+                  onChange={(event) => setFormValue(setForm, "enforcedCurrency", event.target.value.toUpperCase())}
+                />
+              </label>
+              <label>
+                Team
+                <select value={form.teamId} onChange={(event) => setFormValue(setForm, "teamId", event.target.value)}>
+                  <option value="">No team</option>
+                  {teams.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Driver
+                <select
+                  value={form.driverEmployeeProfileId}
+                  onChange={(event) => setFormValue(setForm, "driverEmployeeProfileId", event.target.value)}
+                >
+                  <option value="">No driver</option>
+                  {employees.map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Driver amount
+                <input
+                  inputMode="decimal"
+                  value={form.driverTripAmount}
+                  onChange={(event) => setFormValue(setForm, "driverTripAmount", event.target.value)}
+                />
+              </label>
+              <label>
+                Container
+                <input value={form.containerNumber} onChange={(event) => setFormValue(setForm, "containerNumber", event.target.value)} />
+              </label>
+              <label>
+                External driver amount
+                <input
+                  inputMode="decimal"
+                  value={form.subcontractorAmount}
+                  onChange={(event) => setFormValue(setForm, "subcontractorAmount", event.target.value)}
+                />
+              </label>
+            </div>
+
+            <label className="tex-wide-label">
+              Description
+              <input value={form.description} onChange={(event) => setFormValue(setForm, "description", event.target.value)} />
+            </label>
+            <label className="tex-checkbox-row">
+              <input
+                type="checkbox"
+                checked={form.enforceCurrency}
+                onChange={(event) => setForm((current) => ({ ...current, enforceCurrency: event.target.checked }))}
+              />
+              Lock all trip expenses to {form.enforcedCurrency || "this currency"}
+            </label>
+            {placeSearchError ? <p className="tex-error">{placeSearchError}</p> : null}
+
+            <button type="button" className="tex-primary-button" disabled={isSaving || !form.name.trim()} onClick={saveTrip}>
+              {isSaving ? "Saving..." : form.id ? "Update trip" : "Create trip"}
+            </button>
+            {tripError ? <p className="tex-error">{tripError}</p> : null}
+          </aside>
         </div>
-
-        <div className="tex-form-grid">
-          <label>
-            Trip name
-            <input value={form.name} onChange={(event) => setFormValue(setForm, "name", event.target.value)} />
-          </label>
-          <label>
-            Type
-            <select value={form.tripType} onChange={(event) => setFormValue(setForm, "tripType", event.target.value)}>
-              <option value="general">General</option>
-              <option value="logistics">Logistics</option>
-            </select>
-          </label>
-          <label>
-            Origin
-            <input
-              value={form.origin}
-              list="tex-origin-suggestions"
-              placeholder="Search Google Maps"
-              onChange={(event) => updateTripPlace("origin", event.target.value, originSuggestions)}
-            />
-          </label>
-          <label>
-            Destination
-            <input
-              value={form.destination}
-              list="tex-destination-suggestions"
-              placeholder="Search Google Maps"
-              onChange={(event) => updateTripPlace("destination", event.target.value, destinationSuggestions)}
-            />
-          </label>
-          <datalist id="tex-origin-suggestions">
-            {originSuggestions.map((suggestion) => (
-              <option key={suggestion.placeId} value={suggestion.text} />
-            ))}
-          </datalist>
-          <datalist id="tex-destination-suggestions">
-            {destinationSuggestions.map((suggestion) => (
-              <option key={suggestion.placeId} value={suggestion.text} />
-            ))}
-          </datalist>
-          <label>
-            Start
-            <input type="date" value={form.startDate} onChange={(event) => setFormValue(setForm, "startDate", event.target.value)} />
-          </label>
-          <label>
-            End
-            <input type="date" value={form.endDate} onChange={(event) => setFormValue(setForm, "endDate", event.target.value)} />
-          </label>
-          <label>
-            Budget
-            <input inputMode="decimal" value={form.budgetAmount} onChange={(event) => setFormValue(setForm, "budgetAmount", event.target.value)} />
-          </label>
-          <label>
-            Trip currency
-            <input
-              value={form.enforcedCurrency}
-              maxLength={3}
-              onChange={(event) => setFormValue(setForm, "enforcedCurrency", event.target.value.toUpperCase())}
-            />
-          </label>
-          <label>
-            Team
-            <select value={form.teamId} onChange={(event) => setFormValue(setForm, "teamId", event.target.value)}>
-              <option value="">No team</option>
-              {teams.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Driver
-            <select
-              value={form.driverEmployeeProfileId}
-              onChange={(event) => setFormValue(setForm, "driverEmployeeProfileId", event.target.value)}
-            >
-              <option value="">No driver</option>
-              {employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Driver amount
-            <input
-              inputMode="decimal"
-              value={form.driverTripAmount}
-              onChange={(event) => setFormValue(setForm, "driverTripAmount", event.target.value)}
-            />
-          </label>
-          <label>
-            Container
-            <input value={form.containerNumber} onChange={(event) => setFormValue(setForm, "containerNumber", event.target.value)} />
-          </label>
-          <label>
-            External driver amount
-            <input
-              inputMode="decimal"
-              value={form.subcontractorAmount}
-              onChange={(event) => setFormValue(setForm, "subcontractorAmount", event.target.value)}
-            />
-          </label>
-        </div>
-
-        <label className="tex-wide-label">
-          Description
-          <input value={form.description} onChange={(event) => setFormValue(setForm, "description", event.target.value)} />
-        </label>
-        <label className="tex-checkbox-row">
-          <input
-            type="checkbox"
-            checked={form.enforceCurrency}
-            onChange={(event) => setForm((current) => ({ ...current, enforceCurrency: event.target.checked }))}
-          />
-          Lock all trip expenses to {form.enforcedCurrency || "this currency"}
-        </label>
-        {placeSearchError ? <p className="tex-error">{placeSearchError}</p> : null}
-
-        <button type="button" className="tex-primary-button" disabled={isSaving || !form.name.trim()} onClick={saveTrip}>
-          {isSaving ? "Saving..." : form.id ? "Update trip" : "Create trip"}
-        </button>
-        {tripNotice ? <p className="tex-notice">{tripNotice}</p> : null}
-        {tripError ? <p className="tex-error">{tripError}</p> : null}
-      </section>
+      ) : null}
 
       <section className="tex-form-panel" aria-labelledby="tex-trip-list-title">
         <div className="section-heading-row">
           <h3 id="tex-trip-list-title">Trip board</h3>
-          <button type="button" className="tex-secondary-button" onClick={refreshTrips}>
-            Refresh
-          </button>
+          <div className="tex-panel-actions">
+            <button type="button" className="tex-primary-button" onClick={openNewTripDrawer}>
+              New trip
+            </button>
+            <button type="button" className="tex-secondary-button" onClick={refreshTrips}>
+              Refresh
+            </button>
+          </div>
         </div>
+        {tripNotice ? <p className="tex-notice">{tripNotice}</p> : null}
+        {tripError ? <p className="tex-error">{tripError}</p> : null}
         <TripCards trips={openTrips} busyTripId={busyTripId} onEdit={editTrip} onClose={closeTrip} onLegs={openLegs} />
         {closedTrips.length > 0 ? (
           <>

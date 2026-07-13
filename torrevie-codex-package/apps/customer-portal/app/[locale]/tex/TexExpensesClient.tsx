@@ -38,6 +38,7 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
   const [form, setForm] = useState<ExpenseFormState>(blankForm);
   const [statusFilter, setStatusFilter] = useState<"all" | TexExpenseStatus>("all");
   const [isCreating, setIsCreating] = useState(false);
+  const [isExpenseDrawerOpen, setIsExpenseDrawerOpen] = useState(false);
   const [busyExpenseId, setBusyExpenseId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +78,7 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
       });
       setNotice("Expense submitted.");
       setForm(blankForm());
+      setIsExpenseDrawerOpen(false);
       await refreshExpenses();
     } catch (caught) {
       setError(errorMessage(caught));
@@ -106,97 +108,139 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
 
   return (
     <div className="tex-expense-workspace">
-      <section className="tex-form-panel" aria-labelledby="tex-new-expense-title">
-        <div className="section-heading-row">
-          <h3 id="tex-new-expense-title">New expense</h3>
-          <button type="button" className="tex-secondary-button" onClick={refreshExpenses}>
-            Refresh
-          </button>
-        </div>
+      {isExpenseDrawerOpen ? (
+        <div
+          className="tex-drawer-backdrop"
+          role="presentation"
+          onMouseDown={() => {
+            setIsExpenseDrawerOpen(false);
+            setForm(blankForm());
+          }}
+        >
+          <aside
+            className="tex-drawer"
+            aria-labelledby="tex-new-expense-title"
+            aria-modal="true"
+            role="dialog"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="section-heading-row">
+              <h3 id="tex-new-expense-title">New expense</h3>
+              <button
+                type="button"
+                className="tex-secondary-button"
+                onClick={() => {
+                  setIsExpenseDrawerOpen(false);
+                  setForm(blankForm());
+                }}
+              >
+                Close
+              </button>
+            </div>
 
-        <div className="tex-form-grid">
-          <label>
-            Employee
-            <select value={form.employeeProfileId} onChange={(event) => setFormValue(setForm, "employeeProfileId", event.target.value)}>
-              <option value="">Signed-in user</option>
-              {activeEmployees.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Date
-            <input value={form.expenseDate} type="date" onChange={(event) => setFormValue(setForm, "expenseDate", event.target.value)} />
-          </label>
-          <label>
-            Amount
-            <input value={form.amount} inputMode="decimal" onChange={(event) => setFormValue(setForm, "amount", event.target.value)} />
-          </label>
-          <label>
-            Currency
-            <input
-              value={form.currency}
-              maxLength={3}
-              onChange={(event) => setFormValue(setForm, "currency", event.target.value.toUpperCase())}
-            />
-          </label>
-          <label>
-            Category
-            <select value={form.category} onChange={(event) => setFormValue(setForm, "category", event.target.value)}>
-              <option value="">Uncategorized</option>
-              {activeCategories.map((category) => (
-                <option key={category.id} value={category.name}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Trip
-            <select value={form.tripId} onChange={(event) => setFormValue(setForm, "tripId", event.target.value)}>
-              <option value="">No trip</option>
-              {openTrips.map((trip) => (
-                <option key={trip.id} value={trip.id}>
-                  {trip.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Vendor
-            <input value={form.vendor} onChange={(event) => setFormValue(setForm, "vendor", event.target.value)} />
-          </label>
-          <label>
-            Notes
-            <input value={form.notes} onChange={(event) => setFormValue(setForm, "notes", event.target.value)} />
-          </label>
-        </div>
+            <div className="tex-form-grid">
+              <label>
+                Employee
+                <select value={form.employeeProfileId} onChange={(event) => setFormValue(setForm, "employeeProfileId", event.target.value)}>
+                  <option value="">Signed-in user</option>
+                  {activeEmployees.map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Date
+                <input value={form.expenseDate} type="date" onChange={(event) => setFormValue(setForm, "expenseDate", event.target.value)} />
+              </label>
+              <label>
+                Amount
+                <input value={form.amount} inputMode="decimal" onChange={(event) => setFormValue(setForm, "amount", event.target.value)} />
+              </label>
+              <label>
+                Currency
+                <input
+                  value={form.currency}
+                  maxLength={3}
+                  onChange={(event) => setFormValue(setForm, "currency", event.target.value.toUpperCase())}
+                />
+              </label>
+              <label>
+                Category
+                <select value={form.category} onChange={(event) => setFormValue(setForm, "category", event.target.value)}>
+                  <option value="">Uncategorized</option>
+                  {activeCategories.map((category) => (
+                    <option key={category.id} value={category.name}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Trip
+                <select value={form.tripId} onChange={(event) => setFormValue(setForm, "tripId", event.target.value)}>
+                  <option value="">No trip</option>
+                  {openTrips.map((trip) => (
+                    <option key={trip.id} value={trip.id}>
+                      {trip.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Vendor
+                <input value={form.vendor} onChange={(event) => setFormValue(setForm, "vendor", event.target.value)} />
+              </label>
+              <label>
+                Notes
+                <input value={form.notes} onChange={(event) => setFormValue(setForm, "notes", event.target.value)} />
+              </label>
+            </div>
 
-        <button type="button" className="tex-primary-button" disabled={isCreating} onClick={createExpense}>
-          {isCreating ? "Submitting..." : "Submit expense"}
-        </button>
-        {notice ? <p className="tex-notice">{notice}</p> : null}
-        {error ? <p className="tex-error">{error}</p> : null}
-      </section>
+            <button type="button" className="tex-primary-button" disabled={isCreating} onClick={createExpense}>
+              {isCreating ? "Submitting..." : "Submit expense"}
+            </button>
+            {error ? <p className="tex-error">{error}</p> : null}
+          </aside>
+        </div>
+      ) : null}
 
       <section className="tex-form-panel" aria-labelledby="tex-expense-list-title">
         <div className="section-heading-row">
           <h3 id="tex-expense-list-title">Expense queue</h3>
-          <div className="tex-segmented-control" aria-label="Expense status filter">
-            {(["all", "pending", "approved", "rejected", "paid"] as const).map((status) => (
-              <button
-                key={status}
-                type="button"
-                aria-pressed={statusFilter === status}
-                onClick={() => setStatusFilter(status)}
-              >
-                {status}
-              </button>
-            ))}
+          <div className="tex-panel-actions">
+            <button
+              type="button"
+              className="tex-primary-button"
+              onClick={() => {
+                setForm(blankForm());
+                setError(null);
+                setNotice(null);
+                setIsExpenseDrawerOpen(true);
+              }}
+            >
+              New expense
+            </button>
+            <button type="button" className="tex-secondary-button" onClick={refreshExpenses}>
+              Refresh
+            </button>
           </div>
         </div>
+        <div className="tex-segmented-control" aria-label="Expense status filter">
+          {(["all", "pending", "approved", "rejected", "paid"] as const).map((status) => (
+            <button
+              key={status}
+              type="button"
+              aria-pressed={statusFilter === status}
+              onClick={() => setStatusFilter(status)}
+            >
+              {status}
+            </button>
+          ))}
+        </div>
+        {notice ? <p className="tex-notice">{notice}</p> : null}
+        {error && !isExpenseDrawerOpen ? <p className="tex-error">{error}</p> : null}
 
         {visibleExpenses.length === 0 ? (
           <p>No expenses match this view.</p>
