@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { assertPermission, roleKeys, type PermissionKey, type ProductKey, type RoleKey } from "@torrevie/permissions";
 import { withTenantContext, type ResolvedTenantContext, type TenantQueryClient } from "@torrevie/tenant-context";
-import { extractReceiptWithOpenAI, type TexReceiptExtraction } from "./tex-ai";
+import { extractReceiptWithAI, type TexReceiptExtraction } from "./tex-ai";
 
 export type TexActorContext = ResolvedTenantContext & {
   roles: readonly RoleKey[];
@@ -1281,7 +1281,7 @@ export async function parseTexReceiptUpload(input: Pick<TexReceiptUploadInput, "
   }
 
   const buffer = receiptBufferFromBase64(input.dataBase64);
-  return extractReceiptWithOpenAI(`data:${contentType};base64,${buffer.toString("base64")}`);
+  return extractReceiptWithAI(`data:${contentType};base64,${buffer.toString("base64")}`);
 }
 
 export async function createTexExpense(
@@ -1540,7 +1540,7 @@ export async function processTexWhatsappSubmission(
 
   if (!extraction && submission.mediaUrl) {
     try {
-      extraction = await extractReceiptWithOpenAI(submission.mediaUrl);
+      extraction = await extractReceiptWithAI(submission.mediaUrl);
     } catch (error) {
       extractionError = error instanceof Error ? error.message : "Receipt extraction failed.";
     }

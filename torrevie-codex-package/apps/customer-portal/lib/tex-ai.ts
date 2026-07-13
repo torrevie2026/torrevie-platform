@@ -10,6 +10,8 @@ export type TexReceiptExtraction = {
   notes: string | null;
 };
 
+type ReceiptAiProvider = "gemini" | "openai";
+
 const receiptExtractionSchema = {
   type: "object",
   additionalProperties: false,
@@ -27,6 +29,24 @@ const receiptExtractionSchema = {
   required: ["vendor", "expenseDate", "amount", "currency", "category", "taxAmount", "taxIdNumber", "confidence", "notes"]
 };
 
+const receiptPrompt =
+  "Extract expense receipt fields for a travel and expense system. Return only fields visible or strongly inferable from the receipt. Do not invent merchant names, dates, amounts, or currencies. Return valid JSON only with keys: vendor, expenseDate, amount, currency, category, taxAmount, taxIdNumber, confidence, notes.";
+
+export async function extractReceiptWithAI(mediaUrl: string): Promise<TexReceiptExtraction> {
+  const providers = receiptProviderOrder();
+  const errors: string[] = [];
+
+  for (const provider of providers) {
+    try {
+      return provider === "gemini" ? await extractReceiptWithGemini(mediaUrl) : await extractReceiptWithOpenAI(mediaUrl);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : `${provider} receipt extraction failed.`);
+    }
+  }
+
+  throw new Error(errors.join(" ") || "No receipt AI provider is configured.");
+}
+
 export async function extractReceiptWithOpenAI(mediaUrl: string): Promise<TexReceiptExtraction> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
 
@@ -42,8 +62,7 @@ export async function extractReceiptWithOpenAI(mediaUrl: string): Promise<TexRec
     },
     body: JSON.stringify({
       model: process.env.OPENAI_RECEIPT_MODEL?.trim() || "gpt-5.6",
-      instructions:
-        "Extract expense receipt fields for a travel and expense system. Return only fields visible or strongly inferable from the receipt. Do not invent merchant names, dates, amounts, or currencies.",
+      instructions: receiptPrompt,
       input: [
         {
           role: "user",
@@ -86,6 +105,60 @@ export async function extractReceiptWithOpenAI(mediaUrl: string): Promise<TexRec
   return sanitizeExtraction(JSON.parse(outputText) as Partial<TexReceiptExtraction>);
 }
 
+export async function extractReceiptWithGemini(mediaUrl: string): Promise<TexReceiptExtraction> {
+  const apiKey = geminiApiKey();
+
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not configured.");
+  }
+
+  const media = await receiptMediaForGemini(mediaUrl);
+  const model = process.env.GEMINI_RECEIPT_MODEL?.trim() || "gemini-2.5-flash";
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-goog-api-key": apiKey
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: receiptPrompt },
+            {
+              inlineData: {
+                mimeType: media.mimeType,
+                data: media.dataBase64
+              }
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.1
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Gemini receipt extraction failed: ${response.status} ${text.slice(0, 400)}`);
+  }
+
+  const data = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const outputText = data.candidates?.[0]?.content?.parts?.find((part) => typeof part.text === "string")?.text;
+
+  if (!outputText) {
+    throw new Error("Gemini receipt extraction returned no structured text.");
+  }
+
+  return sanitizeExtraction(parseJsonObject(outputText));
+}
+
 function findOutputText(output: unknown): string {
   if (!Array.isArray(output)) {
     return "";
@@ -104,6 +177,64 @@ function findOutputText(output: unknown): string {
   }
 
   return "";
+}
+
+function receiptProviderOrder(): ReceiptAiProvider[] {
+  const configured = (process.env.TEX_RECEIPT_AI_PROVIDER || process.env.AI_PROVIDER_PRIMARY_NAME || "").trim().toLowerCase();
+
+  if (configured.includes("openai")) {
+    return ["openai", "gemini"];
+  }
+
+  return ["gemini", "openai"];
+}
+
+function geminiApiKey() {
+  const primaryName = process.env.AI_PROVIDER_PRIMARY_NAME?.trim().toLowerCase() ?? "";
+  const fallbackName = process.env.AI_PROVIDER_FALLBACK_NAME?.trim().toLowerCase() ?? "";
+
+  return (
+    process.env.GEMINI_API_KEY?.trim() ||
+    process.env.GOOGLE_AI_API_KEY?.trim() ||
+    process.env.GOOGLE_AI_KEY?.trim() ||
+    (primaryName.includes("gemini") || primaryName.includes("google") ? process.env.AI_PROVIDER_PRIMARY_API_KEY?.trim() : "") ||
+    (fallbackName.includes("gemini") || fallbackName.includes("google") ? process.env.AI_PROVIDER_FALLBACK_API_KEY?.trim() : "") ||
+    ""
+  );
+}
+
+async function receiptMediaForGemini(mediaUrl: string) {
+  const dataUrl = mediaUrl.match(/^data:([^;,]+);base64,(.+)$/);
+
+  if (dataUrl) {
+    return { mimeType: dataUrl[1] ?? "image/jpeg", dataBase64: dataUrl[2] ?? "" };
+  }
+
+  const response = await fetch(mediaUrl);
+
+  if (!response.ok) {
+    throw new Error(`Could not download receipt media for Gemini: ${response.status}`);
+  }
+
+  const mimeType = response.headers.get("content-type")?.split(";")[0]?.trim() || "image/jpeg";
+  const buffer = Buffer.from(await response.arrayBuffer());
+
+  return { mimeType, dataBase64: buffer.toString("base64") };
+}
+
+function parseJsonObject(value: string): Partial<TexReceiptExtraction> {
+  const trimmed = value.trim();
+
+  try {
+    return JSON.parse(trimmed) as Partial<TexReceiptExtraction>;
+  } catch {
+    const match = trimmed.match(/\{[\s\S]*\}/);
+    if (!match) {
+      throw new Error("Receipt extraction returned invalid JSON.");
+    }
+
+    return JSON.parse(match[0]) as Partial<TexReceiptExtraction>;
+  }
 }
 
 function sanitizeExtraction(value: Partial<TexReceiptExtraction>): TexReceiptExtraction {
