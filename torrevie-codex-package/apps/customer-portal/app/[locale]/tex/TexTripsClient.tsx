@@ -36,7 +36,9 @@ type LegFormState = {
   id: string | null;
   sequence: number;
   origin: string;
+  originPlaceId: string;
   destination: string;
+  destinationPlaceId: string;
   mode: "road" | "sea" | "air" | "rail" | "";
   status: "planned" | "in_transit" | "completed" | "cancelled";
   plannedStart: string;
@@ -98,7 +100,9 @@ const blankLeg = (sequence: number): LegFormState => ({
   id: null,
   sequence,
   origin: "",
+  originPlaceId: "",
   destination: "",
+  destinationPlaceId: "",
   mode: "road",
   status: "planned",
   plannedStart: "",
@@ -133,11 +137,6 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
   const [tripError, setTripError] = useState<string | null>(null);
   const [legsNotice, setLegsNotice] = useState<string | null>(null);
   const [legsError, setLegsError] = useState<string | null>(null);
-  const [originSuggestions, setOriginSuggestions] = useState<PlaceSuggestion[]>([]);
-  const [destinationSuggestions, setDestinationSuggestions] = useState<PlaceSuggestion[]>([]);
-  const [placeSearchNotice, setPlaceSearchNotice] = useState<string | null>(null);
-  const [placeSearchError, setPlaceSearchError] = useState<string | null>(null);
-
   const openTrips = useMemo(() => trips.filter((trip) => trip.status === "open"), [trips]);
   const closedTrips = useMemo(() => trips.filter((trip) => trip.status !== "open"), [trips]);
 
@@ -145,20 +144,6 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
     const response = await texFetch<{ trips: TexTripListItem[] }>("/trips");
     setTrips(response.trips);
   }
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      void loadPlaceSuggestions(form.origin, setOriginSuggestions, setPlaceSearchNotice, setPlaceSearchError);
-    }, 250);
-    return () => window.clearTimeout(timeout);
-  }, [form.origin]);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      void loadPlaceSuggestions(form.destination, setDestinationSuggestions, setPlaceSearchNotice, setPlaceSearchError);
-    }, 250);
-    return () => window.clearTimeout(timeout);
-  }, [form.destination]);
 
   function editTrip(trip: TexTripListItem) {
     setForm({
@@ -192,16 +177,12 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
     setForm(blankTripForm());
     setTripNotice(null);
     setTripError(null);
-    setPlaceSearchError(null);
-    setPlaceSearchNotice(null);
     setIsTripDrawerOpen(true);
   }
 
   function closeTripDrawer() {
     setIsTripDrawerOpen(false);
     setForm(blankTripForm());
-    setPlaceSearchError(null);
-    setPlaceSearchNotice(null);
   }
 
   async function saveTrip() {
@@ -332,29 +313,6 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
     }
   }
 
-  function updateTripPlace(field: "origin" | "destination", value: string, suggestions: PlaceSuggestion[]) {
-    const selected = suggestions.find((suggestion) => suggestion.text === value);
-    setForm((current) => ({
-      ...current,
-      [field]: value,
-      [`${field}PlaceId`]: selected?.placeId ?? ""
-    }));
-  }
-
-  function selectTripPlace(field: "origin" | "destination", suggestion: PlaceSuggestion) {
-    setForm((current) => ({
-      ...current,
-      [field]: suggestion.text,
-      [`${field}PlaceId`]: suggestion.placeId
-    }));
-
-    if (field === "origin") {
-      setOriginSuggestions([]);
-    } else {
-      setDestinationSuggestions([]);
-    }
-  }
-
   async function createInitialTripLeg(tripId: string) {
     if (!form.origin.trim() || !form.destination.trim()) {
       return "";
@@ -453,7 +411,9 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
         method: "POST",
         body: JSON.stringify({
           origin: leg.origin,
+          originPlaceId: leg.originPlaceId || null,
           destination: leg.destination,
+          destinationPlaceId: leg.destinationPlaceId || null,
           returnToOrigin: leg.isReturnTrip
         })
       });
@@ -510,20 +470,18 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
                 <input
                   id="tex-trip-origin"
                   value={form.origin}
-                  placeholder="Search Google Maps"
-                  onChange={(event) => updateTripPlace("origin", event.target.value, originSuggestions)}
+                  placeholder="e.g. Jebel Ali Port"
+                  onChange={(event) => setFormValue(setForm, "origin", event.target.value)}
                 />
-                <PlaceSuggestionList suggestions={originSuggestions} onSelect={(suggestion) => selectTripPlace("origin", suggestion)} />
               </div>
               <div className="tex-place-field">
                 <label htmlFor="tex-trip-destination">Destination</label>
                 <input
                   id="tex-trip-destination"
                   value={form.destination}
-                  placeholder="Search Google Maps"
-                  onChange={(event) => updateTripPlace("destination", event.target.value, destinationSuggestions)}
+                  placeholder="e.g. Riyadh DC"
+                  onChange={(event) => setFormValue(setForm, "destination", event.target.value)}
                 />
-                <PlaceSuggestionList suggestions={destinationSuggestions} onSelect={(suggestion) => selectTripPlace("destination", suggestion)} />
               </div>
               <label>
                 Start
@@ -604,9 +562,6 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
               />
               Lock all trip expenses to {form.enforcedCurrency || "this currency"}
             </label>
-            {placeSearchNotice ? <p className="tex-notice">{placeSearchNotice}</p> : null}
-            {placeSearchError ? <p className="tex-error">{placeSearchError}</p> : null}
-
             <button type="button" className="tex-primary-button" disabled={isSaving || !form.name.trim()} onClick={saveTrip}>
               {isSaving ? "Saving..." : form.id ? "Update trip" : "Create trip"}
             </button>
@@ -691,14 +646,18 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
                     <strong>{formatAmount(legTotalDistance(leg))} km</strong>
                   </header>
                   <div className="tex-form-grid">
-                    <label>
-                      Origin
-                      <input value={leg.origin} onChange={(event) => updateLeg(setLegs, index, { origin: event.target.value })} />
-                    </label>
-                    <label>
-                      Destination
-                      <input value={leg.destination} onChange={(event) => updateLeg(setLegs, index, { destination: event.target.value })} />
-                    </label>
+                    <LegPlaceInput
+                      label="Origin"
+                      value={leg.origin}
+                      placeId={leg.originPlaceId}
+                      onChange={(value, placeId) => updateLeg(setLegs, index, { origin: value, originPlaceId: placeId ?? "", distanceSource: placeId ? leg.distanceSource : "" })}
+                    />
+                    <LegPlaceInput
+                      label="Destination"
+                      value={leg.destination}
+                      placeId={leg.destinationPlaceId}
+                      onChange={(value, placeId) => updateLeg(setLegs, index, { destination: value, destinationPlaceId: placeId ?? "", distanceSource: placeId ? leg.distanceSource : "" })}
+                    />
                     <label>
                       Mode
                       <select value={leg.mode} onChange={(event) => updateLeg(setLegs, index, { mode: event.target.value as LegFormState["mode"] })}>
@@ -845,6 +804,90 @@ function PlaceSuggestionList({
   );
 }
 
+function LegPlaceInput({
+  label,
+  value,
+  placeId,
+  onChange
+}: {
+  label: string;
+  value: string;
+  placeId: string;
+  onChange: (value: string, placeId: string | null) => void;
+}) {
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (placeId || value.trim().length < 3) {
+      setSuggestions([]);
+      setIsLoading(false);
+      setSearchError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const timeout = window.setTimeout(async () => {
+      setIsLoading(true);
+      try {
+        const places = await loadPlaceSuggestions(value);
+        if (!cancelled) {
+          setSuggestions(places);
+          setIsOpen(places.length > 0);
+          setSearchError(null);
+        }
+      } catch (caught) {
+        if (!cancelled) {
+          setSuggestions([]);
+          setSearchError(errorMessage(caught));
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [placeId, value]);
+
+  return (
+    <div className="tex-place-field">
+      <label>
+        {label}
+        <input
+          value={value}
+          placeholder="Search Google Maps"
+          onFocus={() => {
+            if (suggestions.length > 0) {
+              setIsOpen(true);
+            }
+          }}
+          onChange={(event) => onChange(event.target.value, null)}
+        />
+      </label>
+      {isLoading ? <p className="tex-field-hint">Searching Google Maps...</p> : null}
+      {placeId ? <p className="tex-field-hint">Google place selected</p> : null}
+      {searchError ? <p className="tex-error">{searchError}</p> : null}
+      {isOpen ? (
+        <PlaceSuggestionList
+          suggestions={suggestions}
+          onSelect={(suggestion) => {
+            onChange(suggestion.text, suggestion.placeId);
+            setSuggestions([]);
+            setIsOpen(false);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function TripCards({
   trips,
   busyTripId,
@@ -918,7 +961,9 @@ function mapLegForForm(leg: TexTripLeg): LegFormState {
     id: leg.id,
     sequence: leg.sequence,
     origin: leg.origin,
+    originPlaceId: leg.originPlaceId ?? "",
     destination: leg.destination,
+    destinationPlaceId: leg.destinationPlaceId ?? "",
     mode: leg.mode ?? "",
     status: leg.status,
     plannedStart: dateInputValue(leg.plannedStart),
@@ -943,7 +988,9 @@ function mapLegForApi(leg: LegFormState): TexTripLegInput {
     id: leg.id,
     sequence: leg.sequence,
     origin: leg.origin,
+    originPlaceId: leg.originPlaceId || null,
     destination: leg.destination,
+    destinationPlaceId: leg.destinationPlaceId || null,
     mode: leg.mode || null,
     status: leg.status,
     plannedStart: leg.plannedStart || null,
@@ -1072,30 +1119,18 @@ function setFormValue(
   setForm((current) => ({ ...current, [key]: value }));
 }
 
-async function loadPlaceSuggestions(
-  value: string,
-  setSuggestions: Dispatch<SetStateAction<PlaceSuggestion[]>>,
-  setPlaceSearchNotice: Dispatch<SetStateAction<string | null>>,
-  setPlaceSearchError: Dispatch<SetStateAction<string | null>>
-) {
+async function loadPlaceSuggestions(value: string) {
   if (value.trim().length < 3) {
-    setSuggestions([]);
-    setPlaceSearchNotice(null);
-    setPlaceSearchError(null);
-    return;
+    return [];
   }
 
-  try {
-    const response = await texFetch<{ configured?: boolean; places: PlaceSuggestion[] }>(`/places?input=${encodeURIComponent(value)}`);
-    setSuggestions(response.places);
-    setPlaceSearchNotice(response.configured === false ? "Google Maps suggestions are not configured. You can still type the address manually." : null);
-    setPlaceSearchError(null);
-  } catch (caught) {
-    setSuggestions([]);
-    setPlaceSearchNotice(null);
-    const message = errorMessage(caught);
-    setPlaceSearchError(message === "Google Maps API key is not configured." ? null : message);
+  const response = await texFetch<{ configured?: boolean; places: PlaceSuggestion[] }>(`/places?input=${encodeURIComponent(value)}`);
+
+  if (response.configured === false) {
+    return [];
   }
+
+  return response.places;
 }
 
 function readOptionalNumber(value: string) {

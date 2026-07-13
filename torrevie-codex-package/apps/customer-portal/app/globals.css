@@ -2034,6 +2034,12 @@ form.member-row {
   background: var(--color-bg-primary);
 }
 
+.tex-field-hint {
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  margin: 4px 0 0;
+}
+
 .tex-primary-button,
 .tex-secondary-button,
 .tex-card-actions button,
