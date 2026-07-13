@@ -9,7 +9,10 @@ export const platformRoleKeys = [
   "torrevie_security_admin"
 ] as const;
 
+export const platformMembershipStatuses = ["active", "invited", "disabled"] as const;
+
 export type PlatformRoleKey = (typeof platformRoleKeys)[number];
+export type PlatformMembershipStatus = (typeof platformMembershipStatuses)[number];
 
 export type PlatformUserRecord = {
   userId: string;
@@ -23,7 +26,7 @@ export type PlatformUserRecord = {
   mfaEnrolled: boolean;
   status: string;
   role: PlatformRoleKey;
-  membershipStatus: string;
+  membershipStatus: PlatformMembershipStatus;
   createdAt: string;
 };
 
@@ -40,7 +43,7 @@ type RoleRow = {
 
 type MembershipRow = {
   user_id: string;
-  status: string;
+  status: PlatformMembershipStatus;
   created_at: string | null;
 };
 
@@ -181,6 +184,59 @@ export async function invitePlatformUser(
     email,
     provider: "resend"
   });
+}
+
+export async function updatePlatformUserAccess(
+  client: SupabaseClient,
+  input: {
+    userId: string;
+    role: PlatformRoleKey;
+    status: PlatformMembershipStatus;
+    actorUserId: string;
+  }
+) {
+  assertUuid(input.userId, "user id");
+  const tenant = await getPlatformTenant(client);
+  const role = sanitizePlatformRole(input.role);
+  const status = sanitizeMembershipStatus(input.status);
+  const roleRow = await getPlatformRole(client, role);
+
+  if (input.userId === input.actorUserId && status !== "active") {
+    throw new Error("You cannot disable your own Admin Portal access.");
+  }
+
+  await updatePlatformMembershipStatus(client, tenant.id, input.userId, status, input.actorUserId);
+  await replacePlatformRole(client, tenant.id, input.userId, roleRow.id, input.actorUserId);
+  await writePlatformUserAuditEvent(client, tenant.id, input.actorUserId, "platform.user.updated", input.userId, {
+    role,
+    status
+  });
+}
+
+export async function removePlatformUser(
+  client: SupabaseClient,
+  input: {
+    userId: string;
+    actorUserId: string;
+  }
+) {
+  assertUuid(input.userId, "user id");
+
+  if (input.userId === input.actorUserId) {
+    throw new Error("You cannot remove your own Admin Portal access.");
+  }
+
+  const tenant = await getPlatformTenant(client);
+  const [{ error: roleError }, { error: membershipError }] = await Promise.all([
+    client.from("user_role_assignments").delete().eq("tenant_id", tenant.id).eq("user_id", input.userId),
+    client.from("tenant_memberships").delete().eq("tenant_id", tenant.id).eq("user_id", input.userId)
+  ]);
+
+  if (roleError || membershipError) {
+    throw new Error(roleError?.message ?? membershipError?.message ?? "Unable to remove platform user.");
+  }
+
+  await writePlatformUserAuditEvent(client, tenant.id, input.actorUserId, "platform.user.removed", input.userId, {});
 }
 
 async function getPlatformTenant(client: SupabaseClient) {
@@ -333,6 +389,27 @@ async function upsertActivePlatformMembership(
   }
 }
 
+async function updatePlatformMembershipStatus(
+  client: SupabaseClient,
+  tenantId: string,
+  userId: string,
+  status: PlatformMembershipStatus,
+  actorUserId: string
+) {
+  const { error } = await client
+    .from("tenant_memberships")
+    .update({
+      status,
+      updated_by: actorUserId
+    })
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId);
+
+  if (error) {
+    throw new Error(`Unable to update platform membership: ${error.message}`);
+  }
+}
+
 async function replacePlatformRole(
   client: SupabaseClient,
   tenantId: string,
@@ -481,6 +558,20 @@ function sanitizePlatformRole(role: PlatformRoleKey) {
   }
 
   return role;
+}
+
+function sanitizeMembershipStatus(status: PlatformMembershipStatus) {
+  if (!platformMembershipStatuses.includes(status)) {
+    throw new Error(`Unsupported platform membership status: ${status}`);
+  }
+
+  return status;
+}
+
+function assertUuid(value: string, label: string) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    throw new Error(`Invalid ${label}.`);
+  }
 }
 
 function isAlreadyRegisteredError(message: string) {

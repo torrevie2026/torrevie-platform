@@ -605,12 +605,16 @@ h1 {
 }
 
 .user-row {
-  align-items: center;
+  align-items: stretch;
   border-top: 1px solid #e2e6ec;
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(0, 1.4fr) auto minmax(0, 1fr) auto;
+  grid-template-columns: 1fr;
   padding-top: 14px;
+}
+
+.user-row .tenant-user-edit {
+  grid-template-columns: minmax(220px, 1.2fr) minmax(180px, 0.9fr) minmax(140px, 0.7fr) minmax(180px, 1fr) minmax(160px, 0.8fr) auto;
 }
 
 .user-row div {
@@ -632,6 +636,12 @@ h1 {
   padding: 6px 10px;
   text-align: center;
   text-transform: uppercase;
+}
+
+.user-row button:disabled,
+.tenant-user-edit select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .provisioning-form {
