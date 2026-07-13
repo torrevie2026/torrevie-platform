@@ -387,9 +387,11 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
               </label>
             </div>
 
-            <button type="button" className="tex-primary-button" disabled={isCreating} onClick={createExpense}>
-              {isCreating ? "Submitting..." : "Submit expense"}
-            </button>
+            <div className="tex-drawer-submit-row">
+              <button type="button" className="tex-primary-button" disabled={isCreating} onClick={createExpense}>
+                {isCreating ? "Submitting..." : "Submit expense"}
+              </button>
+            </div>
             {error ? <p className="tex-error">{error}</p> : null}
           </aside>
         </div>

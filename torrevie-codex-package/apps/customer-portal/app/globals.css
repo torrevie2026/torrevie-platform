@@ -2196,8 +2196,13 @@ form.member-row {
 }
 
 .tex-drawer .tex-primary-button {
-  justify-self: end;
   min-inline-size: 150px;
+}
+
+.tex-drawer-submit-row {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .tex-drawer-backdrop {
@@ -2418,6 +2423,10 @@ form.member-row {
   background: var(--color-accent);
   border: 0;
   color: var(--color-text-inverse);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2;
   min-block-size: 38px;
   padding-inline: 13px;
 }
