@@ -617,6 +617,27 @@ function sectionContent(section: FsmSection, workspace: FsmWorkspace, locale: Lo
   const technicians = term(workspace.segment, locale, "technicians");
 
   const defaults: Record<string, FsmSectionContent> = {
+    onboarding: {
+      title: "Onboarding",
+      primaryTitle: "Onboarding",
+      primaryEmpty: "Complete setup to lock the workspace defaults.",
+      secondaryTitle: "Setup steps",
+      secondaryItems: ["Company basics", "Segment detection", "Plan selection", "Workspace seeding", "Channel activation"]
+    },
+    channels: {
+      title: "Channel Hub",
+      primaryTitle: "Unified triage",
+      primaryEmpty: "No intake requests are waiting.",
+      secondaryTitle: "Connected channels",
+      secondaryItems: ["WhatsApp", "Voice", "Email", "Portal"]
+    },
+    reports: {
+      title: workspace.segment === "COMMUNITY" ? "Board Reports" : "Reports",
+      primaryTitle: "ROI dashboard",
+      primaryEmpty: "ROI metrics will appear after operational activity.",
+      secondaryTitle: "Report outputs",
+      secondaryItems: ["Monthly value email", "Channel capture", "Client report pack", "Baseline deltas"]
+    },
     jobs: {
       title: jobs,
       primaryTitle: `Open ${jobs.toLowerCase()}`,
