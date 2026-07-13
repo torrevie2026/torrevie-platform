@@ -417,7 +417,7 @@ Status: Completed on 2026-07-11.
 
 ## WP-24: Production environment provisioning
 
-Status: In progress on 2026-07-12.
+Status: Completed on 2026-07-13.
 
 - Supabase production project: `rhntonxblbhxsvdpmius` (`torrevie-production`) in `torrevie2026's Org`.
 - Supabase production URL: `https://rhntonxblbhxsvdpmius.supabase.co`.
@@ -450,6 +450,80 @@ Status: In progress on 2026-07-12.
   - Supabase Auth custom access-token hook returns `role_scope = 'platform'` for the first platform admin user.
   - Fresh Vercel production runtime error scans for the Admin Portal returned no errors after the service-role env redeploy.
 
+## WP-25: First production release
+
+Status: Completed on 2026-07-13.
+
+- Scope:
+  - Human production login smoke test completed against `https://admin.torrevie.com`.
+  - Admin Portal shell rendered for `dev@torrevie.com`.
+  - The shell showed `Platform access`.
+- Verification:
+  - Browser screenshot supplied by Semaan on 2026-07-13.
+- Acceptance:
+  - `admin.torrevie.com` is reachable, the platform admin can sign in, and the Control Plane shell renders.
+
 ## Open Questions
 
-- WP-24 production provisioning is complete pending only a human login smoke test with the first platform admin credentials.
+- None for the completed foundation sequence.
+
+## WP-26: FSM alignment audit and safety net
+
+Status: Completed on 2026-07-13.
+
+- Scope:
+  - Added the FSM audit documentation structure under `docs/fsm/`.
+  - Added `docs/fsm/STAGING_STATE.md` with confirmed staging stack, routes, navigation, enums, tables, database functions, Edge Functions, provider usage, and RLS inventory.
+  - Added `docs/fsm/PLATFORM_MAPPING.md` mapping staging tenancy, roles, modules, entitlements, jobs, channels, functions, and files to the platform architecture.
+  - Added `docs/fsm/reports/PHASE_0.md`.
+  - Added `pnpm test:fsm-phase0` as a named wrapper around the existing auth tenant-claim and tenant-context smoke tests.
+  - Excluded `reference/` from Git ignore, Prettier, and ESLint processing.
+- Decisions:
+  - Used `docs/architecture/PROGRESS.md` because no root `PROGRESS.md` exists.
+  - Mapped prompt references to `organizations` onto platform `tenants`.
+  - Treated the existing platform plans and entitlements tables as the starting point for FSM plan work.
+  - Treated the responsive technician PWA as the implementation target until a Flutter checkpoint is explicitly approved.
+- Verification:
+  - `pnpm test:fsm-phase0`
+  - `pnpm lint`
+  - `pnpm typecheck`
+- Acceptance:
+  - Staging export is present under `reference/fsm-staging/`.
+  - Route, table, function, Edge Function, and RLS inventory are documented.
+  - Mapping conflicts and platform resolutions are documented.
+  - No FSM schema, route, entitlement, or provider implementation was introduced.
+
+## WP-27: FSM segmentation and plans
+
+Status: Completed on 2026-07-13.
+
+- Scope:
+  - Added `business_segment` and `plan_tier` enums and tenant-level FSM configuration columns.
+  - Seeded FSM Entry, Growth, and Enterprise plan features through the platform plan and entitlement tables.
+  - Added `org_feature_overrides` with RLS, audit support, expiry, and reason metadata.
+  - Added `public.get_org_entitlements(org_id)` to merge active subscription entitlements with active overrides.
+  - Added Admin Portal controls for FSM segment, plan tier summary, and feature overrides.
+  - Added server-side FSM seat-limit checks in customer and staff tenant-user invitation flows.
+  - Updated RBAC documentation and permission seeds for `fsm.settings.manage` and `fsm.entitlement.override`.
+- Decisions:
+  - Used platform `tenants` where the prompt named `organizations`.
+  - Reused the existing platform subscription and entitlement model instead of adding a parallel FSM entitlement layer.
+  - Restricted FSM feature overrides to Torrevie platform and billing roles.
+  - Counted `customer_standard_user` as an FSM field user and customer admin, module admin, manager, and readonly roles as FSM office users until FSM product roles are introduced.
+  - Added explicit grants for new public schema objects alongside RLS.
+- Verification:
+  - `pnpm supabase:reset`
+  - `pnpm exec supabase db advisors --local`
+  - `pnpm test`
+  - `pnpm test:fsm-entitlements`
+  - `pnpm test:isolation`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+- Acceptance:
+  - Entry tenants do not receive PM, SLA, inspections, or contracts from plan entitlements.
+  - A feature override grants PM above Entry in the smoke test.
+  - Tenant isolation tests cover `org_feature_overrides`.
+  - Seat limits are enforced server-side in user invitation paths.
+- Report:
+  - `docs/fsm/reports/PHASE_1.md`

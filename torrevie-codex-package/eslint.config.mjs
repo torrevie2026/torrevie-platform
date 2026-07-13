@@ -8,7 +8,8 @@ export default tseslint.config(
       "coverage/**",
       "dist/**",
       "node_modules/**",
-      "pnpm-lock.yaml"
+      "pnpm-lock.yaml",
+      "reference/**"
     ]
   },
   js.configs.recommended,
@@ -20,9 +21,12 @@ export default tseslint.config(
       sourceType: "module",
       globals: {
         Buffer: "readonly",
+        caches: "readonly",
         console: "readonly",
         fetch: "readonly",
-        process: "readonly"
+        process: "readonly",
+        self: "readonly",
+        URL: "readonly"
       }
     },
     rules: {

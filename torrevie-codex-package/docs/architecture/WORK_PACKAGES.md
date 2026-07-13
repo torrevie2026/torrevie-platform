@@ -223,4 +223,84 @@ Dependencies: WP-24.
 
 ## After WP-25
 
+## Phase H - Torrevie FSM Revamp
+
+These packages implement TRV-FSM-2026-001. They continue the sequence after WP-25 and remain bound by `AGENTS.md`, `DATABASE_LLD.md`, `RLS_POLICY_SPEC.md`, `AUTH_LLD.md`, `RBAC_MATRIX.md`, and the brand specification.
+
+### WP-26: FSM alignment audit and safety net
+
+Objective: audit the Lovable staging export at `reference/fsm-staging/`, map it to the platform architecture, and add smoke coverage for the current login and tenant flows before FSM implementation starts.
+Allowed: `docs/fsm/`, this work-package file, `docs/architecture/PROGRESS.md`, smoke-test scripts, and ignore rules that keep `reference/` out of builds.
+Prohibited: FSM schema, product routes, entitlement changes, provider integration code, or migrations.
+Requirements:
+- Read the required governance documents before editing.
+- Produce `docs/fsm/STAGING_STATE.md` with route, table, Edge Function, and RLS inventory from the staging export.
+- Produce `docs/fsm/PLATFORM_MAPPING.md` mapping staging concepts to platform concepts.
+- Add a named smoke-test command for current login and tenant-context flows.
+- Record blockers if `reference/fsm-staging/` is missing.
+Tests: `pnpm test:fsm-phase0`, plus existing lint and typecheck.
+Acceptance: mapping docs exist, smoke tests pass, and no product behavior or schema changes are introduced.
+Dependencies: WP-25 and availability of the staging export for full acceptance.
+
+### WP-27: FSM segmentation and plans
+
+Objective: add business segments, FSM plan tiers, entitlement resolution, and platform admin controls.
+Allowed: migrations, shared entitlement package work, Admin Portal controls, tests, and documentation.
+Requirements:
+- Use platform tenant, subscription, and entitlement mechanics. Do not create a parallel organization or role system.
+- Add RLS and isolation tests for every new tenant-scoped table.
+- Existing platform tenants keep current behavior.
+Acceptance: Entry tenants cannot use PM, SLA, inspections, or contracts; overrides grant one feature above tier; seat limits are enforced.
+Dependencies: WP-26.
+
+### WP-28: FSM adaptive UX and onboarding
+
+Objective: add segment navigation profiles, terminology packs, adaptive dashboards, flow settings, and the five-step onboarding wizard.
+Requirements:
+- Profiles and terminology are data-driven and locale-aware.
+- Shared UI remains RTL-ready.
+- Onboarding applies industry defaults, segment overlays, and at least one intake channel before finish.
+Acceptance: five test tenants, one per segment, show correct menu, terms, dashboard widgets, and default flow.
+Dependencies: WP-27.
+
+### WP-29: FSM Channel Hub core
+
+Objective: implement the unified intake model, WhatsApp adapter refactor, portal and QR intake, email intake, and triage rework.
+Requirements:
+- Every channel writes `intake_requests`.
+- Provider names remain behind adapters.
+- Credential tables protect secrets and never expose raw values to browser code.
+Acceptance: WhatsApp, portal, and inbound email requests appear in one triage queue and convert to jobs with `source_channel` stamped.
+Dependencies: WP-28.
+
+### WP-30: FSM voice agent
+
+Objective: add the provider-agnostic voice adapter, Vapi implementation, voice webhook tools, call logs, provisioning flow, minute caps, and Channel Hub usage display.
+Requirements:
+- Stop at checkpoints before creating billed telephony, Vapi, Twilio, or UAE provider resources.
+- Secure webhooks with per-channel secrets.
+- Document UAE call-forwarding and licensed-provider constraints in the admin UI.
+Acceptance: a test call identifies a known caller, creates an intake request, records transcript and call metadata, and respects caps.
+Dependencies: WP-29 and explicit checkpoint approval for any billed resource.
+
+### WP-31: FSM brand and ROI
+
+Objective: apply Torrevie brand tokens across FSM, add the ROI dashboard, baseline capture, monthly value email, PDF footer behavior, and client report packs.
+Requirements:
+- No surface uses colors outside the locked palette except approved status colors.
+- Generated documents carry tenant identity plus the Torrevie footer unless Enterprise white-label entitlement removes it.
+Acceptance: contrast checks pass, ROI dashboard renders real seeded data, and generated PDFs comply with the brand footer rule.
+Dependencies: WP-30.
+
+### WP-32: FSM hardening
+
+Objective: finish RLS coverage, load-test intake webhooks, add rate limiting, and complete FSM operating documentation.
+Requirements:
+- Add `docs/fsm/SEGMENTS.md`, `docs/fsm/ENTITLEMENTS.md`, `docs/fsm/CHANNELS.md`, and update the README.
+- Add `docs/UAT.md` with five personas and ten-step happy paths.
+Acceptance: cross-tenant access attempts fail, rate limits protect public endpoints, load tests meet agreed thresholds, and documentation is complete.
+Dependencies: WP-31.
+
+---
+
 Once WP-25 is complete, the platform has a working, deployed foundation: tenancy, identity, roles, entitlements, the Control Plane, and a working CRM vertical slice, live on production infrastructure. From here, continue into the HLD's Implementation Roadmap (Section 41), Phase 6 onward: FSM and the Flutter mobile foundation, TEX, LQS and the AI gateway, CME, integrations, and enterprise hardening — each following the same pattern of schema, RLS, tests, feature build, staging validation, and a reviewed production release.

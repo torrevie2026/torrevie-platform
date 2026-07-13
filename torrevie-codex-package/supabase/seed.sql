@@ -31,6 +31,8 @@ insert into public.permissions (key, description) values
   ('fsm.work_order.read', 'Read work orders'),
   ('fsm.work_order.update_assigned', 'Update assigned work orders'),
   ('fsm.work_order.manage', 'Full work order administration'),
+  ('fsm.entitlement.override', 'Grant or revoke FSM feature overrides for a tenant'),
+  ('fsm.settings.manage', 'Manage FSM segment, plan, onboarding, and flow settings'),
   ('tex.expense.submit', 'Submit an expense claim'),
   ('tex.expense.read', 'Read TEX expense claims'),
   ('tex.expense.manage', 'Create or edit TEX expense claims for a tenant'),
@@ -59,12 +61,25 @@ on conflict (key) do update set label = excluded.label;
 insert into public.plans (product_id, key, label)
 select products.id, plan_keys.key, plan_keys.label
 from public.products
-cross join (
+join (
   values
-    ('starter', 'Starter'),
-    ('growth', 'Growth'),
-    ('enterprise', 'Enterprise')
-) as plan_keys(key, label)
+    ('crm', 'starter', 'Starter'),
+    ('crm', 'growth', 'Growth'),
+    ('crm', 'enterprise', 'Enterprise'),
+    ('fsm', 'entry', 'Entry'),
+    ('fsm', 'growth', 'Growth'),
+    ('fsm', 'enterprise', 'Enterprise'),
+    ('tex', 'starter', 'Starter'),
+    ('tex', 'growth', 'Growth'),
+    ('tex', 'enterprise', 'Enterprise'),
+    ('cme', 'starter', 'Starter'),
+    ('cme', 'growth', 'Growth'),
+    ('cme', 'enterprise', 'Enterprise'),
+    ('lqs', 'starter', 'Starter'),
+    ('lqs', 'growth', 'Growth'),
+    ('lqs', 'enterprise', 'Enterprise')
+) as plan_keys(product_key, key, label)
+  on plan_keys.product_key = products.key
 on conflict (product_id, key) do update set label = excluded.label;
 
 insert into public.plan_features (plan_id, feature_key, limit_value)
@@ -139,6 +154,8 @@ join public.permissions on permissions.key in (
   'fsm.work_order.read',
   'fsm.work_order.update_assigned',
   'fsm.work_order.manage',
+  'fsm.entitlement.override',
+  'fsm.settings.manage',
   'tex.expense.submit',
   'tex.expense.read',
   'tex.expense.manage',
@@ -175,7 +192,7 @@ on conflict do nothing;
 insert into public.role_permissions (role_id, permission_id)
 select roles.id, permissions.id
 from public.roles
-join public.permissions on permissions.key in ('platform.subscription.manage', 'platform.audit.read_all')
+join public.permissions on permissions.key in ('platform.subscription.manage', 'platform.audit.read_all', 'fsm.entitlement.override')
 where roles.key = 'torrevie_billing_admin'
 on conflict do nothing;
 
@@ -202,6 +219,7 @@ join public.permissions on permissions.key in (
   'fsm.work_order.read',
   'fsm.work_order.update_assigned',
   'fsm.work_order.manage',
+  'fsm.settings.manage',
   'tex.expense.submit',
   'tex.expense.read',
   'tex.expense.manage',
@@ -231,6 +249,7 @@ join public.permissions on permissions.key in (
   'crm.opportunity.write',
   'crm.pipeline.manage',
   'fsm.work_order.manage',
+  'fsm.settings.manage',
   'tex.expense.read',
   'tex.expense.manage',
   'tex.policy.manage',
@@ -257,7 +276,8 @@ join public.permissions on permissions.key in (
   'tex.finance.review',
   'tex.trip.manage',
   'tex.receipt.review',
-  'fsm.work_order.manage'
+  'fsm.work_order.manage',
+  'fsm.settings.manage'
 )
 where roles.key = 'customer_manager'
 on conflict do nothing;

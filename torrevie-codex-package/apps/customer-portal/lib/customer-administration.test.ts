@@ -27,10 +27,21 @@ const standardContext: CustomerAdminContext = {
 class RecordingTenantClient implements TenantQueryClient {
   readonly calls: Array<{ sql: string; values: readonly QueryValue[] }> = [];
 
-  constructor(private readonly memberRows: unknown[] = []) {}
+  constructor(
+    private readonly memberRows: unknown[] = [],
+    private readonly options: { fsmEntitlementRows?: unknown[]; fsmSeatUsageCount?: number } = {}
+  ) {}
 
   async query<Row>(sql: string, values: readonly QueryValue[] = []): Promise<QueryResult<Row>> {
     this.calls.push({ sql, values });
+
+    if (sql.includes("from public.get_org_entitlements")) {
+      return { rows: (this.options.fsmEntitlementRows ?? []) as Row[] };
+    }
+
+    if (sql.includes("count(distinct tm.user_id)")) {
+      return { rows: [{ count: this.options.fsmSeatUsageCount ?? 0 }] as Row[] };
+    }
 
     if (sql.includes("from public.roles")) {
       return { rows: [{ id: "00000000-0000-4000-8000-000000000901" }] as Row[] };
@@ -148,6 +159,23 @@ async function main() {
       /Role cannot be assigned/
     );
     assert.equal(client.calls.length, 0);
+  }
+
+  {
+    const client = new RecordingTenantClient([], {
+      fsmEntitlementRows: [{ feature_key: "fsm.users.office.max", limit_value: 1 }],
+      fsmSeatUsageCount: 1
+    });
+    await assert.rejects(
+      () =>
+        inviteCustomerUser(client, adminContext, {
+          email: "office-limit@example.test",
+          role: "customer_manager"
+        }),
+      /FSM office user limit of 1/
+    );
+    assert.equal(client.hasSql("public.get_org_entitlements"), true);
+    assert.equal(client.hasSql("count(distinct tm.user_id)"), true);
   }
 
   {

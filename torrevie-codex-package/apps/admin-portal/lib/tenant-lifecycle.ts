@@ -8,6 +8,10 @@ export type TenantRecord = {
   name: string;
   slug: string;
   status: TenantStatus;
+  business_segment?: string;
+  plan_tier?: string;
+  terminology_pack?: string;
+  nav_profile?: string;
   region: string | null;
   legal_entity_name: string | null;
   billing_email: string | null;
@@ -34,6 +38,10 @@ type TenantRow = {
   name: string;
   slug: string;
   status: TenantStatus;
+  business_segment?: string;
+  plan_tier?: string;
+  terminology_pack?: string;
+  nav_profile?: string;
   region: string | null;
   legal_entity_name: string | null;
   billing_email: string | null;
@@ -44,7 +52,7 @@ type TenantRow = {
 export async function listTenants(client: SupabaseClient): Promise<TenantRecord[]> {
   const { data, error } = await client
     .from("tenants")
-    .select("id,name,slug,status,region,legal_entity_name,billing_email,created_at,updated_at")
+    .select("id,name,slug,status,business_segment,plan_tier,terminology_pack,nav_profile,region,legal_entity_name,billing_email,created_at,updated_at")
     .order("created_at", { ascending: false });
 
   if (error) {
