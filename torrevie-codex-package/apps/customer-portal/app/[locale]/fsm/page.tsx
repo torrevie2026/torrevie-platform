@@ -11,8 +11,9 @@ import {
 import { PostgresTenantQueryClient } from "../../../lib/server/tenant-query-client";
 import { resolveFsmWorkspace, type FsmWorkspace } from "../../../lib/fsm";
 import { listChannelHubSnapshot, type ChannelHubSnapshot } from "../../../lib/fsm/channels";
+import { listFsmRoiDashboard, type FsmRoiDashboard } from "../../../lib/fsm/roi";
 import { CustomerSessionActions } from "../CustomerSessionActions";
-import { createManualIntakeRequestAction, requestVoiceChannelSetupAction, saveFsmOnboardingAction } from "./actions";
+import { createManualIntakeRequestAction, requestVoiceChannelSetupAction, saveFsmOnboardingAction, saveFsmRoiSettingsAction } from "./actions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ export default async function FsmPage({
   searchParams
 }: {
   params: Promise<{ locale: string }>;
-  searchParams?: Promise<{ section?: string; saved?: string; intake?: string; voice?: string }>;
+  searchParams?: Promise<{ section?: string; saved?: string; intake?: string; voice?: string; roi?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const resolvedSearchParams = await searchParams;
@@ -57,6 +58,7 @@ export default async function FsmPage({
 
     const workspace = await resolveFsmWorkspace(client, tenantContext, locale);
     const channelHub = section === "channels" ? await listChannelHubSnapshot(client, tenantContext) : null;
+    const roiDashboard = section === "reports" ? await listFsmRoiDashboard(client, tenantContext, workspace) : null;
 
     return (
       <main className="customer-shell fsm-shell" data-visual-check="fsm-module-shell" lang={locale} dir={dirForLocale(locale)}>
@@ -102,11 +104,14 @@ export default async function FsmPage({
           {resolvedSearchParams?.saved === "1" ? <p className="tex-notice">FSM onboarding settings saved.</p> : null}
           {resolvedSearchParams?.intake === "created" ? <p className="tex-notice">Intake request created.</p> : null}
           {resolvedSearchParams?.voice === "requested" ? <p className="tex-notice">Voice setup request created.</p> : null}
+          {resolvedSearchParams?.roi === "saved" ? <p className="tex-notice">ROI settings saved.</p> : null}
 
           {section === "onboarding" ? (
             <FsmOnboarding workspace={workspace} locale={locale} />
           ) : section === "channels" ? (
             <ChannelHub snapshot={channelHub} workspace={workspace} locale={locale} />
+          ) : section === "reports" ? (
+            <RoiDashboard dashboard={roiDashboard} workspace={workspace} locale={locale} />
           ) : (
             <FsmDashboard workspace={workspace} locale={locale} />
           )}
@@ -120,6 +125,129 @@ export default async function FsmPage({
 
     throw error;
   }
+}
+
+function RoiDashboard({ dashboard, workspace, locale }: { dashboard: FsmRoiDashboard | null; workspace: FsmWorkspace; locale: Locale }) {
+  const data =
+    dashboard ??
+    {
+      periodLabel: "This month",
+      completedRequestsThisWeek: 0,
+      capturedRequestsThisMonth: 0,
+      averageResponseMinutes: null,
+      responseBaselineHours: null,
+      responseDeltaMinutes: null,
+      firstTimeFixRate: null,
+      slaComplianceRate: null,
+      revenueInvoiced: 0,
+      afterHoursCaptured: 0,
+      adminMinutesSavedPerRequest: 20,
+      adminHoursSaved: 0,
+      channelBreakdown: [],
+      monthlyValueEmail: { subject: "", previewText: "", bodyText: "" },
+      clientReportPack: { title: "", available: false, footer: "", sections: [] }
+    };
+
+  return (
+    <>
+      <section className="fsm-roi-hero" aria-label="ROI dashboard">
+        <div>
+          <span>{data.periodLabel}</span>
+          <h2>ROI dashboard</h2>
+          <p>Track captured requests, saved admin time, response speed, and reporting readiness.</p>
+        </div>
+        <strong>{formatHours(data.adminHoursSaved, locale)} saved</strong>
+      </section>
+
+      <section className="fsm-widget-grid" aria-label="ROI metrics">
+        <RoiMetric label="Requests captured" value={formatNumber(data.capturedRequestsThisMonth, locale)} detail="From all intake channels" />
+        <RoiMetric label="Completed this week" value={formatNumber(data.completedRequestsThisWeek, locale)} detail="Converted or closed requests" />
+        <RoiMetric label="Average response" value={formatMinutes(data.averageResponseMinutes, locale)} detail={responseDetail(data.responseDeltaMinutes, locale)} />
+        <RoiMetric label="After-hours capture" value={formatNumber(data.afterHoursCaptured, locale)} detail="WhatsApp and voice" />
+        <RoiMetric label="Revenue invoiced" value={`AED ${formatNumber(data.revenueInvoiced, locale)}`} detail="Pending FSM invoices" />
+        <RoiMetric label="First-time fix" value={formatPercent(data.firstTimeFixRate, locale)} detail="Pending FSM jobs" />
+        <RoiMetric label="SLA compliance" value={formatPercent(data.slaComplianceRate, locale)} detail="Pending SLA records" />
+        <RoiMetric label="Admin time saved" value={formatHours(data.adminHoursSaved, locale)} detail={`${data.adminMinutesSavedPerRequest} minutes per request`} />
+      </section>
+
+      <section className="fsm-workspace-grid" aria-label="ROI supporting data">
+        <article className="fsm-panel">
+          <div className="section-heading-row">
+            <h2>Channel capture</h2>
+            <span className="module-status module-status-active">{data.channelBreakdown.length} channels</span>
+          </div>
+          <div className="fsm-roi-bars">
+            {data.channelBreakdown.length === 0 ? <p className="empty">No captured requests yet.</p> : null}
+            {data.channelBreakdown.map((item) => (
+              <div key={item.channelType}>
+                <span>{item.channelType}</span>
+                <meter min="0" max={Math.max(...data.channelBreakdown.map((channel) => channel.count), 1)} value={item.count} />
+                <strong>{formatNumber(item.count, locale)}</strong>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <aside className="fsm-panel">
+          <h2>ROI settings</h2>
+          <form action={saveFsmRoiSettingsAction} className="fsm-channel-form">
+            <input type="hidden" name="locale" value={locale} />
+            <label>
+              Jobs per month baseline
+              <input name="jobsPerMonthToday" type="number" min="0" defaultValue={readString(workspace.baselineMetrics["jobsPerMonthToday"], "")} />
+            </label>
+            <label>
+              Response hours baseline
+              <input
+                name="averageResponseHoursToday"
+                type="number"
+                min="0"
+                step="0.5"
+                defaultValue={readString(workspace.baselineMetrics["averageResponseHoursToday"], "")}
+              />
+            </label>
+            <label>
+              Minutes saved per request
+              <input name="adminMinutesSavedPerRequest" type="number" min="1" defaultValue={data.adminMinutesSavedPerRequest} />
+            </label>
+            <button type="submit" className="tex-primary-button">Save ROI settings</button>
+          </form>
+        </aside>
+      </section>
+
+      <section className="fsm-workspace-grid" aria-label="Monthly reports">
+        <article className="fsm-panel">
+          <h2>Monthly value email</h2>
+          <div className="fsm-roi-preview">
+            <strong>{data.monthlyValueEmail.subject}</strong>
+            <p>{data.monthlyValueEmail.previewText}</p>
+            <pre>{data.monthlyValueEmail.bodyText}</pre>
+          </div>
+        </article>
+
+        <aside className="fsm-panel">
+          <h2>Client report pack</h2>
+          <p className="empty">{data.clientReportPack.available ? "Enterprise report pack is available." : "Enterprise report pack is locked."}</p>
+          <ul className="fsm-flow-list">
+            {data.clientReportPack.sections.map((section) => (
+              <li key={section}>{section}</li>
+            ))}
+          </ul>
+          {data.clientReportPack.footer ? <p className="fsm-document-footer">{data.clientReportPack.footer}</p> : null}
+        </aside>
+      </section>
+    </>
+  );
+}
+
+function RoiMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <article className="fsm-widget">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+    </article>
+  );
 }
 
 function ChannelHub({ snapshot, workspace, locale }: { snapshot: ChannelHubSnapshot | null; workspace: FsmWorkspace; locale: Locale }) {
@@ -451,6 +579,46 @@ function readString(value: unknown, fallback: string) {
   }
 
   return fallback;
+}
+
+function formatNumber(value: number, locale: Locale) {
+  return new Intl.NumberFormat(locale).format(value);
+}
+
+function formatHours(value: number, locale: Locale) {
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value)}h`;
+}
+
+function formatMinutes(value: number | null, locale: Locale) {
+  if (value === null) {
+    return "Pending";
+  }
+
+  return `${new Intl.NumberFormat(locale).format(value)}m`;
+}
+
+function formatPercent(value: number | null, locale: Locale) {
+  if (value === null) {
+    return "Pending";
+  }
+
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0, style: "percent" }).format(value);
+}
+
+function responseDetail(deltaMinutes: number | null, locale: Locale) {
+  if (deltaMinutes === null) {
+    return "Baseline pending";
+  }
+
+  if (deltaMinutes > 0) {
+    return `${formatMinutes(deltaMinutes, locale)} faster than baseline`;
+  }
+
+  if (deltaMinutes < 0) {
+    return `${formatMinutes(Math.abs(deltaMinutes), locale)} slower than baseline`;
+  }
+
+  return "Matches baseline";
 }
 
 function voiceSetupLabel(value: unknown) {

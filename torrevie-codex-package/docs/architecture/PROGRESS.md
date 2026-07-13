@@ -620,3 +620,39 @@ Status: Completed on 2026-07-13.
   - Minute-cap warning behavior is covered by smoke tests.
 - Report:
   - `docs/fsm/reports/PHASE_4.md`
+
+## WP-31: FSM brand and ROI
+
+Status: Completed on 2026-07-13.
+
+- Scope:
+  - Added a Torrevie FSM ROI dashboard under the reports section.
+  - Added tenant-scoped ROI aggregates from `intake_requests` and `call_logs`.
+  - Added editable ROI settings for baseline jobs per month, baseline response time, and estimated admin minutes saved per request.
+  - Added monthly value email text generation in Torrevie style.
+  - Added client report pack summary helpers and the fixed Torrevie FSM document footer.
+  - Added Enterprise white-label footer suppression through `fsm.white_label.portal.enabled`.
+  - Updated Customer Portal metadata and PWA manifest for Torrevie FSM.
+  - Added the approved Torrevie mark and locked slogan to the Customer Portal login page.
+  - Removed Customer Portal gradients, drawer shadow, and off-token danger fallbacks touched by this phase.
+  - Added `pnpm test:fsm-roi` and included it in the normal test chain.
+- Decisions:
+  - Used existing Channel Hub data for ROI until FSM jobs, invoices, inspections, and SLA records exist.
+  - Treated converted and closed intake requests as the temporary proxy for completed operational work.
+  - Rendered revenue, first-time-fix, and SLA compliance as pending metrics until their source tables exist.
+  - Kept monthly value email as generated text rather than a scheduled sender because the FSM notification workflow is not implemented yet.
+  - Kept client report packs as a summary artifact until PDF generation exists.
+  - Changed Customer Portal primary buttons to navy so turquoise stays an accent.
+- Verification:
+  - `pnpm test:fsm-roi`
+  - `pnpm test:fsm-adaptive-ux`
+  - `pnpm lint`
+  - `pnpm typecheck`
+- Acceptance:
+  - ROI dashboard renders real numbers from existing tenant intake and call-log data.
+  - Baseline and admin-time assumptions are editable and audited.
+  - Monthly value email copy follows Torrevie style and includes the required footer.
+  - Client report pack helper applies the Torrevie footer and respects Enterprise white-label suppression.
+  - Customer Portal metadata, PWA manifest, login mark, slogan, and touched UI styles align to the locked brand rules.
+- Report:
+  - `docs/fsm/reports/PHASE_5.md`

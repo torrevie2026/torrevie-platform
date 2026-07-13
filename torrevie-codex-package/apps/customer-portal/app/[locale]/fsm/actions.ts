@@ -6,6 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import { buildOnboardingInput, saveFsmOnboarding } from "../../../lib/fsm";
 import { createManualIntakeRequest, requestVoiceChannelSetup, type ChannelType } from "../../../lib/fsm/channels";
 import { normalizeBusinessSegment } from "../../../config/fsmSegments";
+import { buildFsmRoiSettingsInput, saveFsmRoiSettings } from "../../../lib/fsm/roi";
 import { normalizeVoiceSetupInput } from "../../../lib/fsm/voice";
 import {
   getCustomerAccessRequirements,
@@ -113,6 +114,36 @@ export async function requestVoiceChannelSetupAction(formData: FormData) {
 
   revalidatePath(`/${locale}/fsm`);
   redirect(`/${locale}/fsm?section=channels&voice=requested`);
+}
+
+export async function saveFsmRoiSettingsAction(formData: FormData) {
+  const locale = stringValue(formData, "locale");
+
+  if (!isLocale(locale)) {
+    notFound();
+  }
+
+  const session = await requireVerifiedCustomerSession();
+  const client = new PostgresTenantQueryClient(session.userId);
+  const tenantContext = await resolveCustomerTenantContext(client, session);
+  const requirements = await getCustomerAccessRequirements(client, tenantContext);
+
+  if (requirements.requireProfileCompletion && !requirements.profileComplete) {
+    redirect(`/${locale}/account?profile=required`);
+  }
+
+  await saveFsmRoiSettings(
+    client,
+    tenantContext,
+    buildFsmRoiSettingsInput({
+      jobsPerMonthToday: stringValue(formData, "jobsPerMonthToday"),
+      averageResponseHoursToday: stringValue(formData, "averageResponseHoursToday"),
+      adminMinutesSavedPerRequest: stringValue(formData, "adminMinutesSavedPerRequest")
+    })
+  );
+
+  revalidatePath(`/${locale}/fsm`);
+  redirect(`/${locale}/fsm?section=reports&roi=saved`);
 }
 
 function stringValue(formData: FormData, key: string) {

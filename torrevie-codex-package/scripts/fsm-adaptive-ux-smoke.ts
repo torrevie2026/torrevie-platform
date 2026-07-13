@@ -25,9 +25,10 @@ assert.equal(suggestedPlanForSegment("SOLO"), "entry");
 assert.equal(suggestedPlanForSegment("TRADE"), "growth");
 assert.equal(suggestedPlanForSegment("FM"), "enterprise");
 
-const entryTradeNav = navForSegment("TRADE", new Set(["fsm.channel.whatsapp.enabled"]));
+const entryTradeNav = navForSegment("TRADE", new Set(["fsm.channel.whatsapp.enabled", "fsm.roi.basic.enabled"]));
 assert.equal(entryTradeNav.some((item) => item.key === "pm"), false);
 assert.equal(entryTradeNav.some((item) => item.key === "whatsapp"), true);
+assert.equal(entryTradeNav.some((item) => item.key === "reports"), true);
 
 const growthTradeNav = navForSegment("TRADE", new Set(["fsm.module.pm", "fsm.module.contracts", "fsm.channel.whatsapp.enabled"]));
 assert.equal(growthTradeNav.some((item) => item.key === "pm"), true);

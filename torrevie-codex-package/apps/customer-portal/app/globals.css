@@ -289,9 +289,7 @@ a {
 }
 
 .tex-dashboard-hero {
-  background:
-    linear-gradient(135deg, rgba(0, 146, 139, 0.94), rgba(7, 34, 73, 0.95)),
-    url("/logo/torrevie_logo_color.png");
+  background: var(--color-bg-inverse);
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover, 260px;
@@ -315,7 +313,7 @@ a {
 
 .tex-hero-copy .eyebrow,
 .tex-hero-copy p {
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--color-text-inverse);
 }
 
 .tex-hero-copy h2 {
@@ -344,7 +342,7 @@ a {
 }
 
 .tex-secondary-link {
-  border: 1px solid rgba(255, 255, 255, 0.42);
+  border: 1px solid var(--color-text-inverse);
   border-radius: 6px;
   color: var(--color-text-inverse);
   font-size: 13px;
@@ -355,8 +353,8 @@ a {
 
 .tex-hero-signal {
   align-content: center;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: var(--color-bg-inverse);
+  border: 1px solid var(--color-accent);
   border-radius: 8px;
   display: grid;
   gap: 12px;
@@ -368,7 +366,7 @@ a {
 
 .tex-hero-signal span,
 .tex-hero-signal small {
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--color-text-inverse);
   font-weight: 700;
 }
 
@@ -379,9 +377,7 @@ a {
 .tex-signal-ring {
   align-items: center;
   aspect-ratio: 1;
-  background:
-    radial-gradient(circle at center, rgba(255, 255, 255, 0.08) 0 52%, transparent 53%),
-    conic-gradient(#e7b341 0 38%, rgba(255, 255, 255, 0.2) 38% 100%);
+  background: var(--color-accent-secondary);
   border-radius: 999px;
   display: inline-flex;
   inline-size: 96px;
@@ -559,7 +555,7 @@ a {
 }
 
 .tex-bar-track i {
-  background: linear-gradient(90deg, var(--color-accent), var(--color-accent-secondary));
+  background: var(--color-accent);
   block-size: 100%;
   border-radius: inherit;
   display: block;
@@ -585,7 +581,7 @@ a {
 
 .tex-status-column span {
   align-self: end;
-  background: linear-gradient(180deg, var(--color-status-warning), var(--color-accent));
+  background: var(--color-accent-secondary);
   border-radius: 8px 8px 3px 3px;
   display: block;
   inline-size: 100%;
@@ -1054,7 +1050,7 @@ form.member-row {
 }
 
 .tex-row-actions .tex-danger-button {
-  background: var(--color-danger, #b42318);
+  background: var(--color-status-error);
 }
 
 .tex-settings-summary {
@@ -1424,6 +1420,111 @@ form.member-row {
   padding-block-end: 10px;
 }
 
+.fsm-roi-hero {
+  align-items: center;
+  background: var(--color-bg-inverse);
+  border-radius: 8px;
+  color: var(--color-text-inverse);
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  padding: 24px;
+}
+
+.fsm-roi-hero span {
+  color: var(--color-accent);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.fsm-roi-hero h2 {
+  color: var(--color-text-inverse);
+  font-size: 28px;
+  margin: 6px 0;
+}
+
+.fsm-roi-hero p {
+  color: var(--color-text-inverse);
+  margin: 0;
+  max-inline-size: 620px;
+}
+
+.fsm-roi-hero strong {
+  color: var(--color-text-inverse);
+  font-size: 32px;
+  white-space: nowrap;
+}
+
+.fsm-roi-bars {
+  display: grid;
+  gap: 14px;
+  margin-block-start: 18px;
+}
+
+.fsm-roi-bars div {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(90px, 0.35fr) minmax(120px, 1fr) auto;
+}
+
+.fsm-roi-bars span,
+.fsm-roi-bars strong {
+  color: var(--color-text-primary);
+  text-transform: capitalize;
+}
+
+.fsm-roi-bars meter {
+  block-size: 10px;
+  inline-size: 100%;
+}
+
+.fsm-roi-bars meter::-webkit-meter-bar {
+  background: var(--color-bg-surface);
+  border: 0;
+  border-radius: 999px;
+}
+
+.fsm-roi-bars meter::-webkit-meter-optimum-value {
+  background: var(--color-accent);
+  border-radius: 999px;
+}
+
+.fsm-roi-preview {
+  background: var(--color-bg-surface);
+  border-inline-start: 4px solid var(--color-accent);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  margin-block-start: 16px;
+  padding: 16px;
+}
+
+.fsm-roi-preview strong {
+  color: var(--color-text-primary);
+}
+
+.fsm-roi-preview p {
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.fsm-roi-preview pre {
+  color: var(--color-text-primary);
+  font-family: var(--font-family-base);
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.fsm-document-footer {
+  border-block-start: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  margin-block-start: 16px;
+  padding-block-start: 12px;
+}
+
 .crm-workspace {
   align-items: start;
   display: grid;
@@ -1681,7 +1782,7 @@ form.member-row {
 }
 
 .customer-session-actions button {
-  color: var(--color-danger, #b42318);
+  color: var(--color-status-error);
   inline-size: 100%;
 }
 
@@ -1945,7 +2046,6 @@ form.member-row {
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  box-shadow: 0 24px 70px color-mix(in srgb, var(--color-text-primary) 24%, transparent);
   display: grid;
   gap: 16px;
   inline-size: min(560px, 100%);
@@ -2050,7 +2150,7 @@ form.member-row {
 }
 
 .tex-primary-button {
-  background: var(--color-accent);
+  background: var(--color-bg-inverse);
   border: 0;
   color: var(--color-text-inverse);
   min-block-size: 42px;
@@ -2404,8 +2504,13 @@ form.member-row {
 .brand {
   color: var(--color-accent);
   font-weight: 700;
-  margin: 0 0 24px;
+  margin: 12px 0 4px;
   text-transform: uppercase;
+}
+
+.login-slogan {
+  color: var(--color-text-muted);
+  margin: 0 0 24px;
 }
 
 .login-panel h1 {
@@ -2432,7 +2537,7 @@ form.member-row {
 }
 
 .login-panel button {
-  background: var(--color-accent);
+  background: var(--color-bg-inverse);
   border: 0;
   border-radius: 6px;
   color: var(--color-text-inverse);
@@ -2645,6 +2750,20 @@ form.member-row {
   .fsm-progress-band {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .fsm-roi-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .fsm-roi-hero strong {
+    white-space: normal;
+  }
+
+  .fsm-roi-bars div {
+    align-items: stretch;
+    grid-template-columns: 1fr;
   }
 
   .fsm-widget strong {
