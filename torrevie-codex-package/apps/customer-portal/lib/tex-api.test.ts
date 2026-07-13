@@ -487,14 +487,57 @@ async function main() {
 
   {
     const client = new RecordingTexApiClient();
+    const previousKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    const previousFetch = globalThis.fetch;
+    delete process.env.GOOGLE_MAPS_API_KEY;
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY = "test-public-google-key";
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          suggestions: [
+            {
+              placePrediction: {
+                placeId: "places/gpi",
+                text: { text: "GPI DIP, Dubai, United Arab Emirates" }
+              }
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    const response = await handleTexApiRequest(client, actor, {
+      method: "GET",
+      path: "/places",
+      query: { input: "GPI DIP" }
+    });
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) {
+      delete process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    } else {
+      process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY = previousKey;
+    }
+    assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /GPI DIP/);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
     const previousKeys = {
       GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
       GOOGLE_MAPS_PLATFORM_KEY: process.env.GOOGLE_MAPS_PLATFORM_KEY,
+      NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
+      NEXT_PUBLIC_GOOGLE_MAPS_PLATFORM_KEY: process.env.NEXT_PUBLIC_GOOGLE_MAPS_PLATFORM_KEY,
+      VITE_GOOGLE_MAPS_API_KEY: process.env.VITE_GOOGLE_MAPS_API_KEY,
+      VITE_GOOGLE_MAPS_PLATFORM_KEY: process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY,
       GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
       GOOGLE_AI_KEY: process.env.GOOGLE_AI_KEY
     };
     delete process.env.GOOGLE_MAPS_API_KEY;
     delete process.env.GOOGLE_MAPS_PLATFORM_KEY;
+    delete process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    delete process.env.NEXT_PUBLIC_GOOGLE_MAPS_PLATFORM_KEY;
+    delete process.env.VITE_GOOGLE_MAPS_API_KEY;
+    delete process.env.VITE_GOOGLE_MAPS_PLATFORM_KEY;
     delete process.env.GOOGLE_API_KEY;
     delete process.env.GOOGLE_AI_KEY;
     const response = await handleTexApiRequest(client, actor, {
