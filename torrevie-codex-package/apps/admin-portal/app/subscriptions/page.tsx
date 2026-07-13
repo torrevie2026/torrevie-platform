@@ -2,16 +2,28 @@ import { notFound, redirect } from "next/navigation";
 import { AdminSidebar } from "../components/AdminSidebar";
 import { getSupabaseAdminClient } from "../../lib/admin-client";
 import { getPlatformSession } from "../../lib/session";
-import { listSubscriptionCatalog, listSubscriptions, subscriptionStatuses } from "../../lib/subscription-management";
+import {
+  businessSegments,
+  fsmPlanTiers,
+  listFeatureOverrides,
+  listSubscriptionCatalog,
+  listSubscriptions,
+  subscriptionStatuses
+} from "../../lib/subscription-management";
 import { listTenants } from "../../lib/tenant-lifecycle";
-import { assignSubscriptionAction, inviteTenantAdminAction } from "./actions";
+import {
+  assignSubscriptionAction,
+  inviteTenantAdminAction,
+  updateFsmTenantControlsAction,
+  upsertFeatureOverrideAction
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function SubscriptionsPage({
   searchParams
 }: {
-  searchParams: Promise<{ assigned?: string; invited?: string; tenantId?: string }>;
+  searchParams: Promise<{ assigned?: string; invited?: string; tenantId?: string; fsmControls?: string; override?: string }>;
 }) {
   const session = await getPlatformSession();
 
@@ -20,10 +32,11 @@ export default async function SubscriptionsPage({
   }
 
   const client = getSupabaseAdminClient();
-  const [tenants, plans, subscriptions] = await Promise.all([
+  const [tenants, plans, subscriptions, overrides] = await Promise.all([
     listTenants(client),
     listSubscriptionCatalog(client),
-    listSubscriptions(client)
+    listSubscriptions(client),
+    listFeatureOverrides(client)
   ]).catch(() => {
     notFound();
   });
@@ -114,6 +127,114 @@ export default async function SubscriptionsPage({
             Customer admin invitation sent to {selectedTenant.billing_email ?? "the tenant billing email"}.
           </p>
         ) : null}
+
+        {selectedTenant && params.fsmControls === "1" ? (
+          <p className="notice">FSM controls updated for {selectedTenant.name}.</p>
+        ) : null}
+
+        {selectedTenant && params.override === "1" ? (
+          <p className="notice">FSM feature override saved for {selectedTenant.name}.</p>
+        ) : null}
+
+        <section className="panel" aria-label="FSM controls">
+          <h2>FSM segmentation and plan controls</h2>
+          <form action={updateFsmTenantControlsAction} className="subscription-form">
+            <label>
+              Tenant
+              <select name="tenantId" required>
+                {tenants.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>
+                    {tenant.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Segment
+              <select name="businessSegment" defaultValue="TRADE">
+                {businessSegments.map((segment) => (
+                  <option key={segment} value={segment}>
+                    {segment}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              FSM plan tier
+              <select name="planTier" defaultValue="growth">
+                {fsmPlanTiers.map((tier) => (
+                  <option key={tier} value={tier}>
+                    {tier}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" disabled={tenants.length === 0}>
+              Save FSM controls
+            </button>
+          </form>
+        </section>
+
+        <section className="panel" aria-label="FSM feature override">
+          <h2>FSM feature override</h2>
+          <form action={upsertFeatureOverrideAction} className="subscription-form">
+            <label>
+              Tenant
+              <select name="tenantId" required>
+                {tenants.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>
+                    {tenant.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Feature key
+              <input name="featureKey" placeholder="fsm.module.pm" required />
+            </label>
+            <label>
+              Enabled
+              <select name="enabled" defaultValue="true">
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select>
+            </label>
+            <label>
+              Limit
+              <input name="limitValue" type="number" min="0" />
+            </label>
+            <label>
+              Expires
+              <input name="expiresAt" type="date" />
+            </label>
+            <label>
+              Reason
+              <input name="reason" placeholder="Growth trial override" required />
+            </label>
+            <button type="submit" disabled={tenants.length === 0}>
+              Save override
+            </button>
+          </form>
+          <div className="subscription-list">
+            {overrides.length === 0 ? <p className="empty">No FSM overrides have been granted.</p> : null}
+            {overrides.slice(0, 6).map((override) => (
+              <article key={override.id} className="subscription-row">
+                <div>
+                  <strong>{tenantNames.get(override.tenant_id) ?? override.tenant_id}</strong>
+                  <span>{override.feature_key}</span>
+                </div>
+                <div>
+                  <strong>{override.enabled ? "enabled" : "disabled"}</strong>
+                  <span>{override.limit_value === null ? "No limit override" : `Limit ${override.limit_value}`}</span>
+                </div>
+                <div>
+                  <strong>{override.expires_at ? formatDate(override.expires_at) : "No expiry"}</strong>
+                  <span>{override.reason}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
 
         <section className="panel" aria-label="Current subscriptions">
           <h2>Current subscriptions</h2>

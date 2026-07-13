@@ -36,6 +36,8 @@
 | fsm.work_order.read | Read work orders |
 | fsm.work_order.update_assigned | Update a work order the technician is assigned to |
 | fsm.work_order.manage | Full work order administration |
+| fsm.settings.manage | Manage FSM segment, onboarding, and flow settings |
+| fsm.entitlement.override | Grant or revoke FSM feature overrides for a tenant |
 | tex.expense.submit | Submit an expense claim |
 | tex.expense.approve | Approve an expense claim at an assigned approval step |
 | tex.policy.manage | Configure expense policies |
@@ -52,9 +54,9 @@
 | torrevie_platform_admin | platform.provision, platform.subscription.manage, platform.support_access.grant, platform.audit.read_all, all customer_admin-equivalent permissions for support purposes only, exercised via a support-access session |
 | torrevie_operations_admin | platform.provision, platform.support_access.grant |
 | torrevie_support_agent | platform.support_access.grant (session-scoped only), platform.audit.read_all (read-only) |
-| torrevie_billing_admin | platform.subscription.manage (read/write), platform.audit.read_all (billing-relevant events only) |
+| torrevie_billing_admin | platform.subscription.manage (read/write), fsm.entitlement.override, platform.audit.read_all (billing-relevant events only) |
 | torrevie_security_admin | platform.audit.read_all, tenant.role.assign (review only, not routine use) |
-| customer_admin | tenant.settings.manage, tenant.user.invite, tenant.user.manage, tenant.role.assign, and every product permission for products the tenant is subscribed to |
+| customer_admin | tenant.settings.manage, tenant.user.invite, tenant.user.manage, tenant.role.assign, fsm.settings.manage, and every product permission for products the tenant is subscribed to |
 | customer_module_admin | Full write access within one subscribed product only, for example crm.pipeline.manage, but not tenant.user.manage |
 | customer_manager | crm.opportunity.write (any record, not just own), tex.expense.approve, fsm.work_order.manage |
 | customer_standard_user | crm.account.read, crm.opportunity.read/write (own records only), fsm.work_order.update_assigned, tex.expense.submit, cme.content.draft, lqs.lead.qualify |

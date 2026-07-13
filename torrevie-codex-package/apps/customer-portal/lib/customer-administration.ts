@@ -8,6 +8,14 @@ export const assignableCustomerRoles = roleKeys.filter(
 export const membershipStatuses = ["active", "invited", "disabled"] as const;
 export type MembershipStatus = (typeof membershipStatuses)[number];
 
+const fsmFieldRoles = new Set<RoleKey>(["customer_standard_user"]);
+const fsmOfficeRoles = new Set<RoleKey>([
+  "customer_admin",
+  "customer_module_admin",
+  "customer_manager",
+  "customer_readonly"
+]);
+
 export type CustomerAdminContext = ResolvedTenantContext & {
   roles: readonly RoleKey[];
 };
@@ -152,6 +160,7 @@ export async function inviteCustomerUser(
 
   return withTenantContext(client, actor, async () => {
     await assertWebUserLimitAllowsInvite(client, email);
+    await assertFsmSeatLimitAllowsInvite(client, email, role);
 
     const userId = await upsertUserIdentity(client, email, actor.userId);
 
@@ -748,6 +757,65 @@ async function assertWebUserLimitAllowsInvite(client: TenantQueryClient, email: 
   }
 }
 
+async function assertFsmSeatLimitAllowsInvite(client: TenantQueryClient, email: string, role: RoleKey) {
+  const seatCategory = getFsmSeatCategory(role);
+  if (!seatCategory) {
+    return;
+  }
+
+  const limitResult = await client.query<EntitlementRow>(
+    `
+      select feature_key, limit_value
+      from public.get_org_entitlements(public.current_tenant_id())
+      where feature_key = $1
+    `,
+    [seatCategory.featureKey]
+  );
+  const limit = pickExplicitLimit(limitResult.rows, seatCategory.featureKey);
+
+  if (limit === undefined || limit === null) {
+    return;
+  }
+
+  const existingUserResult = await client.query<{ id: string; status: MembershipStatus | null }>(
+    `
+      select u.id, tm.status
+      from public.users u
+      left join public.tenant_memberships tm
+        on tm.tenant_id = public.current_tenant_id()
+       and tm.user_id = u.id
+      where lower(u.email) = $1
+      limit 1
+    `,
+    [email]
+  );
+  const existing = existingUserResult.rows[0];
+
+  if (existing?.status === "active" || existing?.status === "invited") {
+    return;
+  }
+
+  const usageResult = await client.query<{ count: number }>(
+    `
+      select count(distinct tm.user_id)::int as count
+      from public.tenant_memberships tm
+      join public.user_role_assignments ura
+        on ura.tenant_id = tm.tenant_id
+       and ura.user_id = tm.user_id
+      join public.roles r on r.id = ura.role_id
+      where tm.tenant_id = public.current_tenant_id()
+        and tm.status in ('active', 'invited')
+        and ${seatCategory.rolePredicate}
+    `
+  );
+
+  if ((usageResult.rows[0]?.count ?? 0) >= limit) {
+    throw new Error(
+      `This tenant has reached its FSM ${seatCategory.label} user limit of ${limit}. Upgrade the plan or disable a user before inviting another one.`
+    );
+  }
+}
+
 async function assertWhatsappProviderProfileLimitAllowsSave(client: TenantQueryClient, label: string) {
   const limitResult = await client.query<EntitlementRow>(
     `
@@ -1076,6 +1144,20 @@ function pickLimit(rows: readonly EntitlementRow[], featureKey: string) {
   return pickMostPermissiveLimit(rows.filter((row) => row.feature_key === featureKey));
 }
 
+function pickExplicitLimit(rows: readonly EntitlementRow[], featureKey: string) {
+  const matching = rows.filter((row) => row.feature_key === featureKey);
+
+  if (matching.length === 0) {
+    return undefined;
+  }
+
+  if (matching.some((row) => row.limit_value === null)) {
+    return null;
+  }
+
+  return Math.max(...matching.map((row) => row.limit_value ?? 0));
+}
+
 function pickMostPermissiveLimit(rows: readonly EntitlementRow[]) {
   if (rows.length === 0) {
     return 5;
@@ -1086,6 +1168,26 @@ function pickMostPermissiveLimit(rows: readonly EntitlementRow[]) {
   }
 
   return Math.max(...rows.map((row) => row.limit_value ?? 0));
+}
+
+function getFsmSeatCategory(role: RoleKey) {
+  if (fsmFieldRoles.has(role)) {
+    return {
+      featureKey: "fsm.users.field.max",
+      label: "field",
+      rolePredicate: "r.key = 'customer_standard_user'"
+    };
+  }
+
+  if (fsmOfficeRoles.has(role)) {
+    return {
+      featureKey: "fsm.users.office.max",
+      label: "office",
+      rolePredicate: "r.key in ('customer_admin', 'customer_module_admin', 'customer_manager', 'customer_readonly')"
+    };
+  }
+
+  return null;
 }
 
 function sanitizeEmailReportFrequency(value: string): "off" | "daily" | "weekly" | "monthly" {

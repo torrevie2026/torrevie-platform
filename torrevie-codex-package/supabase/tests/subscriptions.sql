@@ -12,7 +12,7 @@ where products.key = 'crm' and plans.key = 'starter';
 insert into public.subscriptions (id, tenant_id, product_id, plan_id, status, starts_at)
 select '00000000-0000-0000-0000-000000006602', '00000000-0000-0000-0000-000000001602', products.id, plans.id, 'active', now()
 from public.products join public.plans on plans.product_id = products.id
-where products.key = 'fsm' and plans.key = 'starter';
+where products.key = 'fsm' and plans.key = 'entry';
 
 set local role authenticated;
 set local app.current_tenant_id = '00000000-0000-0000-0000-000000001601';

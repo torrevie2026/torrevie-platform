@@ -31,6 +31,8 @@ export const permissionKeys = [
   "fsm.work_order.read",
   "fsm.work_order.update_assigned",
   "fsm.work_order.manage",
+  "fsm.entitlement.override",
+  "fsm.settings.manage",
   "tex.expense.submit",
   "tex.expense.read",
   "tex.expense.manage",
@@ -78,7 +80,7 @@ export type PermissionContext = {
 };
 
 const customerAdminEquivalentPermissions = permissionKeys.filter(
-  (permission) => !permission.startsWith("platform.")
+  (permission) => !permission.startsWith("platform.") && permission !== "fsm.entitlement.override"
 );
 
 const baseRolePermissions = {
@@ -91,7 +93,7 @@ const baseRolePermissions = {
   ],
   torrevie_operations_admin: ["platform.provision", "platform.support_access.grant"],
   torrevie_support_agent: ["platform.support_access.grant", "platform.audit.read_all"],
-  torrevie_billing_admin: ["platform.subscription.manage", "platform.audit.read_all"],
+  torrevie_billing_admin: ["platform.subscription.manage", "platform.audit.read_all", "fsm.entitlement.override"],
   torrevie_security_admin: ["platform.audit.read_all", "tenant.role.assign"],
   customer_admin: customerAdminEquivalentPermissions,
   customer_module_admin: [
@@ -103,6 +105,7 @@ const baseRolePermissions = {
     "fsm.work_order.read",
     "fsm.work_order.update_assigned",
     "fsm.work_order.manage",
+    "fsm.settings.manage",
     "tex.expense.submit",
     "tex.expense.read",
     "tex.expense.manage",
@@ -130,7 +133,8 @@ const baseRolePermissions = {
     "tex.trip.manage",
     "tex.people.manage",
     "tex.receipt.review",
-    "fsm.work_order.manage"
+    "fsm.work_order.manage",
+    "fsm.settings.manage"
   ],
   customer_standard_user: [
     "crm.account.read",

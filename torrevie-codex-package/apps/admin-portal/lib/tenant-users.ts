@@ -14,6 +14,14 @@ export const tenantMembershipStatuses = ["active", "invited", "disabled"] as con
 export type CustomerRoleKey = (typeof customerRoleKeys)[number];
 export type TenantMembershipStatus = (typeof tenantMembershipStatuses)[number];
 
+const fsmFieldRoles = new Set<CustomerRoleKey>(["customer_standard_user"]);
+const fsmOfficeRoles = new Set<CustomerRoleKey>([
+  "customer_admin",
+  "customer_module_admin",
+  "customer_manager",
+  "customer_readonly"
+]);
+
 export type TenantUserRecord = {
   userId: string;
   email: string;
@@ -94,6 +102,11 @@ type RoleAssignmentRow = {
 type RoleRow = {
   id: string;
   key: CustomerRoleKey;
+};
+
+type EntitlementRow = {
+  feature_key: string;
+  limit_value: number | null;
 };
 
 export async function listTenantUsers(client: SupabaseClient, tenantId: string): Promise<TenantUserRecord[]> {
@@ -185,6 +198,8 @@ export async function inviteTenantUser(client: SupabaseClient, input: TenantUser
   const tenant = await getTenant(client, input.tenantId);
   const email = sanitizeEmail(input.email);
   const role = sanitizeCustomerRole(input.role);
+  await assertFsmSeatLimitAllowsTenantInvite(client, tenant.id, email, role);
+
   const { userId, actionLink } = await createInviteLink(client, email);
 
   await upsertUser(client, userId, email, actorUserId);
@@ -445,6 +460,78 @@ async function setRequirePasswordChange(
   if (error) {
     throw new Error(`Unable to set password change requirement: ${error.message}`);
   }
+}
+
+async function assertFsmSeatLimitAllowsTenantInvite(
+  client: SupabaseClient,
+  tenantId: string,
+  email: string,
+  role: CustomerRoleKey
+) {
+  const seatCategory = getFsmSeatCategory(role);
+  if (!seatCategory) {
+    return;
+  }
+
+  const { data, error } = await client.rpc("get_org_entitlements", { org_id: tenantId });
+  if (error) {
+    throw new Error(`Unable to resolve FSM entitlements: ${error.message}`);
+  }
+
+  const limit = pickExplicitLimit((data ?? []) as EntitlementRow[], seatCategory.featureKey);
+  if (limit === undefined || limit === null) {
+    return;
+  }
+
+  const members = await listTenantUsers(client, tenantId);
+  const existing = members.find((member) => member.email.toLowerCase() === email);
+  if (existing?.status === "active" || existing?.status === "invited") {
+    return;
+  }
+
+  const used = members.filter(
+    (member) => (member.status === "active" || member.status === "invited") && member.role && seatCategory.roles.has(member.role)
+  ).length;
+
+  if (used >= limit) {
+    throw new Error(
+      `This tenant has reached its FSM ${seatCategory.label} user limit of ${limit}. Upgrade the plan or disable a user before inviting another one.`
+    );
+  }
+}
+
+function pickExplicitLimit(rows: readonly EntitlementRow[], featureKey: string) {
+  const matching = rows.filter((row) => row.feature_key === featureKey);
+
+  if (matching.length === 0) {
+    return undefined;
+  }
+
+  if (matching.some((row) => row.limit_value === null)) {
+    return null;
+  }
+
+  return Math.max(...matching.map((row) => row.limit_value ?? 0));
+}
+
+function getFsmSeatCategory(role: CustomerRoleKey) {
+  if (fsmFieldRoles.has(role)) {
+    return {
+      featureKey: "fsm.users.field.max",
+      label: "field",
+      roles: fsmFieldRoles
+    };
+  }
+
+  if (fsmOfficeRoles.has(role)) {
+    return {
+      featureKey: "fsm.users.office.max",
+      label: "office",
+      roles: fsmOfficeRoles
+    };
+  }
+
+  return null;
 }
 
 async function writeTenantUserAuditEvent(

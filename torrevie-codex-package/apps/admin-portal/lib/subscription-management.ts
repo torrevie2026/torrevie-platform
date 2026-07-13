@@ -3,6 +3,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const subscriptionStatuses = ["trial", "active", "expired", "cancelled"] as const;
 export type SubscriptionStatus = (typeof subscriptionStatuses)[number];
+export const businessSegments = ["SOLO", "TRADE", "FM", "COMMUNITY", "OEM"] as const;
+export type BusinessSegment = (typeof businessSegments)[number];
+export const fsmPlanTiers = ["entry", "growth", "enterprise"] as const;
+export type FsmPlanTier = (typeof fsmPlanTiers)[number];
 
 export type ProductRecord = {
   id: string;
@@ -40,6 +44,31 @@ export type SubscriptionAssignmentInput = {
   status: SubscriptionStatus;
   startsAt: string;
   expiresAt?: string | null;
+};
+
+export type FsmTenantControlsInput = {
+  tenantId: string;
+  businessSegment: BusinessSegment;
+  planTier: FsmPlanTier;
+};
+
+export type FeatureOverrideInput = {
+  tenantId: string;
+  featureKey: string;
+  enabled: boolean;
+  limitValue?: number | null;
+  reason: string;
+  expiresAt?: string | null;
+};
+
+export type FeatureOverrideRecord = {
+  id: string;
+  tenant_id: string;
+  feature_key: string;
+  enabled: boolean;
+  limit_value: number | null;
+  reason: string;
+  expires_at: string | null;
 };
 
 type PlanFeatureRow = {
@@ -169,6 +198,9 @@ export async function assignSubscription(
 
   const subscription = data as SubscriptionRow;
   await replaceEntitlementsFromPlan(client, subscription, sanitized.planId, actorUserId);
+  if (plan.product_key === "fsm" && isFsmPlanTier(plan.key)) {
+    await updateTenantPlanTier(client, sanitized.tenantId, plan.key, actorUserId);
+  }
   await writeSubscriptionAuditEvent(client, {
     tenantId: sanitized.tenantId,
     actorUserId,
@@ -189,6 +221,101 @@ export async function assignSubscription(
     plan_label: plan.label,
     entitlement_count: await countEntitlements(client, subscription.id)
   };
+}
+
+export async function updateFsmTenantControls(
+  client: SupabaseClient,
+  input: FsmTenantControlsInput,
+  actorUserId: string
+) {
+  const sanitized = sanitizeFsmTenantControls(input);
+  const profile = profileForSegment(sanitized.businessSegment);
+  const { data, error } = await client
+    .from("tenants")
+    .update({
+      business_segment: sanitized.businessSegment,
+      plan_tier: sanitized.planTier,
+      terminology_pack: profile,
+      nav_profile: profile,
+      updated_by: actorUserId
+    })
+    .eq("id", sanitized.tenantId)
+    .select("id,business_segment,plan_tier,terminology_pack,nav_profile")
+    .single();
+
+  if (error) {
+    throw new Error(`Unable to update FSM tenant controls: ${error.message}`);
+  }
+
+  await writeSubscriptionAuditEvent(client, {
+    tenantId: sanitized.tenantId,
+    actorUserId,
+    action: "fsm.tenant_controls.updated",
+    targetType: "tenant",
+    targetId: sanitized.tenantId,
+    metadata: {
+      business_segment: sanitized.businessSegment,
+      plan_tier: sanitized.planTier
+    }
+  });
+
+  return data;
+}
+
+export async function upsertFeatureOverride(
+  client: SupabaseClient,
+  input: FeatureOverrideInput,
+  actorUserId: string
+): Promise<FeatureOverrideRecord> {
+  const sanitized = sanitizeFeatureOverride(input);
+  const { data, error } = await client
+    .from("org_feature_overrides")
+    .upsert(
+      {
+        tenant_id: sanitized.tenantId,
+        feature_key: sanitized.featureKey,
+        enabled: sanitized.enabled,
+        limit_value: sanitized.limitValue,
+        reason: sanitized.reason,
+        expires_at: sanitized.expiresAt,
+        created_by: actorUserId,
+        updated_by: actorUserId
+      },
+      { onConflict: "tenant_id,feature_key" }
+    )
+    .select("id,tenant_id,feature_key,enabled,limit_value,reason,expires_at")
+    .single();
+
+  if (error) {
+    throw new Error(`Unable to save feature override: ${error.message}`);
+  }
+
+  await writeSubscriptionAuditEvent(client, {
+    tenantId: sanitized.tenantId,
+    actorUserId,
+    action: "fsm.entitlement.override_saved",
+    targetType: "org_feature_override",
+    targetId: data.id,
+    metadata: {
+      feature_key: sanitized.featureKey,
+      enabled: String(sanitized.enabled)
+    }
+  });
+
+  return data as FeatureOverrideRecord;
+}
+
+export async function listFeatureOverrides(client: SupabaseClient): Promise<FeatureOverrideRecord[]> {
+  const { data, error } = await client
+    .from("org_feature_overrides")
+    .select("id,tenant_id,feature_key,enabled,limit_value,reason,expires_at")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Unable to list feature overrides: ${error.message}`);
+  }
+
+  return (data ?? []) as FeatureOverrideRecord[];
 }
 
 export async function getEntitledProducts(client: SupabaseClient, tenantId: string): Promise<ProductKey[]> {
@@ -292,16 +419,23 @@ async function writeSubscriptionAuditEvent(
     tenantId: string;
     actorUserId: string;
     action: string;
-    subscriptionId: string;
+    subscriptionId?: string;
+    targetType?: string;
+    targetId?: string;
     metadata: Record<string, string>;
   }
 ) {
+  const targetId = event.targetId ?? event.subscriptionId;
+  if (!targetId) {
+    throw new Error("Audit event target id is missing.");
+  }
+
   const { error } = await client.from("audit_events").insert({
     tenant_id: event.tenantId,
     actor_user_id: event.actorUserId,
     action: event.action,
-    target_type: "subscription",
-    target_id: event.subscriptionId,
+    target_type: event.targetType ?? "subscription",
+    target_id: targetId,
     metadata: event.metadata
   });
 
@@ -344,6 +478,83 @@ function parseDate(value: string, label: string) {
 function assertSubscriptionStatus(status: string): asserts status is SubscriptionStatus {
   if (!subscriptionStatuses.includes(status as SubscriptionStatus)) {
     throw new Error(`Unsupported subscription status: ${status}`);
+  }
+}
+
+function sanitizeFsmTenantControls(input: FsmTenantControlsInput): FsmTenantControlsInput {
+  assertUuid(input.tenantId, "tenant id");
+  assertBusinessSegment(input.businessSegment);
+  assertFsmPlanTier(input.planTier);
+  return input;
+}
+
+function sanitizeFeatureOverride(input: FeatureOverrideInput): Required<FeatureOverrideInput> {
+  assertUuid(input.tenantId, "tenant id");
+  const featureKey = input.featureKey.trim();
+  const reason = input.reason.trim();
+
+  if (!/^fsm\.[a-z0-9_.]+$/.test(featureKey)) {
+    throw new Error("Feature key must be an FSM feature key.");
+  }
+
+  if (reason.length < 3) {
+    throw new Error("Override reason must be at least 3 characters.");
+  }
+
+  let limitValue: number | null = null;
+  if (input.limitValue !== null && input.limitValue !== undefined) {
+    if (!Number.isInteger(input.limitValue) || input.limitValue < 0) {
+      throw new Error("Override limit must be a non-negative integer.");
+    }
+    limitValue = input.limitValue;
+  }
+
+  return {
+    tenantId: input.tenantId,
+    featureKey,
+    enabled: input.enabled,
+    limitValue,
+    reason,
+    expiresAt: input.expiresAt ? parseDate(input.expiresAt, "override expiry").toISOString() : null
+  };
+}
+
+function assertBusinessSegment(segment: string): asserts segment is BusinessSegment {
+  if (!businessSegments.includes(segment as BusinessSegment)) {
+    throw new Error(`Unsupported business segment: ${segment}`);
+  }
+}
+
+function assertFsmPlanTier(planTier: string): asserts planTier is FsmPlanTier {
+  if (!fsmPlanTiers.includes(planTier as FsmPlanTier)) {
+    throw new Error(`Unsupported FSM plan tier: ${planTier}`);
+  }
+}
+
+function isFsmPlanTier(planTier: string): planTier is FsmPlanTier {
+  return fsmPlanTiers.includes(planTier as FsmPlanTier);
+}
+
+function profileForSegment(segment: BusinessSegment) {
+  return segment.toLowerCase();
+}
+
+async function updateTenantPlanTier(
+  client: SupabaseClient,
+  tenantId: string,
+  planTier: FsmPlanTier,
+  actorUserId: string
+) {
+  const { error } = await client
+    .from("tenants")
+    .update({
+      plan_tier: planTier,
+      updated_by: actorUserId
+    })
+    .eq("id", tenantId);
+
+  if (error) {
+    throw new Error(`Unable to update tenant plan tier: ${error.message}`);
   }
 }
 

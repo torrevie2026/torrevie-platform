@@ -5,7 +5,17 @@ import { notFound, redirect } from "next/navigation";
 import { getSupabaseAdminClient } from "../../lib/admin-client";
 import { sendTenantAdminInvitationEmail } from "../../lib/onboarding-invitations";
 import { getPlatformSession } from "../../lib/session";
-import { assignSubscription, subscriptionStatuses, type SubscriptionStatus } from "../../lib/subscription-management";
+import {
+  assignSubscription,
+  businessSegments,
+  fsmPlanTiers,
+  subscriptionStatuses,
+  type BusinessSegment,
+  type FsmPlanTier,
+  type SubscriptionStatus,
+  updateFsmTenantControls,
+  upsertFeatureOverride
+} from "../../lib/subscription-management";
 
 export async function assignSubscriptionAction(formData: FormData) {
   const session = await requirePlatformSession();
@@ -36,6 +46,41 @@ export async function inviteTenantAdminAction(formData: FormData) {
   redirect(`/subscriptions?invited=1&tenantId=${encodeURIComponent(tenantId)}`);
 }
 
+export async function updateFsmTenantControlsAction(formData: FormData) {
+  const session = await requirePlatformSession();
+  await updateFsmTenantControls(
+    getSupabaseAdminClient(),
+    {
+      tenantId: stringValue(formData, "tenantId"),
+      businessSegment: businessSegmentValue(formData),
+      planTier: fsmPlanTierValue(formData)
+    },
+    session.userId
+  );
+
+  revalidatePath("/subscriptions");
+  redirect(`/subscriptions?fsmControls=1&tenantId=${encodeURIComponent(stringValue(formData, "tenantId"))}`);
+}
+
+export async function upsertFeatureOverrideAction(formData: FormData) {
+  const session = await requirePlatformSession();
+  await upsertFeatureOverride(
+    getSupabaseAdminClient(),
+    {
+      tenantId: stringValue(formData, "tenantId"),
+      featureKey: stringValue(formData, "featureKey"),
+      enabled: stringValue(formData, "enabled") === "true",
+      limitValue: optionalIntegerValue(formData, "limitValue"),
+      reason: stringValue(formData, "reason"),
+      expiresAt: stringValue(formData, "expiresAt")
+    },
+    session.userId
+  );
+
+  revalidatePath("/subscriptions");
+  redirect(`/subscriptions?override=1&tenantId=${encodeURIComponent(stringValue(formData, "tenantId"))}`);
+}
+
 async function requirePlatformSession() {
   const session = await getPlatformSession();
 
@@ -58,4 +103,36 @@ function statusValue(formData: FormData): SubscriptionStatus {
   }
 
   return status as SubscriptionStatus;
+}
+
+function businessSegmentValue(formData: FormData): BusinessSegment {
+  const segment = stringValue(formData, "businessSegment");
+
+  if (!businessSegments.includes(segment as BusinessSegment)) {
+    throw new Error(`Unsupported business segment: ${segment}`);
+  }
+
+  return segment as BusinessSegment;
+}
+
+function fsmPlanTierValue(formData: FormData): FsmPlanTier {
+  const planTier = stringValue(formData, "planTier");
+
+  if (!fsmPlanTiers.includes(planTier as FsmPlanTier)) {
+    throw new Error(`Unsupported FSM plan tier: ${planTier}`);
+  }
+
+  return planTier as FsmPlanTier;
+}
+
+function optionalIntegerValue(formData: FormData, key: string) {
+  const raw = stringValue(formData, key).trim();
+  if (!raw) return null;
+  const value = Number(raw);
+
+  if (!Number.isInteger(value)) {
+    throw new Error(`${key} must be an integer.`);
+  }
+
+  return value;
 }
