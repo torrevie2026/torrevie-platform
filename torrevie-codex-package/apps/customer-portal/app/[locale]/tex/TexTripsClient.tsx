@@ -108,8 +108,10 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
   const [showClosed, setShowClosed] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [busyTripId, setBusyTripId] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [tripNotice, setTripNotice] = useState<string | null>(null);
+  const [tripError, setTripError] = useState<string | null>(null);
+  const [legsNotice, setLegsNotice] = useState<string | null>(null);
+  const [legsError, setLegsError] = useState<string | null>(null);
 
   const openTrips = useMemo(() => trips.filter((trip) => trip.status === "open"), [trips]);
   const closedTrips = useMemo(() => trips.filter((trip) => trip.status !== "open"), [trips]);
@@ -140,14 +142,14 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
       subcontractorAmount: trip.subcontractorAmount ? String(trip.subcontractorAmount) : "",
       subcontractorNotes: ""
     });
-    setNotice(null);
-    setError(null);
+    setTripNotice(null);
+    setTripError(null);
   }
 
   async function saveTrip() {
     setIsSaving(true);
-    setNotice(null);
-    setError(null);
+    setTripNotice(null);
+    setTripError(null);
 
     try {
       const payload: TexTripInput = {
@@ -173,11 +175,11 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
         method: form.id ? "PATCH" : "POST",
         body: JSON.stringify(payload)
       });
-      setNotice(form.id ? "Trip updated." : "Trip created.");
+      setTripNotice(form.id ? "Trip updated." : "Trip created.");
       setForm(blankTripForm());
       await refreshTrips();
     } catch (caught) {
-      setError(errorMessage(caught));
+      setTripError(errorMessage(caught));
     } finally {
       setIsSaving(false);
     }
@@ -185,15 +187,15 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
 
   async function closeTrip(tripId: string) {
     setBusyTripId(tripId);
-    setNotice(null);
-    setError(null);
+    setTripNotice(null);
+    setTripError(null);
 
     try {
       await texFetch(`/trips/${tripId}/close`, { method: "PATCH", body: "{}" });
-      setNotice("Trip closed.");
+      setTripNotice("Trip closed.");
       await refreshTrips();
     } catch (caught) {
-      setError(errorMessage(caught));
+      setTripError(errorMessage(caught));
     } finally {
       setBusyTripId(null);
     }
@@ -203,14 +205,14 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
     setLegsTrip(trip);
     setLegs([]);
     setLegsLoading(true);
-    setNotice(null);
-    setError(null);
+    setLegsNotice(null);
+    setLegsError(null);
 
     try {
       const response = await texFetch<{ legs: TexTripLeg[] }>(`/trips/${trip.id}/legs`);
       setLegs(response.legs.map(mapLegForForm));
     } catch (caught) {
-      setError(errorMessage(caught));
+      setLegsError(errorMessage(caught));
     } finally {
       setLegsLoading(false);
     }
@@ -252,8 +254,8 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
     }
 
     setLegsSaving(true);
-    setNotice(null);
-    setError(null);
+    setLegsNotice(null);
+    setLegsError(null);
 
     try {
       const response = await texFetch<{ legs: TexTripLeg[] }>(`/trips/${legsTrip.id}/legs`, {
@@ -261,10 +263,10 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
         body: JSON.stringify({ legs: legs.map(mapLegForApi) })
       });
       setLegs(response.legs.map(mapLegForForm));
-      setNotice("Trip legs saved.");
+      setLegsNotice("Trip legs saved.");
       await refreshTrips();
     } catch (caught) {
-      setError(errorMessage(caught));
+      setLegsError(errorMessage(caught));
     } finally {
       setLegsSaving(false);
     }
@@ -278,12 +280,12 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
     }
 
     if (!leg.origin.trim() || !leg.destination.trim()) {
-      setError("Origin and destination are required before estimating a leg.");
+      setLegsError("Origin and destination are required before estimating a leg.");
       return;
     }
 
     if (leg.mode && leg.mode !== "road") {
-      setError("Google Maps route estimates are available for road legs.");
+      setLegsError("Google Maps route estimates are available for road legs.");
       return;
     }
 
@@ -292,8 +294,8 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
     }
 
     setEstimatingLegIndex(index);
-    setNotice(null);
-    setError(null);
+    setLegsNotice(null);
+    setLegsError(null);
 
     try {
       const response = await texFetch<{
@@ -325,9 +327,9 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
         distanceSource: response.estimate.source,
         routePolyline: response.estimate.routePolyline ?? ""
       });
-      setNotice("Google Maps distance estimated.");
+      setLegsNotice("Google Maps distance estimated.");
     } catch (caught) {
-      setError(errorMessage(caught));
+      setLegsError(errorMessage(caught));
     } finally {
       setEstimatingLegIndex(null);
     }
@@ -448,8 +450,8 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
         <button type="button" className="tex-primary-button" disabled={isSaving || !form.name.trim()} onClick={saveTrip}>
           {isSaving ? "Saving..." : form.id ? "Update trip" : "Create trip"}
         </button>
-        {notice ? <p className="tex-notice">{notice}</p> : null}
-        {error ? <p className="tex-error">{error}</p> : null}
+        {tripNotice ? <p className="tex-notice">{tripNotice}</p> : null}
+        {tripError ? <p className="tex-error">{tripError}</p> : null}
       </section>
 
       <section className="tex-form-panel" aria-labelledby="tex-trip-list-title">
@@ -480,7 +482,15 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
                 {legDistanceTotal(legs) > 0 ? ` - ${formatAmount(legDistanceTotal(legs))} km total` : ""}
               </p>
             </div>
-            <button type="button" className="tex-secondary-button" onClick={() => setLegsTrip(null)}>
+            <button
+              type="button"
+              className="tex-secondary-button"
+              onClick={() => {
+                setLegsTrip(null);
+                setLegsNotice(null);
+                setLegsError(null);
+              }}
+            >
               Close
             </button>
           </div>
@@ -621,6 +631,8 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
               {legsSaving ? "Saving..." : "Save legs"}
             </button>
           </div>
+          {legsNotice ? <p className="tex-notice">{legsNotice}</p> : null}
+          {legsError ? <p className="tex-error">{legsError}</p> : null}
         </section>
       ) : null}
     </div>
