@@ -1,5 +1,6 @@
 import { dirForLocale, getMessages, isLocale, type Locale } from "@torrevie/localization";
 import { withTenantContext } from "@torrevie/tenant-context";
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import {
   listTexBootstrap,
@@ -23,6 +24,10 @@ import { saveTexEmployeeProfileAction } from "./actions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  title: "Torrevie TEX",
+  description: "Travel and expense workspace for receipt OCR, trips, approvals, and finance review."
+};
 
 type TexSection = "dashboard" | "expenses" | "trips" | "finance" | "people" | "whatsapp" | "notifications" | "settings";
 

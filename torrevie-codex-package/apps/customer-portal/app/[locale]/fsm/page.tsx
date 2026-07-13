@@ -1,4 +1,5 @@
 import { dirForLocale, isLocale, type Locale } from "@torrevie/localization";
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { businessSegments, fsmPlanTiers, segmentLabels, suggestedPlanForSegment } from "../../../config/fsmSegments";
 import { term } from "../../../config/terminology";
@@ -17,6 +18,10 @@ import { createManualIntakeRequestAction, requestVoiceChannelSetupAction, saveFs
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  title: "Torrevie FSM",
+  description: "Field service management workspace."
+};
 
 type FsmSection = string;
 
