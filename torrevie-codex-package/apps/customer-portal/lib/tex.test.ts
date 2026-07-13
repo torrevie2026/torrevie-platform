@@ -4,6 +4,7 @@ import {
   createTexExpense,
   closeTexTrip,
   createTexTrip,
+  deleteTexEmployeeProfile,
   deleteTexTripLeg,
   listTexTripLegs,
   listTexExpenses,
@@ -16,6 +17,7 @@ import {
   replaceTexTripLegs,
   resolveTexActorContext,
   updateTexTrip,
+  updateTexEmployeeProfile,
   updateTexExpenseStatus,
   type TexActorContext
 } from "./tex";
@@ -73,6 +75,32 @@ class RecordingTexClient implements TenantQueryClient {
             phone_number: "+971500000001",
             department: "Operations",
             is_active: true
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("update public.tex_employee_profiles")) {
+      return {
+        rows: [
+          {
+            id: values[0],
+            user_id: actor.userId,
+            name: values[1],
+            phone_number: values[2],
+            department: values[3],
+            is_active: values[4]
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("delete from public.tex_employee_profiles")) {
+      return {
+        rows: [
+          {
+            id: values[0],
+            name: "Maya Haddad"
           }
         ] as Row[]
       };
@@ -487,6 +515,28 @@ async function main() {
     assert.equal(bootstrap.integrationSettings?.whatsappProvider, "wappfly");
     assert.equal(client.hasSql("public.tex_expense_categories"), true);
     assert.equal(client.hasSql("app.current_tenant_id"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const employee = await updateTexEmployeeProfile(client, actor, "00000000-0000-4000-8000-000000004001", {
+      name: "Maya Haddad Updated",
+      phoneNumber: "+971 50 000 0001",
+      department: "Finance",
+      isActive: false
+    });
+    assert.equal(employee.name, "Maya Haddad Updated");
+    assert.equal(employee.phoneNumber, "971500000001");
+    assert.equal(employee.isActive, false);
+    assert.equal(client.hasSql("update public.tex_employee_profiles"), true);
+    assert.equal(client.valuesContain("tex.employee.updated"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    await deleteTexEmployeeProfile(client, actor, "00000000-0000-4000-8000-000000004001");
+    assert.equal(client.hasSql("delete from public.tex_employee_profiles"), true);
+    assert.equal(client.valuesContain("tex.employee.deleted"), true);
   }
 
   {

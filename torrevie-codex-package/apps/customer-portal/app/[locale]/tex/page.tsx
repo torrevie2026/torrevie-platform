@@ -19,6 +19,7 @@ import { CustomerSessionActions } from "../CustomerSessionActions";
 import { TexExpensesClient } from "./TexExpensesClient";
 import { TexFinanceClient } from "./TexFinanceClient";
 import { TexTripsClient } from "./TexTripsClient";
+import { saveTexEmployeeProfileAction } from "./actions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -185,7 +186,7 @@ export default async function TexPage({
   searchParams
 }: {
   params: Promise<{ locale: string }>;
-  searchParams?: Promise<{ section?: string }>;
+  searchParams?: Promise<{ section?: string; people?: string; message?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const resolvedSearchParams = await searchParams;
@@ -288,7 +289,7 @@ export default async function TexPage({
             </div>
           </header>
 
-          {renderTexSection(section, dashboard, bootstrap, financeReview)}
+          {renderTexSection(section, dashboard, bootstrap, financeReview, locale, resolvedSearchParams)}
 
           <nav className="tex-mobile-nav" aria-label="Primary TEX sections">
             {navItems
@@ -324,7 +325,7 @@ function texNavItems(locale: Locale): TexNavItem[] {
     { section: "trips", label: "Trips", href: `${base}?section=trips`, icon: "TR" },
     { section: "people", label: "My Team", href: `${base}?section=people`, icon: "TM" },
     { section: "finance", label: "Finance Review", href: `${base}?section=finance`, icon: "FN" },
-    { section: "whatsapp", label: "WhatsApp Intake", href: `${base}?section=whatsapp`, icon: "WA" },
+    { section: "whatsapp", label: "WhatsApp Config", href: `${base}?section=whatsapp`, icon: "WA" },
     { section: "notifications", label: "Notifications", href: `${base}?section=notifications`, icon: "NT" },
     { section: "settings", label: "Settings", href: `${base}?section=settings`, icon: "ST" }
   ];
@@ -337,7 +338,7 @@ function sectionTitle(section: TexSection) {
     trips: "Trips",
     finance: "Finance Review",
     people: "My Team",
-    whatsapp: "WhatsApp Intake",
+    whatsapp: "WhatsApp Config",
     notifications: "Notifications",
     settings: "Settings"
   };
@@ -352,7 +353,7 @@ function sectionSubtitle(section: TexSection) {
     trips: "Create trip files, track spend, and manage driver settlement context.",
     finance: "Review approved expenses and trip payouts before marking them paid.",
     people: "Employee and team records available for TEX expense operations.",
-    whatsapp: "Incoming WhatsApp receipt submissions that need review or assignment.",
+    whatsapp: "Configure WhatsApp receipt OCR, STATUS replies, providers, and intake monitoring.",
     notifications: "Operational notices created by TEX workflows and integrations.",
     settings: "Tenant TEX settings and integration status."
   };
@@ -380,7 +381,9 @@ function renderTexSection(
   section: TexSection,
   dashboard: TexDashboard,
   bootstrap: Awaited<ReturnType<typeof listTexBootstrap>>,
-  financeReview: Awaited<ReturnType<typeof listTexFinanceReview>> | null
+  financeReview: Awaited<ReturnType<typeof listTexFinanceReview>> | null,
+  locale: Locale,
+  status?: { people?: string; message?: string }
 ) {
   if (section === "expenses") {
     return (
@@ -418,23 +421,50 @@ function renderTexSection(
     return (
       <section className="customer-section activity-panel" aria-labelledby="tex-people-title">
         <h2 id="tex-people-title">People</h2>
-        <TexTable
-          empty="No employee profiles are available for this tenant."
-          rows={dashboard.employees.map((employee) => [
-            employee.name,
-            employee.phoneNumber,
-            employee.department ?? "No department",
-            employee.isActive ? "active" : "inactive"
-          ])}
-        />
+        {status?.people === "updated" ? <p className="tex-notice">Team member access updated.</p> : null}
+        {status?.people === "deleted" ? <p className="tex-notice">Team member deleted.</p> : null}
+        {status?.people === "failed" ? <p className="tex-error">{status.message ?? "Team member update failed."}</p> : null}
+        <TexPeopleEditor locale={locale} employees={dashboard.employees} />
       </section>
     );
   }
 
   if (section === "whatsapp") {
+    const settings = bootstrap.integrationSettings;
+
     return (
       <section className="customer-section activity-panel" aria-labelledby="tex-whatsapp-title">
-        <h2 id="tex-whatsapp-title">WhatsApp intake</h2>
+        <div className="section-heading-row">
+          <h2 id="tex-whatsapp-title">WhatsApp configuration</h2>
+          <a className="tex-action-link" href={`/${locale}/admin/users#tex-whatsapp-settings`}>
+            Open setup panel
+          </a>
+        </div>
+        <div className="tex-settings-summary" aria-label="Active WhatsApp configuration">
+          <article>
+            <span>Active provider</span>
+            <strong>{settings ? formatProvider(settings.whatsappProvider) : "Not configured"}</strong>
+          </article>
+          <article>
+            <span>AI receipt OCR</span>
+            <strong>{settings?.aiReceiptExtractionEnabled ? "Enabled" : "Disabled"}</strong>
+          </article>
+          <article>
+            <span>Duplicate handling</span>
+            <strong>
+              {settings?.duplicateDetectionEnabled ? (settings.duplicateAutoRejectEnabled ? "Auto-reject duplicates" : "Flag for manager") : "Disabled"}
+            </strong>
+          </article>
+          <article>
+            <span>Provider identity</span>
+            <strong>{providerIdentity(settings)}</strong>
+          </article>
+        </div>
+        <p>
+          Use the setup panel to configure provider keys, webhook verify tokens, multiple WhatsApp provider profiles, OCR, duplicate detection,
+          auto-reject behavior, and email reports.
+        </p>
+        <h3>Incoming WhatsApp intake</h3>
         <TexTable
           empty="No open WhatsApp submissions are waiting for review."
           rows={dashboard.whatsappSubmissions.map((submission) => [
@@ -490,6 +520,53 @@ function renderTexSection(
   }
 
   return <TexDashboardHome dashboard={dashboard} />;
+}
+
+function TexPeopleEditor({ locale, employees }: { locale: Locale; employees: TexEmployee[] }) {
+  if (employees.length === 0) {
+    return <p>No employee profiles are available for this tenant.</p>;
+  }
+
+  return (
+    <div className="member-table tex-people-table" role="table" aria-label="TEX team members">
+      <div role="row" className="member-row member-row-head tex-people-row">
+        <span role="columnheader">Name</span>
+        <span role="columnheader">WhatsApp phone</span>
+        <span role="columnheader">Department</span>
+        <span role="columnheader">Access</span>
+        <span role="columnheader">Actions</span>
+      </div>
+      {employees.map((employee) => (
+        <form action={saveTexEmployeeProfileAction} role="row" className="member-row tex-people-row" key={employee.id}>
+          <input type="hidden" name="locale" value={locale} />
+          <input type="hidden" name="employeeProfileId" value={employee.id} />
+          <span role="cell">
+            <input name="name" defaultValue={employee.name} aria-label={`${employee.name} name`} required />
+          </span>
+          <span role="cell">
+            <input name="phoneNumber" defaultValue={employee.phoneNumber} aria-label={`${employee.name} WhatsApp phone`} dir="ltr" required />
+          </span>
+          <span role="cell">
+            <input name="department" defaultValue={employee.department ?? ""} aria-label={`${employee.name} department`} />
+          </span>
+          <span role="cell">
+            <label className="tex-access-toggle">
+              <input name="isActive" type="checkbox" defaultChecked={employee.isActive} />
+              <span>{employee.isActive ? "Active" : "Inactive"}</span>
+            </label>
+          </span>
+          <span role="cell" className="tex-row-actions">
+            <button type="submit" name="intent" value="save">
+              Edit access
+            </button>
+            <button type="submit" name="intent" value="delete" className="tex-danger-button">
+              Delete
+            </button>
+          </span>
+        </form>
+      ))}
+    </div>
+  );
 }
 
 function TexDashboardHome({ dashboard }: { dashboard: TexDashboard }) {
@@ -644,7 +721,7 @@ function TexDashboardHome({ dashboard }: { dashboard: TexDashboard }) {
           <ModuleCard title="Trips" text="Trip files, budget use, and driver context." value={dashboard.trips} href="?section=trips" />
           <ModuleCard title="Finance Review" text="Approved spend and payouts ready for settlement." value={dashboard.pendingApprovals} href="?section=finance" />
           <ModuleCard title="My Team" text="Employee records linked to TEX submissions." value={dashboard.employees.length} href="?section=people" />
-          <ModuleCard title="WhatsApp Intake" text="Receipt messages waiting for assignment." value={dashboard.whatsappOpen} href="?section=whatsapp" />
+          <ModuleCard title="WhatsApp Config" text="Provider setup, AI OCR, duplicate rules, and intake." value={dashboard.whatsappOpen} href="?section=whatsapp" />
         </div>
       </section>
     </>
@@ -705,6 +782,26 @@ function formatDate(value: string) {
 
 function formatAmount(value: number) {
   return new Intl.NumberFormat("en", { maximumFractionDigits: 2 }).format(value);
+}
+
+function formatProvider(provider: string) {
+  if (provider === "wappfly") return "Wappfly";
+  if (provider === "meta") return "Meta Cloud API";
+  return "UltraMsg";
+}
+
+function providerIdentity(settings: Awaited<ReturnType<typeof listTexBootstrap>>["integrationSettings"]) {
+  if (!settings) {
+    return "Not configured";
+  }
+
+  return (
+    settings.whatsappInstanceId ??
+    settings.wappflySessionId ??
+    settings.metaPhoneNumberId ??
+    settings.metaWhatsappBusinessAccountId ??
+    "Missing provider ID"
+  );
 }
 
 function topCategorySpend(expenses: TexRecentExpense[]) {

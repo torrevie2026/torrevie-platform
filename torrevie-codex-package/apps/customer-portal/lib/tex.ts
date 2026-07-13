@@ -34,6 +34,13 @@ export type TexEmployeeProfile = {
   isActive: boolean;
 };
 
+export type TexEmployeeProfileInput = {
+  name: string;
+  phoneNumber: string;
+  department?: string | null;
+  isActive: boolean;
+};
+
 export type TexTeam = {
   id: string;
   name: string;
@@ -430,6 +437,74 @@ export async function listTexExpenses(client: TenantQueryClient, actor: TexActor
     );
 
     return result.rows.map(mapExpenseListItem);
+  });
+}
+
+export async function updateTexEmployeeProfile(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  employeeProfileId: string,
+  input: TexEmployeeProfileInput
+): Promise<TexEmployeeProfile> {
+  assertTexPermission(actor, "tex.people.manage");
+  assertUuid(employeeProfileId, "employee profile id");
+
+  const name = cleanRequired(input.name, "Employee name");
+  const phoneNumber = normalizePhoneDigits(input.phoneNumber);
+  const department = cleanOptional(input.department);
+
+  if (!phoneNumber) {
+    throw new Error("Employee WhatsApp phone is required.");
+  }
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexEmployeeProfileRow>(
+      `
+        update public.tex_employee_profiles
+           set name = $2,
+               phone_number = $3,
+               department = $4,
+               is_active = $5,
+               updated_by = $6
+         where tenant_id = public.current_tenant_id()
+           and id = $1
+        returning id, user_id, name, phone_number, department, is_active
+      `,
+      [employeeProfileId, name, phoneNumber, department, input.isActive, actor.userId]
+    );
+    const employee = requireSingleRow(result.rows, "employee profile");
+
+    await writeTexAuditEvent(client, actor, "tex.employee.updated", "tex_employee_profile", employee.id, {
+      employee_name: employee.name
+    });
+
+    return mapEmployeeProfile(employee);
+  });
+}
+
+export async function deleteTexEmployeeProfile(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  employeeProfileId: string
+): Promise<void> {
+  assertTexPermission(actor, "tex.people.manage");
+  assertUuid(employeeProfileId, "employee profile id");
+
+  await withTenantContext(client, actor, async () => {
+    const result = await client.query<{ id: string; name: string }>(
+      `
+        delete from public.tex_employee_profiles
+         where tenant_id = public.current_tenant_id()
+           and id = $1
+        returning id, name
+      `,
+      [employeeProfileId]
+    );
+    const employee = requireSingleRow(result.rows, "employee profile");
+
+    await writeTexAuditEvent(client, actor, "tex.employee.deleted", "tex_employee_profile", employee.id, {
+      employee_name: employee.name
+    });
   });
 }
 
@@ -2148,6 +2223,16 @@ function assertUuid(value: string, label: string) {
 function cleanOptional(value: string | null | undefined) {
   const clean = value?.trim();
   return clean ? clean : null;
+}
+
+function cleanRequired(value: string | null | undefined, label: string) {
+  const clean = cleanOptional(value);
+
+  if (!clean) {
+    throw new Error(`${label} is required.`);
+  }
+
+  return clean;
 }
 
 function classifyWhatsappMessage(submission: Required<TexWebhookSubmissionInput>): "receipt" | "status" | "text" {
