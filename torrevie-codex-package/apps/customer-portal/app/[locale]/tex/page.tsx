@@ -76,6 +76,8 @@ type TexTrip = {
   startDate: string | null;
   endDate: string | null;
   budgetAmount: string | null;
+  legCount: number;
+  totalDistanceKm: number;
   expenseCount: number;
   spendAmount: string;
   spendAmountAsNumber: number;
@@ -144,6 +146,8 @@ type TripRow = {
   start_date: string | null;
   end_date: string | null;
   budget_amount: string | null;
+  leg_count: number;
+  total_distance_km: string;
   expense_count: number;
   spend_amount: string;
 };
@@ -804,6 +808,13 @@ async function listTexDashboard(client: PostgresTenantQueryClient, actor: TexAct
           t.start_date::text as start_date,
           t.end_date::text as end_date,
           t.budget_amount::text as budget_amount,
+          (select count(*)::int from public.tex_trip_legs leg where leg.tenant_id = t.tenant_id and leg.trip_id = t.id) as leg_count,
+          (
+            select coalesce(sum(coalesce(leg.total_distance_km, leg.distance_km, 0)), 0)::text
+            from public.tex_trip_legs leg
+            where leg.tenant_id = t.tenant_id
+              and leg.trip_id = t.id
+          ) as total_distance_km,
           count(e.id)::int as expense_count,
           coalesce(sum(e.amount), 0)::text as spend_amount
         from public.tex_trips t
@@ -878,6 +889,8 @@ async function listTexDashboard(client: PostgresTenantQueryClient, actor: TexAct
         startDate: trip.start_date,
         endDate: trip.end_date,
         budgetAmount: trip.budget_amount,
+        legCount: trip.leg_count,
+        totalDistanceKm: Number(trip.total_distance_km),
         expenseCount: trip.expense_count,
         spendAmount: trip.spend_amount,
         spendAmountAsNumber: Number(trip.spend_amount)
@@ -957,6 +970,8 @@ function mapTripForClient(trip: TexTrip) {
     subcontractorDriverName: null,
     subcontractorAmount: 0,
     driverPayoutStatus: "unpaid",
+    legCount: trip.legCount,
+    totalDistanceKm: trip.totalDistanceKm,
     expenseCount: trip.expenseCount,
     spendAmount: Number(trip.spendAmount)
   };

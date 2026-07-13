@@ -4,6 +4,8 @@ import {
   createTexExpense,
   closeTexTrip,
   createTexTrip,
+  deleteTexTripLeg,
+  listTexTripLegs,
   listTexExpenses,
   listTexFinanceReview,
   listTexTrips,
@@ -11,6 +13,7 @@ import {
   payTexFinanceItems,
   processTexWhatsappSubmission,
   recordTexWebhookSubmission,
+  replaceTexTripLegs,
   resolveTexActorContext,
   updateTexTrip,
   updateTexExpenseStatus,
@@ -275,6 +278,8 @@ class RecordingTexClient implements TenantQueryClient {
             subcontractor_driver_name: null,
             subcontractor_amount: 0,
             driver_payout_status: "unpaid",
+            leg_count: 1,
+            total_distance_km: 210,
             expense_count: 2,
             spend_amount: 300
           }
@@ -307,6 +312,8 @@ class RecordingTexClient implements TenantQueryClient {
             subcontractor_driver_name: null,
             subcontractor_amount: 0,
             driver_payout_status: "unpaid",
+            leg_count: 1,
+            total_distance_km: 210,
             expense_count: 0,
             spend_amount: 0
           }
@@ -339,6 +346,8 @@ class RecordingTexClient implements TenantQueryClient {
             subcontractor_driver_name: values[14] ?? null,
             subcontractor_amount: values[15] ?? 0,
             driver_payout_status: "unpaid",
+            leg_count: 0,
+            total_distance_km: 0,
             expense_count: 0,
             spend_amount: 0
           }
@@ -385,6 +394,58 @@ class RecordingTexClient implements TenantQueryClient {
           {
             id: "00000000-0000-4000-8000-000000007001",
             status: "open"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("from public.tex_trips") && sql.includes("limit 1")) {
+      return { rows: [{ id: "00000000-0000-4000-8000-000000008001" }] as Row[] };
+    }
+
+    if (sql.includes("from public.tex_trip_legs") && sql.includes("order by sequence")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000009001",
+            sequence: 1,
+            origin: "Jebel Ali",
+            origin_place_id: null,
+            origin_lat: null,
+            origin_lng: null,
+            origin_country: "AE",
+            destination: "Riyadh",
+            destination_place_id: null,
+            destination_lat: null,
+            destination_lng: null,
+            destination_country: "SA",
+            mode: "road",
+            status: "planned",
+            planned_start: "2026-07-12",
+            planned_end: "2026-07-13",
+            actual_start: null,
+            actual_end: null,
+            distance_km: 105,
+            is_return_trip: true,
+            return_distance_km: 105,
+            return_duration_seconds: null,
+            total_distance_km: 210,
+            duration_seconds: null,
+            distance_source: "manual",
+            route_polyline: null,
+            budget_amount: 700,
+            container_ref: "MSKU123",
+            notes: "Border route"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_trip_legs") || sql.includes("update public.tex_trip_legs")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000009001"
           }
         ] as Row[]
       };
@@ -442,6 +503,8 @@ async function main() {
     const trips = await listTexTrips(client, actor);
     assert.equal(trips[0]?.name, "Dubai run");
     assert.equal(trips[0]?.budgetAmount, 1500);
+    assert.equal(trips[0]?.legCount, 1);
+    assert.equal(trips[0]?.totalDistanceKm, 210);
     assert.equal(trips[0]?.expenseCount, 2);
     assert.equal(client.hasSql("from public.tex_trips"), true);
   }
@@ -465,6 +528,42 @@ async function main() {
     assert.equal(payment.paidTrips, 1);
     assert.equal(client.valuesContain("tex.finance.expense_paid"), true);
     assert.equal(client.valuesContain("tex.finance.trip_payout_paid"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const legs = await listTexTripLegs(client, actor, "00000000-0000-4000-8000-000000008001");
+    assert.equal(legs[0]?.origin, "Jebel Ali");
+    assert.equal(legs[0]?.isReturnTrip, true);
+    assert.equal(legs[0]?.totalDistanceKm, 210);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const legs = await replaceTexTripLegs(client, actor, "00000000-0000-4000-8000-000000008001", {
+      legs: [
+        {
+          origin: "Jebel Ali",
+          destination: "Riyadh",
+          mode: "road",
+          status: "planned",
+          distanceKm: 105,
+          isReturnTrip: true,
+          returnDistanceKm: 105,
+          budgetAmount: 700,
+          containerRef: "MSKU123"
+        }
+      ]
+    });
+    assert.equal(legs[0]?.destination, "Riyadh");
+    assert.equal(client.valuesContain("tex.trip.legs_updated"), true);
+    assert.equal(client.hasSql("delete from public.tex_trip_legs"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    await deleteTexTripLeg(client, actor, "00000000-0000-4000-8000-000000008001", "00000000-0000-4000-8000-000000009001");
+    assert.equal(client.valuesContain("tex.trip.leg_deleted"), true);
   }
 
   {

@@ -3,19 +3,23 @@ import {
   closeTexTrip,
   createTexExpense,
   createTexTrip,
+  deleteTexTripLeg,
   listTexBootstrap,
   listTexExpenses,
   listTexFinanceReview,
+  listTexTripLegs,
   listTexTrips,
   payTexFinanceItems,
   processTexWhatsappSubmission,
   recordTexWebhookSubmission,
+  replaceTexTripLegs,
   updateTexTrip,
   updateTexExpenseStatus,
   type TexActorContext,
   type TexExpenseInput,
   type TexExpenseStatus,
   type TexFinancePaymentInput,
+  type TexTripLegInput,
   type TexTripInput,
   type TexWebhookSubmissionInput
 } from "./tex";
@@ -66,6 +70,20 @@ export async function handleTexApiRequest(
     return json(201, { trip: await createTexTrip(client, actor, request.body as TexTripInput) });
   }
 
+  const tripLegsMatch = path.match(/^\/trips\/([0-9a-f-]+)\/legs$/i);
+  if (tripLegsMatch && method === "GET") {
+    return json(200, { legs: await listTexTripLegs(client, actor, tripLegsMatch[1] ?? "") });
+  }
+
+  if (tripLegsMatch && method === "PUT") {
+    const body = readRecord(request.body);
+    return json(200, {
+      legs: await replaceTexTripLegs(client, actor, tripLegsMatch[1] ?? "", {
+        legs: Array.isArray(body.legs) ? (body.legs as TexTripLegInput[]) : []
+      })
+    });
+  }
+
   if (path === "/finance-review" && method === "GET") {
     const query = request.query ?? {};
     return json(200, await listTexFinanceReview(client, actor, readInteger(query.month), readInteger(query.year)));
@@ -83,6 +101,12 @@ export async function handleTexApiRequest(
   const closeTripMatch = path.match(/^\/trips\/([0-9a-f-]+)\/close$/i);
   if (closeTripMatch && method === "PATCH") {
     return json(200, { trip: await closeTexTrip(client, actor, closeTripMatch[1] ?? "") });
+  }
+
+  const tripLegDeleteMatch = path.match(/^\/trips\/([0-9a-f-]+)\/legs\/([0-9a-f-]+)$/i);
+  if (tripLegDeleteMatch && method === "DELETE") {
+    await deleteTexTripLeg(client, actor, tripLegDeleteMatch[1] ?? "", tripLegDeleteMatch[2] ?? "");
+    return json(200, { ok: true });
   }
 
   const statusMatch = path.match(/^\/expenses\/([0-9a-f-]+)\/status$/i);
