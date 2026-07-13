@@ -8,6 +8,7 @@ import {
   resolveCustomerTenantContext
 } from "../../lib/server/customer-session";
 import { PostgresTenantQueryClient } from "../../lib/server/tenant-query-client";
+import { CustomerSessionActions } from "./CustomerSessionActions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -151,6 +152,7 @@ export default async function CustomerPortalShell({
             )}
             <a href={`/${locale}/account`}>Account</a>
           </nav>
+          <CustomerSessionActions locale={locale} />
         </aside>
 
         <section className="customer-main app-launcher-main">

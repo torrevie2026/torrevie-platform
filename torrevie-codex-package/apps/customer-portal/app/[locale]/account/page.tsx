@@ -6,6 +6,7 @@ import {
   resolveCustomerTenantContext
 } from "../../../lib/server/customer-session";
 import { PostgresTenantQueryClient } from "../../../lib/server/tenant-query-client";
+import { CustomerSessionActions } from "../CustomerSessionActions";
 import { changeCustomerPasswordAction, updateCustomerProfileAction } from "./actions";
 import { CustomerMfaSettings } from "./CustomerMfaSettings";
 
@@ -64,6 +65,7 @@ export default async function CustomerAccountPage({
             Account
           </a>
         </nav>
+        <CustomerSessionActions locale={locale} />
       </aside>
       <section className="customer-main">
         <header className="customer-topbar">

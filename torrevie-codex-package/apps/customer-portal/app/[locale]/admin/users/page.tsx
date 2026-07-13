@@ -15,6 +15,7 @@ import {
   resolveCustomerTenantContext
 } from "../../../../lib/server/customer-session";
 import { PostgresTenantQueryClient } from "../../../../lib/server/tenant-query-client";
+import { CustomerSessionActions } from "../../CustomerSessionActions";
 import {
   inviteCustomerUserAction,
   saveWhatsappProviderProfileAction,
@@ -66,6 +67,7 @@ export default async function CustomerUsersPage({
             </a>
             <a href={`/${locale}/account`}>Account</a>
           </nav>
+          <CustomerSessionActions locale={locale} />
         </aside>
 
         <section className="customer-main">

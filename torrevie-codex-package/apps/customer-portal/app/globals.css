@@ -37,6 +37,8 @@ a {
 .customer-sidebar {
   background: var(--color-bg-primary);
   border-inline-end: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
   padding-block: 28px;
   padding-inline: 20px;
 }
@@ -1228,6 +1230,41 @@ form.member-row {
   opacity: 0.72;
   padding-block: 10px;
   padding-inline: 12px;
+}
+
+.customer-session-actions {
+  border-block-start: 1px solid var(--color-border);
+  display: grid;
+  gap: 8px;
+  margin-block-start: auto;
+  padding-block-start: 16px;
+}
+
+.customer-session-actions a,
+.customer-session-actions button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-weight: 700;
+  justify-content: center;
+  min-block-size: 38px;
+  padding-inline: 10px;
+  text-align: center;
+}
+
+.customer-session-actions button {
+  color: var(--color-danger, #b42318);
+  inline-size: 100%;
+}
+
+.tex-sidebar .customer-session-actions {
+  margin-block-start: 0;
+  padding: 14px 16px 16px;
 }
 
 .app-launcher-main {

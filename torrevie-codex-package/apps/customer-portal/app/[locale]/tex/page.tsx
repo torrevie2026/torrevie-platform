@@ -15,6 +15,7 @@ import {
   resolveCustomerTenantContext
 } from "../../../lib/server/customer-session";
 import { PostgresTenantQueryClient } from "../../../lib/server/tenant-query-client";
+import { CustomerSessionActions } from "../CustomerSessionActions";
 import { TexExpensesClient } from "./TexExpensesClient";
 import { TexFinanceClient } from "./TexFinanceClient";
 import { TexTripsClient } from "./TexTripsClient";
@@ -264,6 +265,7 @@ export default async function TexPage({
               <small>{t.shell.activeTenant}</small>
             </span>
           </div>
+          <CustomerSessionActions locale={locale} />
         </aside>
 
         <section className="customer-main tex-main">
