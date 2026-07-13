@@ -20,6 +20,11 @@ values
   ('00000000-0000-0000-0000-000000004291', '00000000-0000-0000-0000-000000001291', '00000000-0000-0000-0000-000000002291', 'inbound', '+971501111111', '+441111111111', '00000000-0000-0000-0000-000000003291'),
   ('00000000-0000-0000-0000-000000004292', '00000000-0000-0000-0000-000000001292', '00000000-0000-0000-0000-000000002292', 'inbound', '+971502222222', '+442222222222', '00000000-0000-0000-0000-000000003292');
 
+insert into public.org_channel_credentials (id, tenant_id, channel_id, secret_name, secret_value, secret_last4)
+values
+  ('00000000-0000-0000-0000-000000005291', '00000000-0000-0000-0000-000000001291', '00000000-0000-0000-0000-000000002291', 'voice_webhook_secret', 'tenant-a-secret', 'cret'),
+  ('00000000-0000-0000-0000-000000005292', '00000000-0000-0000-0000-000000001292', '00000000-0000-0000-0000-000000002292', 'voice_webhook_secret', 'tenant-b-secret', 'cret');
+
 set local role authenticated;
 set local app.current_tenant_id = '00000000-0000-0000-0000-000000001291';
 
@@ -36,6 +41,14 @@ begin
 
   select count(*) into visible_count from public.call_logs where tenant_id = '00000000-0000-0000-0000-000000001292';
   if visible_count <> 0 then raise exception 'call_logs cross-tenant select leaked rows'; end if;
+
+  begin
+    execute 'select count(*) from public.org_channel_credentials where tenant_id = ''00000000-0000-0000-0000-000000001292''';
+    insert_succeeded := true;
+  exception when insufficient_privilege then null;
+  end;
+  if insert_succeeded then raise exception 'org_channel_credentials authenticated select succeeded'; end if;
+  insert_succeeded := false;
 
   begin
     insert into public.intake_requests (tenant_id, channel_type, external_ref)
@@ -57,6 +70,21 @@ where id = '00000000-0000-0000-0000-000000003292';
 delete from public.call_logs
 where id = '00000000-0000-0000-0000-000000004292';
 
+do $$
+declare
+  update_succeeded boolean := false;
+begin
+  begin
+    update public.org_channel_credentials
+    set secret_value = 'cross-tenant-update'
+    where id = '00000000-0000-0000-0000-000000005292';
+    update_succeeded := true;
+  exception when insufficient_privilege then null;
+  end;
+
+  if update_succeeded then raise exception 'org_channel_credentials authenticated update succeeded'; end if;
+end $$;
+
 reset role;
 
 do $$
@@ -77,6 +105,12 @@ begin
     select 1 from public.call_logs
     where id = '00000000-0000-0000-0000-000000004292'
   ) then raise exception 'call_logs cross-tenant delete removed row'; end if;
+
+  if exists (
+    select 1 from public.org_channel_credentials
+    where id = '00000000-0000-0000-0000-000000005292'
+      and secret_value = 'cross-tenant-update'
+  ) then raise exception 'org_channel_credentials cross-tenant update changed row'; end if;
 end $$;
 
 set local role authenticated;

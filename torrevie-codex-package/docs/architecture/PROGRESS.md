@@ -656,3 +656,34 @@ Status: Completed on 2026-07-13.
   - Customer Portal metadata, PWA manifest, login mark, slogan, and touched UI styles align to the locked brand rules.
 - Report:
   - `docs/fsm/reports/PHASE_5.md`
+
+## WP-32: FSM hardening
+
+Status: Completed on 2026-07-13.
+
+- Scope:
+  - Expanded Channel Hub RLS coverage for `org_channel_credentials`.
+  - Added local FSM rate-limit policy utilities.
+  - Added in-memory rate limiting to the voice webhook.
+  - Added `pnpm test:fsm-hardening` and included it in the normal test chain.
+  - Added `docs/fsm/SEGMENTS.md`, `docs/fsm/ENTITLEMENTS.md`, `docs/fsm/CHANNELS.md`, and `docs/UAT.md`.
+  - Updated the root README with Torrevie FSM references and checkpoint notes.
+- Decisions:
+  - Used a local deterministic rate-limit utility for tests and policy documentation.
+  - Added equivalent in-memory throttling inside `supabase/functions/voice-webhook` because Supabase Edge Functions cannot import from the Next app package.
+  - Treated provider-level rate controls and firewall rules as deployment tasks for the first live channel rollout.
+  - Kept load testing as a local smoke test because no public portal endpoint or live provider endpoint exists yet.
+- Verification:
+  - `pnpm test:fsm-hardening`
+  - `pnpm test:isolation`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm test`
+  - `pnpm build`
+- Acceptance:
+  - Channel Hub credential access is covered by the isolation suite.
+  - Voice webhook requests are rate limited per channel.
+  - Local rate-limit policy behavior is covered by smoke tests.
+  - FSM segment, entitlement, channel, and UAT documentation is complete for the current implementation state.
+- Report:
+  - `docs/fsm/reports/PHASE_6.md`

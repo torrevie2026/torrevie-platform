@@ -29,6 +29,12 @@ const corsHeaders = {
   "content-type": "application/json"
 };
 
+const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
+const voiceWebhookRateLimit = {
+  windowMs: 60_000,
+  maxRequests: 120
+};
+
 Deno.serve(async (request) => {
   if (request.method !== "POST") {
     return jsonResponse({ error: "method_not_allowed" }, 405);
@@ -39,6 +45,16 @@ Deno.serve(async (request) => {
 
   if (!channelId || !webhookSecret) {
     return jsonResponse({ error: "missing_channel_auth" }, 401);
+  }
+
+  const rateLimit = checkRateLimit(channelId);
+
+  if (!rateLimit.allowed) {
+    return jsonResponse(
+      { error: "rate_limit_exceeded" },
+      429,
+      rateLimitHeaders(rateLimit)
+    );
   }
 
   const supabase = createClient(requireEnv("SUPABASE_URL"), requireEnv("SUPABASE_SERVICE_ROLE_KEY"), {
@@ -287,6 +303,28 @@ function estimateCallCost(durationSeconds: number) {
   return Number((minutes * 0.12).toFixed(4));
 }
 
+function checkRateLimit(channelId: string) {
+  const now = Date.now();
+  const existing = rateLimitBuckets.get(channelId);
+  const bucket = !existing || existing.resetAt <= now ? { count: 0, resetAt: now + voiceWebhookRateLimit.windowMs } : existing;
+
+  bucket.count += 1;
+  rateLimitBuckets.set(channelId, bucket);
+
+  return {
+    allowed: bucket.count <= voiceWebhookRateLimit.maxRequests,
+    remaining: Math.max(voiceWebhookRateLimit.maxRequests - bucket.count, 0),
+    resetAt: bucket.resetAt
+  };
+}
+
+function rateLimitHeaders(result: { remaining: number; resetAt: number }) {
+  return {
+    "x-ratelimit-remaining": String(result.remaining),
+    "x-ratelimit-reset": new Date(result.resetAt).toISOString()
+  };
+}
+
 function readBearerToken(value: string | null) {
   if (!value?.startsWith("Bearer ")) {
     return null;
@@ -335,9 +373,12 @@ function requireEnv(name: string) {
   return value;
 }
 
-function jsonResponse(body: JsonRecord, status = 200) {
+function jsonResponse(body: JsonRecord, status = 200, extraHeaders: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: corsHeaders
+    headers: {
+      ...corsHeaders,
+      ...extraHeaders
+    }
   });
 }

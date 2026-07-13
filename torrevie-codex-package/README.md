@@ -10,6 +10,17 @@ The repository is being built in ordered work packages from
 `docs/architecture/WORK_PACKAGES.md`. Progress is tracked in
 `docs/architecture/PROGRESS.md`.
 
+## Torrevie FSM
+
+Torrevie FSM is the Field Service Management product in the platform. Current FSM references:
+
+- `docs/fsm/SEGMENTS.md`
+- `docs/fsm/ENTITLEMENTS.md`
+- `docs/fsm/CHANNELS.md`
+- `docs/UAT.md`
+
+Live channel providers, phone numbers, SIP trunks, inbound email domains, and other billed resources require an explicit checkpoint before setup.
+
 ## Development
 
 ```bash
