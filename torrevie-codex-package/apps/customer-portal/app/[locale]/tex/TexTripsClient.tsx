@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import type { TexBootstrap, TexTripInput, TexTripLeg, TexTripLegInput, TexTripListItem } from "../../../lib/tex";
 
 type TexTripsClientProps = {
@@ -15,7 +15,9 @@ type TripFormState = {
   description: string;
   tripType: "general" | "logistics";
   origin: string;
+  originPlaceId: string;
   destination: string;
+  destinationPlaceId: string;
   budgetAmount: string;
   startDate: string;
   endDate: string;
@@ -53,13 +55,31 @@ type LegFormState = {
   notes: string;
 };
 
+type PlaceSuggestion = {
+  placeId: string;
+  text: string;
+};
+
+type GoogleRouteEstimate = {
+  distanceKm: number;
+  durationSeconds: number | null;
+  routePolyline: string | null;
+  source: string;
+  isReturnTrip: boolean;
+  returnDistanceKm: number | null;
+  returnDurationSeconds: number | null;
+  totalDistanceKm: number;
+};
+
 const blankTripForm = (): TripFormState => ({
   id: null,
   name: "",
   description: "",
   tripType: "general",
   origin: "",
+  originPlaceId: "",
   destination: "",
+  destinationPlaceId: "",
   budgetAmount: "",
   startDate: "",
   endDate: "",
@@ -112,6 +132,9 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
   const [tripError, setTripError] = useState<string | null>(null);
   const [legsNotice, setLegsNotice] = useState<string | null>(null);
   const [legsError, setLegsError] = useState<string | null>(null);
+  const [originSuggestions, setOriginSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [destinationSuggestions, setDestinationSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [placeSearchError, setPlaceSearchError] = useState<string | null>(null);
 
   const openTrips = useMemo(() => trips.filter((trip) => trip.status === "open"), [trips]);
   const closedTrips = useMemo(() => trips.filter((trip) => trip.status !== "open"), [trips]);
@@ -121,6 +144,20 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
     setTrips(response.trips);
   }
 
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      void loadPlaceSuggestions(form.origin, setOriginSuggestions, setPlaceSearchError);
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [form.origin]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      void loadPlaceSuggestions(form.destination, setDestinationSuggestions, setPlaceSearchError);
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [form.destination]);
+
   function editTrip(trip: TexTripListItem) {
     setForm({
       id: trip.id,
@@ -128,7 +165,9 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
       description: trip.description ?? "",
       tripType: trip.tripType,
       origin: trip.origin ?? "",
+      originPlaceId: "",
       destination: trip.destination ?? "",
+      destinationPlaceId: "",
       budgetAmount: trip.budgetAmount === null ? "" : String(trip.budgetAmount),
       startDate: trip.startDate ?? "",
       endDate: trip.endDate ?? "",
@@ -171,11 +210,12 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
         subcontractorAmount: readOptionalNumber(form.subcontractorAmount),
         subcontractorNotes: form.subcontractorNotes || null
       };
-      await texFetch(form.id ? `/trips/${form.id}` : "/trips", {
+      const response = await texFetch<{ trip: TexTripListItem }>(form.id ? `/trips/${form.id}` : "/trips", {
         method: form.id ? "PATCH" : "POST",
         body: JSON.stringify(payload)
       });
-      setTripNotice(form.id ? "Trip updated." : "Trip created.");
+      const legNotice = form.id ? "" : await createInitialTripLeg(response.trip.id);
+      setTripNotice(form.id ? "Trip updated." : ["Trip created.", legNotice].filter(Boolean).join(" "));
       setForm(blankTripForm());
       await refreshTrips();
     } catch (caught) {
@@ -272,6 +312,72 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
     }
   }
 
+  function updateTripPlace(field: "origin" | "destination", value: string, suggestions: PlaceSuggestion[]) {
+    const selected = suggestions.find((suggestion) => suggestion.text === value);
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+      [`${field}PlaceId`]: selected?.placeId ?? ""
+    }));
+  }
+
+  async function createInitialTripLeg(tripId: string) {
+    if (!form.origin.trim() || !form.destination.trim()) {
+      return "";
+    }
+
+    let leg: TexTripLegInput = {
+      sequence: 1,
+      origin: form.origin,
+      originPlaceId: form.originPlaceId || null,
+      destination: form.destination,
+      destinationPlaceId: form.destinationPlaceId || null,
+      mode: "road",
+      status: "planned",
+      plannedStart: form.startDate || null,
+      plannedEnd: form.endDate || null,
+      budgetAmount: readOptionalNumber(form.budgetAmount),
+      containerRef: form.containerNumber || null,
+      notes: "Created from trip origin and destination"
+    };
+    let notice = "Initial road leg created.";
+
+    try {
+      const route = await texFetch<{ estimate: GoogleRouteEstimate }>(`/trips/${tripId}/legs/estimate`, {
+        method: "POST",
+        body: JSON.stringify({
+          origin: form.origin,
+          originPlaceId: form.originPlaceId || null,
+          destination: form.destination,
+          destinationPlaceId: form.destinationPlaceId || null,
+          returnToOrigin: false
+        })
+      });
+
+      leg = {
+        ...leg,
+        distanceKm: route.estimate.distanceKm,
+        durationSeconds: route.estimate.durationSeconds,
+        distanceSource: route.estimate.source,
+        routePolyline: route.estimate.routePolyline,
+        totalDistanceKm: route.estimate.totalDistanceKm
+      };
+      notice = "Initial road leg created with Google Maps distance.";
+    } catch (caught) {
+      notice = `Initial road leg created without Google distance: ${errorMessage(caught)}`;
+    }
+
+    try {
+      await texFetch(`/trips/${tripId}/legs`, {
+        method: "PUT",
+        body: JSON.stringify({ legs: [leg] })
+      });
+      return notice;
+    } catch (caught) {
+      return `Trip saved, but the initial leg could not be created: ${errorMessage(caught)}`;
+    }
+  }
+
   async function estimateLeg(index: number) {
     const leg = legs[index];
 
@@ -359,12 +465,32 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
           </label>
           <label>
             Origin
-            <input value={form.origin} onChange={(event) => setFormValue(setForm, "origin", event.target.value)} />
+            <input
+              value={form.origin}
+              list="tex-origin-suggestions"
+              placeholder="Search Google Maps"
+              onChange={(event) => updateTripPlace("origin", event.target.value, originSuggestions)}
+            />
           </label>
           <label>
             Destination
-            <input value={form.destination} onChange={(event) => setFormValue(setForm, "destination", event.target.value)} />
+            <input
+              value={form.destination}
+              list="tex-destination-suggestions"
+              placeholder="Search Google Maps"
+              onChange={(event) => updateTripPlace("destination", event.target.value, destinationSuggestions)}
+            />
           </label>
+          <datalist id="tex-origin-suggestions">
+            {originSuggestions.map((suggestion) => (
+              <option key={suggestion.placeId} value={suggestion.text} />
+            ))}
+          </datalist>
+          <datalist id="tex-destination-suggestions">
+            {destinationSuggestions.map((suggestion) => (
+              <option key={suggestion.placeId} value={suggestion.text} />
+            ))}
+          </datalist>
           <label>
             Start
             <input type="date" value={form.startDate} onChange={(event) => setFormValue(setForm, "startDate", event.target.value)} />
@@ -376,6 +502,14 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
           <label>
             Budget
             <input inputMode="decimal" value={form.budgetAmount} onChange={(event) => setFormValue(setForm, "budgetAmount", event.target.value)} />
+          </label>
+          <label>
+            Trip currency
+            <input
+              value={form.enforcedCurrency}
+              maxLength={3}
+              onChange={(event) => setFormValue(setForm, "enforcedCurrency", event.target.value.toUpperCase())}
+            />
           </label>
           <label>
             Team
@@ -434,18 +568,9 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
             checked={form.enforceCurrency}
             onChange={(event) => setForm((current) => ({ ...current, enforceCurrency: event.target.checked }))}
           />
-          Enforce one currency
+          Lock all trip expenses to {form.enforcedCurrency || "this currency"}
         </label>
-        {form.enforceCurrency ? (
-          <label className="tex-wide-label">
-            Currency
-            <input
-              value={form.enforcedCurrency}
-              maxLength={3}
-              onChange={(event) => setFormValue(setForm, "enforcedCurrency", event.target.value.toUpperCase())}
-            />
-          </label>
-        ) : null}
+        {placeSearchError ? <p className="tex-error">{placeSearchError}</p> : null}
 
         <button type="button" className="tex-primary-button" disabled={isSaving || !form.name.trim()} onClick={saveTrip}>
           {isSaving ? "Saving..." : form.id ? "Update trip" : "Create trip"}
@@ -864,6 +989,27 @@ function setFormValue(
   value: string
 ) {
   setForm((current) => ({ ...current, [key]: value }));
+}
+
+async function loadPlaceSuggestions(
+  value: string,
+  setSuggestions: Dispatch<SetStateAction<PlaceSuggestion[]>>,
+  setPlaceSearchError: Dispatch<SetStateAction<string | null>>
+) {
+  if (value.trim().length < 3) {
+    setSuggestions([]);
+    setPlaceSearchError(null);
+    return;
+  }
+
+  try {
+    const response = await texFetch<{ places: PlaceSuggestion[] }>(`/places?input=${encodeURIComponent(value)}`);
+    setSuggestions(response.places);
+    setPlaceSearchError(null);
+  } catch (caught) {
+    setSuggestions([]);
+    setPlaceSearchError(errorMessage(caught));
+  }
 }
 
 function readOptionalNumber(value: string) {

@@ -452,6 +452,40 @@ async function main() {
 
   {
     const client = new RecordingTexApiClient();
+    const previousKey = process.env.GOOGLE_MAPS_API_KEY;
+    const previousFetch = globalThis.fetch;
+    process.env.GOOGLE_MAPS_API_KEY = "test-google-key";
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          suggestions: [
+            {
+              placePrediction: {
+                placeId: "places/hamriya",
+                text: { text: "Hamriya Port, Sharjah, United Arab Emirates" }
+              }
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    const response = await handleTexApiRequest(client, actor, {
+      method: "GET",
+      path: "/places",
+      query: { input: "Hamriya" }
+    });
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) {
+      delete process.env.GOOGLE_MAPS_API_KEY;
+    } else {
+      process.env.GOOGLE_MAPS_API_KEY = previousKey;
+    }
+    assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /Hamriya Port/);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
     const response = await handleTexApiRequest(client, actor, {
       method: "PUT",
       path: "/trips/00000000-0000-4000-8000-000000008001/legs",

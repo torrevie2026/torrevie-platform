@@ -55,6 +55,11 @@ type GoogleRouteEstimate = {
   totalDistanceKm: number;
 };
 
+type GooglePlaceSuggestion = {
+  placeId: string;
+  text: string;
+};
+
 export async function handleTexApiRequest(
   client: TenantQueryClient,
   actor: TexActorContext,
@@ -87,6 +92,10 @@ export async function handleTexApiRequest(
 
   if (path === "/trips" && method === "POST") {
     return json(201, { trip: await createTexTrip(client, actor, request.body as TexTripInput) });
+  }
+
+  if (path === "/places" && method === "GET") {
+    return json(200, { places: await googlePlaceSuggestions(request.query?.input ?? "") });
   }
 
   const tripLegsMatch = path.match(/^\/trips\/([0-9a-f-]+)\/legs$/i);
@@ -218,6 +227,49 @@ function googleMapsApiKey() {
     process.env.GOOGLE_AI_KEY ||
     ""
   );
+}
+
+async function googlePlaceSuggestions(input: string): Promise<GooglePlaceSuggestion[]> {
+  const key = googleMapsApiKey();
+  const trimmed = input.trim();
+
+  if (trimmed.length < 3) {
+    return [];
+  }
+
+  if (!key) {
+    const error = new Error("Google Maps API key is not configured.");
+    (error as Error & { statusCode?: number }).statusCode = 501;
+    throw error;
+  }
+
+  const response = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": key,
+      "X-Goog-FieldMask": "suggestions.placePrediction.placeId,suggestions.placePrediction.text.text"
+    },
+    body: JSON.stringify({ input: trimmed })
+  });
+  const result = (await response.json().catch(() => ({}))) as {
+    error?: { message?: string };
+    suggestions?: Array<{ placePrediction?: { placeId?: string; text?: { text?: string } } }>;
+  };
+
+  if (!response.ok) {
+    const error = new Error(result.error?.message || `Google Places rejected the request (${response.status}).`);
+    (error as Error & { statusCode?: number }).statusCode = response.status === 401 || response.status === 403 ? 502 : response.status;
+    throw error;
+  }
+
+  return (result.suggestions ?? [])
+    .map((suggestion) => ({
+      placeId: suggestion.placePrediction?.placeId ?? "",
+      text: suggestion.placePrediction?.text?.text ?? ""
+    }))
+    .filter((suggestion) => suggestion.placeId && suggestion.text)
+    .slice(0, 6);
 }
 
 function googleWaypoint(input: { placeId?: string | null; address: string }) {
