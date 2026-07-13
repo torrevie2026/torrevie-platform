@@ -76,14 +76,34 @@ export async function extractReceiptWithOpenAI(mediaUrl: string): Promise<TexRec
     throw new Error(`OpenAI receipt extraction failed: ${response.status} ${text.slice(0, 400)}`);
   }
 
-  const data = (await response.json()) as { output_text?: string };
-  const outputText = typeof data.output_text === "string" ? data.output_text : "";
+  const data = (await response.json()) as { output_text?: string; output?: unknown };
+  const outputText = typeof data.output_text === "string" ? data.output_text : findOutputText(data.output);
 
   if (!outputText) {
     throw new Error("OpenAI receipt extraction returned no structured text.");
   }
 
   return sanitizeExtraction(JSON.parse(outputText) as Partial<TexReceiptExtraction>);
+}
+
+function findOutputText(output: unknown): string {
+  if (!Array.isArray(output)) {
+    return "";
+  }
+
+  for (const item of output) {
+    if (!item || typeof item !== "object" || !("content" in item) || !Array.isArray(item.content)) {
+      continue;
+    }
+
+    for (const content of item.content) {
+      if (content && typeof content === "object" && "text" in content && typeof content.text === "string") {
+        return content.text;
+      }
+    }
+  }
+
+  return "";
 }
 
 function sanitizeExtraction(value: Partial<TexReceiptExtraction>): TexReceiptExtraction {

@@ -2278,6 +2278,91 @@ form.member-row {
   outline: none;
 }
 
+.tex-receipt-upload {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 7%, white), var(--color-bg-primary));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 18%, var(--color-border));
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.tex-receipt-upload strong {
+  color: var(--color-text-primary);
+  font-size: 16px;
+}
+
+.tex-receipt-upload p {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  margin: 4px 0 0;
+}
+
+.tex-receipt-drop {
+  align-items: center;
+  background: var(--color-bg-primary);
+  border: 2px dashed color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  border-radius: 8px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  min-block-size: 112px;
+  padding: 18px;
+  place-items: center;
+  text-align: center;
+}
+
+.tex-receipt-drop:hover {
+  background: color-mix(in srgb, var(--color-accent) 5%, var(--color-bg-primary));
+  border-color: var(--color-accent);
+}
+
+.tex-receipt-drop-active {
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-bg-primary));
+  border-color: var(--color-accent);
+}
+
+.tex-receipt-drop input {
+  display: none;
+}
+
+.tex-receipt-drop span {
+  font-weight: 900;
+}
+
+.tex-receipt-drop small,
+.tex-receipt-file span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.tex-receipt-file {
+  align-items: center;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.tex-receipt-file b {
+  background: color-mix(in srgb, var(--color-status-success) 12%, var(--color-bg-primary));
+  border-radius: 999px;
+  color: var(--color-status-success);
+  font-size: 12px;
+  padding-block: 5px;
+  padding-inline: 9px;
+}
+
+.tex-ai-filled {
+  border-inline-start: 4px solid var(--color-accent);
+  padding-inline-start: 10px;
+}
+
 .tex-place-suggestions {
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);

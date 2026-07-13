@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { assertPermission, roleKeys, type PermissionKey, type ProductKey, type RoleKey } from "@torrevie/permissions";
 import { withTenantContext, type ResolvedTenantContext, type TenantQueryClient } from "@torrevie/tenant-context";
 import { extractReceiptWithOpenAI, type TexReceiptExtraction } from "./tex-ai";
@@ -69,7 +70,13 @@ export type TexExpenseInput = {
   tripId?: string | null;
   tripLegId?: string | null;
   notes?: string | null;
+  paymentMethod?: string | null;
+  taxIdNumber?: string | null;
+  taxAmount?: number | null;
   receiptFileId?: string | null;
+  extractionSource?: "manual" | "web_ai" | "whatsapp_ai" | null;
+  extractionConfidence?: number | null;
+  extractionPayload?: Record<string, unknown> | null;
   source?: string | null;
 };
 
@@ -78,6 +85,21 @@ export type TexExpenseRecord = {
   status: TexExpenseStatus;
   amount: number;
   currency: string;
+};
+
+export type TexReceiptUploadInput = {
+  fileName: string;
+  contentType: string;
+  dataBase64: string;
+};
+
+export type TexReceiptFileRecord = {
+  id: string;
+  storagePath: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  url: string;
 };
 
 export type TexExpenseListItem = TexExpenseRecord & {
@@ -1186,6 +1208,82 @@ export async function payTexFinanceItems(
   });
 }
 
+export async function uploadTexReceiptFile(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexReceiptUploadInput
+): Promise<TexReceiptFileRecord> {
+  assertTexPermission(actor, "tex.expense.submit");
+  const receipt = sanitizeReceiptUpload(input);
+  const fileId = randomUUID();
+  const extension = extensionForContentType(receipt.contentType);
+  const storagePath = `tenant/${actor.tenantId}/tex/receipts/${fileId}.${extension}`;
+
+  await uploadReceiptObject(storagePath, receipt.contentType, receipt.buffer);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<{
+      id: string;
+      storage_path: string;
+      filename: string;
+      content_type: string;
+      size_bytes: number;
+    }>(
+      `
+        insert into public.files (
+          id,
+          tenant_id,
+          storage_path,
+          filename,
+          content_type,
+          size_bytes,
+          uploaded_by,
+          created_by,
+          updated_by
+        )
+        values (
+          $1,
+          public.current_tenant_id(),
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $6,
+          $6
+        )
+        returning id, storage_path, filename, content_type, size_bytes::int as size_bytes
+      `,
+      [fileId, storagePath, receipt.fileName, receipt.contentType, receipt.buffer.length, actor.userId]
+    );
+    const row = requireSingleRow(result.rows, "receipt file");
+
+    await writeTexAuditEvent(client, actor, "tex.receipt.uploaded", "file", row.id, {
+      filename: row.filename,
+      content_type: row.content_type
+    });
+
+    return {
+      id: row.id,
+      storagePath: row.storage_path,
+      filename: row.filename,
+      contentType: row.content_type,
+      sizeBytes: row.size_bytes,
+      url: `/api/tex/receipts/${row.id}`
+    };
+  });
+}
+
+export async function parseTexReceiptUpload(input: Pick<TexReceiptUploadInput, "contentType" | "dataBase64">): Promise<TexReceiptExtraction> {
+  const contentType = cleanContentType(input.contentType);
+  if (!contentType.startsWith("image/")) {
+    throw new Error("OCR currently supports image receipts only.");
+  }
+
+  const buffer = receiptBufferFromBase64(input.dataBase64);
+  return extractReceiptWithOpenAI(`data:${contentType};base64,${buffer.toString("base64")}`);
+}
+
 export async function createTexExpense(
   client: TenantQueryClient,
   actor: TexActorContext,
@@ -1209,6 +1307,9 @@ export async function createTexExpense(
           trip_id,
           trip_leg_id,
           notes,
+          payment_method,
+          tax_id_number,
+          tax_amount,
           receipt_file_id,
           source,
           extraction_source,
@@ -1235,9 +1336,12 @@ export async function createTexExpense(
           $10,
           $11,
           $12,
-          'manual',
-          null,
-          '{}'::jsonb,
+          $13,
+          $14,
+          $15,
+          $16,
+          $17,
+          $18::jsonb,
           'clear',
           null,
           null,
@@ -1258,8 +1362,14 @@ export async function createTexExpense(
         expense.tripId,
         expense.tripLegId,
         expense.notes,
+        expense.paymentMethod,
+        expense.taxIdNumber,
+        expense.taxAmount,
         expense.receiptFileId,
-        expense.source
+        expense.source,
+        expense.extractionSource,
+        expense.extractionConfidence,
+        JSON.stringify(expense.extractionPayload ?? {})
       ]
     );
     const row = requireSingleRow(result.rows, "expense");
@@ -1922,9 +2032,137 @@ function sanitizeExpense(input: TexExpenseInput): Required<TexExpenseInput> {
     tripId: cleanOptional(input.tripId),
     tripLegId: cleanOptional(input.tripLegId),
     notes: cleanOptional(input.notes),
+    paymentMethod: cleanOptional(input.paymentMethod),
+    taxIdNumber: cleanOptional(input.taxIdNumber),
+    taxAmount: optionalNonNegative(input.taxAmount, "tax amount"),
     receiptFileId: cleanOptional(input.receiptFileId),
+    extractionSource: sanitizeExtractionSource(input.extractionSource),
+    extractionConfidence: sanitizeExtractionConfidence(input.extractionConfidence),
+    extractionPayload: input.extractionPayload && typeof input.extractionPayload === "object" && !Array.isArray(input.extractionPayload) ? input.extractionPayload : {},
     source: cleanOptional(input.source) ?? "web"
   };
+}
+
+function sanitizeReceiptUpload(input: TexReceiptUploadInput) {
+  const contentType = cleanContentType(input.contentType);
+  if (!isAllowedReceiptType(contentType)) {
+    throw new Error("Unsupported receipt file type.");
+  }
+
+  const buffer = receiptBufferFromBase64(input.dataBase64);
+  return {
+    fileName: sanitizeFileName(input.fileName),
+    contentType,
+    buffer
+  };
+}
+
+function cleanContentType(value: string) {
+  return value.trim().toLowerCase().split(";")[0]?.trim() ?? "";
+}
+
+function sanitizeFileName(value: string) {
+  const name = value.trim().replace(/[^\w.\- ()]/g, "_").slice(0, 160);
+  return name || "receipt";
+}
+
+function isAllowedReceiptType(contentType: string) {
+  return ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"].includes(contentType);
+}
+
+function receiptBufferFromBase64(value: string) {
+  const base64 = stripDataUrl(value);
+  if (!base64) {
+    throw new Error("Receipt data is required.");
+  }
+
+  const buffer = Buffer.from(base64, "base64");
+  if (buffer.length <= 0) {
+    throw new Error("Receipt file is empty.");
+  }
+
+  if (buffer.length > 20 * 1024 * 1024) {
+    throw new Error("Receipt file exceeds 20MB.");
+  }
+
+  return buffer;
+}
+
+function stripDataUrl(value: string) {
+  const trimmed = value.trim();
+  return trimmed.includes(",") ? trimmed.split(",").pop()?.trim() ?? "" : trimmed;
+}
+
+function extensionForContentType(contentType: string) {
+  if (contentType === "image/png") return "png";
+  if (contentType === "image/webp") return "webp";
+  if (contentType === "image/heic") return "heic";
+  if (contentType === "image/heif") return "heif";
+  if (contentType === "application/pdf") return "pdf";
+  return "jpg";
+}
+
+function receiptBucketName() {
+  return process.env.SUPABASE_RECEIPTS_BUCKET?.trim() || "receipts";
+}
+
+function supabaseProjectUrl() {
+  const url = process.env.SUPABASE_URL?.trim() || process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  if (!url) {
+    throw new Error("SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL is not configured.");
+  }
+
+  return url.replace(/\/+$/, "");
+}
+
+function supabaseServiceRoleKey() {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!key) {
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured.");
+  }
+
+  return key;
+}
+
+async function uploadReceiptObject(storagePath: string, contentType: string, buffer: Buffer) {
+  const bucket = receiptBucketName();
+  const encodedPath = storagePath.split("/").map(encodeURIComponent).join("/");
+  const response = await fetch(`${supabaseProjectUrl()}/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${supabaseServiceRoleKey()}`,
+      apikey: supabaseServiceRoleKey(),
+      "Content-Type": contentType,
+      "x-upsert": "false"
+    },
+    body: buffer
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Receipt storage upload failed: ${response.status} ${text.slice(0, 240)}`);
+  }
+}
+
+function sanitizeExtractionSource(value: TexExpenseInput["extractionSource"]): "manual" | "web_ai" | "whatsapp_ai" {
+  if (value === "web_ai" || value === "whatsapp_ai") {
+    return value;
+  }
+
+  return "manual";
+}
+
+function sanitizeExtractionConfidence(value: unknown) {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error("Extraction confidence must be numeric.");
+  }
+
+  return Math.min(Math.max(parsed, 0), 1);
 }
 
 function sanitizeWebhookSubmission(input: TexWebhookSubmissionInput): Required<TexWebhookSubmissionInput> {

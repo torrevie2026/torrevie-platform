@@ -10,15 +10,18 @@ import {
   listTexTripLegs,
   listTexTrips,
   payTexFinanceItems,
+  parseTexReceiptUpload,
   processTexWhatsappSubmission,
   recordTexWebhookSubmission,
   replaceTexTripLegs,
   updateTexTrip,
   updateTexExpenseStatus,
+  uploadTexReceiptFile,
   type TexActorContext,
   type TexExpenseInput,
   type TexExpenseStatus,
   type TexFinancePaymentInput,
+  type TexReceiptUploadInput,
   type TexTripLegInput,
   type TexTripInput,
   type TexWebhookSubmissionInput
@@ -89,6 +92,18 @@ export async function handleTexApiRequest(
 
   if (path === "/expenses" && method === "POST") {
     return json(201, { expense: await createTexExpense(client, actor, request.body as TexExpenseInput) });
+  }
+
+  if (path === "/receipts" && method === "POST") {
+    return json(201, { receipt: await uploadTexReceiptFile(client, actor, request.body as TexReceiptUploadInput) });
+  }
+
+  if (path === "/receipts/parse" && method === "POST") {
+    const body = readRecord(request.body);
+    return json(200, await parseTexReceiptUpload({
+      contentType: readOptionalString(body.contentType) ?? readOptionalString(body.content_type) ?? "",
+      dataBase64: readOptionalString(body.dataBase64) ?? readOptionalString(body.data_base64) ?? readOptionalString(body.image_base64) ?? ""
+    }));
   }
 
   if (path === "/trips" && method === "GET") {

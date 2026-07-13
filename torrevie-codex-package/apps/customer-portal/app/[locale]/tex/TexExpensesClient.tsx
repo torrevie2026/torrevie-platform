@@ -20,6 +20,36 @@ type ExpenseFormState = {
   category: string;
   tripId: string;
   notes: string;
+  paymentMethod: string;
+  taxIdNumber: string;
+  taxAmount: string;
+  receiptFileId: string;
+  receiptUrl: string;
+  receiptFileName: string;
+  extractionConfidence: number | null;
+  extractionPayload: Record<string, unknown> | null;
+};
+
+type ParsedReceipt = {
+  vendor: string | null;
+  expenseDate: string | null;
+  amount: number | null;
+  currency: string | null;
+  category: string | null;
+  taxAmount: number | null;
+  taxIdNumber: string | null;
+  confidence: number;
+  notes: string | null;
+};
+
+type ReceiptUploadResponse = {
+  receipt: {
+    id: string;
+    url: string;
+    filename: string;
+    contentType: string;
+    sizeBytes: number;
+  };
 };
 
 const blankForm = (): ExpenseFormState => ({
@@ -30,7 +60,15 @@ const blankForm = (): ExpenseFormState => ({
   currency: "AED",
   category: "",
   tripId: "",
-  notes: ""
+  notes: "",
+  paymentMethod: "",
+  taxIdNumber: "",
+  taxAmount: "",
+  receiptFileId: "",
+  receiptUrl: "",
+  receiptFileName: "",
+  extractionConfidence: null,
+  extractionPayload: null
 });
 
 export function TexExpensesClient({ categories, employees, trips, initialExpenses }: TexExpensesClientProps) {
@@ -41,6 +79,9 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
   const [isExpenseDrawerOpen, setIsExpenseDrawerOpen] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<TexExpenseListItem | null>(null);
   const [busyExpenseId, setBusyExpenseId] = useState<string | null>(null);
+  const [isReceiptParsing, setIsReceiptParsing] = useState(false);
+  const [autoFilledFields, setAutoFilledFields] = useState<Set<keyof ExpenseFormState>>(new Set());
+  const [receiptWarning, setReceiptWarning] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,17 +116,111 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
           category: form.category || null,
           tripId: form.tripId || null,
           notes: form.notes || null,
+          paymentMethod: form.paymentMethod || null,
+          taxIdNumber: form.taxIdNumber || null,
+          taxAmount: form.taxAmount ? Number(form.taxAmount) : null,
+          receiptFileId: form.receiptFileId || null,
+          extractionSource: "manual",
+          extractionConfidence: form.extractionConfidence,
+          extractionPayload: form.extractionPayload,
           source: "web"
         })
       });
       setNotice("Expense submitted.");
       setForm(blankForm());
+      setAutoFilledFields(new Set());
+      setReceiptWarning(null);
       setIsExpenseDrawerOpen(false);
       await refreshExpenses();
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
       setIsCreating(false);
+    }
+  }
+
+  async function uploadReceipt(file: File) {
+    setIsReceiptParsing(true);
+    setError(null);
+    setNotice(null);
+    setReceiptWarning(null);
+    setAutoFilledFields(new Set());
+
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const upload = await texFetch<ReceiptUploadResponse>("/receipts", {
+        method: "POST",
+        body: JSON.stringify({
+          fileName: file.name,
+          contentType: file.type || "application/octet-stream",
+          dataBase64: dataUrl
+        })
+      });
+
+      setForm((current) => ({
+        ...current,
+        receiptFileId: upload.receipt.id,
+        receiptUrl: upload.receipt.url,
+        receiptFileName: upload.receipt.filename || file.name
+      }));
+
+      if (!file.type.startsWith("image/")) {
+        setReceiptWarning("Receipt uploaded. OCR currently supports image receipts only, so please fill in the fields manually.");
+        return;
+      }
+
+      const parsed = await texFetch<ParsedReceipt>("/receipts/parse", {
+        method: "POST",
+        body: JSON.stringify({
+          contentType: file.type,
+          dataBase64: dataUrl
+        })
+      });
+      const filled = new Set<keyof ExpenseFormState>();
+      setForm((current) => {
+        const next = { ...current, extractionConfidence: parsed.confidence, extractionPayload: parsed as unknown as Record<string, unknown> };
+
+        if (parsed.vendor) {
+          next.vendor = parsed.vendor;
+          filled.add("vendor");
+        }
+        if (parsed.expenseDate) {
+          next.expenseDate = parsed.expenseDate;
+          filled.add("expenseDate");
+        }
+        if (parsed.amount) {
+          next.amount = String(parsed.amount);
+          filled.add("amount");
+        }
+        if (parsed.currency) {
+          next.currency = parsed.currency.toUpperCase();
+          filled.add("currency");
+        }
+        if (parsed.category && activeCategories.some((category) => category.name === parsed.category)) {
+          next.category = parsed.category;
+          filled.add("category");
+        }
+        if (parsed.taxIdNumber) {
+          next.taxIdNumber = parsed.taxIdNumber;
+          filled.add("taxIdNumber");
+        }
+        if (parsed.taxAmount != null) {
+          next.taxAmount = String(parsed.taxAmount);
+          filled.add("taxAmount");
+        }
+        if (parsed.notes) {
+          next.notes = parsed.notes;
+          filled.add("notes");
+        }
+
+        return next;
+      });
+      setAutoFilledFields(filled);
+      setReceiptWarning(filled.size > 0 ? null : "Receipt uploaded, but no fields could be read automatically. Please fill in the fields manually.");
+    } catch (caught) {
+      setReceiptWarning(errorMessage(caught));
+    } finally {
+      setIsReceiptParsing(false);
     }
   }
 
@@ -140,8 +275,28 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
               </button>
             </div>
 
+            <ReceiptUploadPanel
+              fileName={form.receiptFileName}
+              isParsing={isReceiptParsing}
+              confidence={form.extractionConfidence}
+              warning={receiptWarning}
+              onFile={uploadReceipt}
+              onClear={() => {
+                setForm((current) => ({
+                  ...current,
+                  receiptFileId: "",
+                  receiptUrl: "",
+                  receiptFileName: "",
+                  extractionConfidence: null,
+                  extractionPayload: null
+                }));
+                setAutoFilledFields(new Set());
+                setReceiptWarning(null);
+              }}
+            />
+
             <div className="tex-form-grid">
-              <label>
+              <label className={fieldClass(autoFilledFields, "employeeProfileId")}>
                 Employee
                 <select value={form.employeeProfileId} onChange={(event) => setFormValue(setForm, "employeeProfileId", event.target.value)}>
                   <option value="">Signed-in user</option>
@@ -152,15 +307,15 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
                   ))}
                 </select>
               </label>
-              <label>
+              <label className={fieldClass(autoFilledFields, "expenseDate")}>
                 Date
                 <input value={form.expenseDate} type="date" onChange={(event) => setFormValue(setForm, "expenseDate", event.target.value)} />
               </label>
-              <label>
+              <label className={fieldClass(autoFilledFields, "amount")}>
                 Amount
                 <input value={form.amount} inputMode="decimal" onChange={(event) => setFormValue(setForm, "amount", event.target.value)} />
               </label>
-              <label>
+              <label className={fieldClass(autoFilledFields, "currency")}>
                 Currency
                 <input
                   value={form.currency}
@@ -168,7 +323,7 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
                   onChange={(event) => setFormValue(setForm, "currency", event.target.value.toUpperCase())}
                 />
               </label>
-              <label>
+              <label className={fieldClass(autoFilledFields, "category")}>
                 Category
                 <select value={form.category} onChange={(event) => setFormValue(setForm, "category", event.target.value)}>
                   <option value="">Uncategorized</option>
@@ -190,11 +345,29 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
                   ))}
                 </select>
               </label>
-              <label>
+              <label className={fieldClass(autoFilledFields, "vendor")}>
                 Vendor
                 <input value={form.vendor} onChange={(event) => setFormValue(setForm, "vendor", event.target.value)} />
               </label>
               <label>
+                Payment method
+                <select value={form.paymentMethod} onChange={(event) => setFormValue(setForm, "paymentMethod", event.target.value)}>
+                  <option value="">Not specified</option>
+                  <option value="Corporate Card">Corporate Card</option>
+                  <option value="Personal Card">Personal Card</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                </select>
+              </label>
+              <label className={fieldClass(autoFilledFields, "taxIdNumber")}>
+                TRN / tax number
+                <input value={form.taxIdNumber} onChange={(event) => setFormValue(setForm, "taxIdNumber", event.target.value)} />
+              </label>
+              <label className={fieldClass(autoFilledFields, "taxAmount")}>
+                VAT / tax amount
+                <input value={form.taxAmount} inputMode="decimal" onChange={(event) => setFormValue(setForm, "taxAmount", event.target.value)} />
+              </label>
+              <label className={fieldClass(autoFilledFields, "notes")}>
                 Notes
                 <input value={form.notes} onChange={(event) => setFormValue(setForm, "notes", event.target.value)} />
               </label>
@@ -363,6 +536,87 @@ function setFormValue(
   value: string
 ) {
   setForm((current) => ({ ...current, [key]: value }));
+}
+
+function ReceiptUploadPanel({
+  fileName,
+  isParsing,
+  confidence,
+  warning,
+  onFile,
+  onClear
+}: {
+  fileName: string;
+  isParsing: boolean;
+  confidence: number | null;
+  warning: string | null;
+  onFile: (file: File) => void;
+  onClear: () => void;
+}) {
+  const [isDragging, setIsDragging] = useState(false);
+
+  return (
+    <div className="tex-receipt-upload">
+      <div>
+        <strong>Receipt</strong>
+        <p>Attach a receipt image and TEX will extract the fields for review.</p>
+      </div>
+      {fileName ? (
+        <div className="tex-receipt-file">
+          <span>{fileName}</span>
+          {confidence !== null ? <b>AI confidence {Math.round(confidence * 100)}%</b> : null}
+          <button type="button" className="tex-secondary-button" onClick={onClear}>
+            Clear
+          </button>
+        </div>
+      ) : (
+        <label
+          className={`tex-receipt-drop${isDragging ? " tex-receipt-drop-active" : ""}`}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setIsDragging(false);
+            const file = event.dataTransfer.files[0];
+            if (file) {
+              onFile(file);
+            }
+          }}
+        >
+          <input
+            type="file"
+            accept=".jpeg,.jpg,.png,.webp,.heic,.heif,.pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                onFile(file);
+              }
+            }}
+          />
+          <span>Drop receipt here or click to upload</span>
+          <small>JPEG, PNG, WEBP, HEIC, or PDF up to 20MB</small>
+        </label>
+      )}
+      {isParsing ? <p className="tex-notice">Reading receipt and extracting expense fields...</p> : null}
+      {warning ? <p className="tex-error">{warning}</p> : null}
+    </div>
+  );
+}
+
+function fieldClass(fields: Set<keyof ExpenseFormState>, field: keyof ExpenseFormState) {
+  return fields.has(field) ? "tex-ai-filled" : undefined;
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Could not read receipt file."));
+    reader.readAsDataURL(file);
+  });
 }
 
 async function texFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {
