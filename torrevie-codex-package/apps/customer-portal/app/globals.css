@@ -2115,7 +2115,7 @@ form.member-row {
 
 .tex-expense-workspace {
   display: grid;
-  gap: 20px;
+  gap: 12px;
 }
 
 .tex-trip-workspace {
@@ -2135,8 +2135,8 @@ form.member-row {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   display: grid;
-  gap: 16px;
-  padding: 18px;
+  gap: 12px;
+  padding: 14px;
 }
 
 .tex-form-panel,
@@ -2177,7 +2177,7 @@ form.member-row {
 }
 
 .tex-form-panel h3 {
-  font-size: 18px;
+  font-size: 17px;
   margin: 0;
 }
 
@@ -2187,6 +2187,17 @@ form.member-row {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.tex-drawer .section-heading-row {
+  align-items: center;
+  border-block-end: 1px solid var(--color-border);
+  padding-block-end: 8px;
+}
+
+.tex-drawer .tex-primary-button {
+  justify-self: end;
+  min-inline-size: 150px;
 }
 
 .tex-drawer-backdrop {
@@ -2205,11 +2216,11 @@ form.member-row {
   border: 1px solid color-mix(in srgb, var(--color-accent) 16%, var(--color-border));
   border-radius: 8px;
   display: grid;
-  gap: 16px;
-  inline-size: min(560px, 100%);
+  gap: 12px;
+  inline-size: min(600px, 100%);
   max-block-size: 100%;
   overflow: auto;
-  padding: 18px;
+  padding: 16px;
   box-shadow: -20px 0 42px color-mix(in srgb, var(--color-text-primary) 16%, transparent);
 }
 
@@ -2244,7 +2255,7 @@ form.member-row {
 
 .tex-form-grid {
   display: grid;
-  gap: 12px;
+  gap: 9px 10px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -2252,9 +2263,9 @@ form.member-row {
 .tex-place-field {
   color: var(--color-text-muted);
   display: grid;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
-  gap: 6px;
+  gap: 4px;
 }
 
 .tex-form-grid input,
@@ -2264,8 +2275,8 @@ form.member-row {
   border: 1px solid var(--color-border);
   border-radius: 6px;
   color: var(--color-text-primary);
-  min-block-size: 42px;
-  padding-inline: 10px;
+  min-block-size: 38px;
+  padding-inline: 9px;
 }
 
 .tex-form-grid input:focus,
@@ -2279,23 +2290,23 @@ form.member-row {
 }
 
 .tex-receipt-upload {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 7%, white), var(--color-bg-primary));
+  background: var(--color-bg-primary);
   border: 1px solid color-mix(in srgb, var(--color-accent) 18%, var(--color-border));
   border-radius: 8px;
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: 8px;
+  padding: 12px;
 }
 
 .tex-receipt-upload strong {
   color: var(--color-text-primary);
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .tex-receipt-upload p {
   color: var(--color-text-muted);
-  font-size: 13px;
-  margin: 4px 0 0;
+  font-size: 12px;
+  margin: 2px 0 0;
 }
 
 .tex-receipt-drop {
@@ -2306,9 +2317,9 @@ form.member-row {
   color: var(--color-text-primary);
   cursor: pointer;
   display: grid;
-  gap: 4px;
-  min-block-size: 112px;
-  padding: 18px;
+  gap: 2px;
+  min-block-size: 82px;
+  padding: 12px;
   place-items: center;
   text-align: center;
 }
@@ -2344,9 +2355,9 @@ form.member-row {
   border-radius: 8px;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   justify-content: space-between;
-  padding: 12px;
+  padding: 9px;
 }
 
 .tex-receipt-file b {
@@ -2359,8 +2370,8 @@ form.member-row {
 }
 
 .tex-ai-filled {
-  border-inline-start: 4px solid var(--color-accent);
-  padding-inline-start: 10px;
+  border-inline-start: 3px solid var(--color-accent);
+  padding-inline-start: 8px;
 }
 
 .tex-place-suggestions {
@@ -2407,8 +2418,8 @@ form.member-row {
   background: var(--color-accent);
   border: 0;
   color: var(--color-text-inverse);
-  min-block-size: 42px;
-  padding-inline: 14px;
+  min-block-size: 38px;
+  padding-inline: 13px;
 }
 
 .tex-secondary-button,
@@ -2417,8 +2428,8 @@ form.member-row {
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
   color: var(--color-text-primary);
-  min-block-size: 36px;
-  padding-inline: 11px;
+  min-block-size: 34px;
+  padding-inline: 10px;
 }
 
 .tex-primary-button:disabled,
@@ -2448,8 +2459,34 @@ form.member-row {
 .tex-segmented-control {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
   justify-content: flex-end;
+}
+
+.tex-expense-panel .section-heading-row {
+  align-items: center;
+  border-block-end: 1px solid var(--color-border);
+  padding-block-end: 10px;
+}
+
+.tex-expense-panel .section-heading-row p {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  margin: 3px 0 0;
+}
+
+.tex-expense-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.tex-expense-toolbar > span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .tex-segmented-control button[aria-pressed="true"] {
@@ -2460,7 +2497,7 @@ form.member-row {
 
 .tex-expense-list {
   display: grid;
-  gap: 10px;
+  gap: 7px;
 }
 
 .tex-expense-card {
@@ -2469,32 +2506,32 @@ form.member-row {
   border: 1px solid color-mix(in srgb, var(--color-accent) 10%, var(--color-border));
   border-radius: 8px;
   display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(220px, 1fr) minmax(120px, auto) minmax(150px, auto);
-  padding: 14px;
+  gap: 10px;
+  grid-template-columns: minmax(260px, 1fr) minmax(110px, auto) minmax(132px, auto);
+  padding: 10px 12px;
 }
 
 .tex-expense-card h4 {
-  font-size: 16px;
-  margin: 6px 0 4px;
+  font-size: 15px;
+  margin: 4px 0 2px;
 }
 
 .tex-expense-card p,
 .tex-card-actions span {
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: 12px;
   margin: 0;
 }
 
 .tex-expense-card strong {
-  font-size: 18px;
+  font-size: 16px;
   text-align: end;
 }
 
 .tex-card-actions {
   align-items: center;
   display: flex;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-end;
 }
 
@@ -2502,10 +2539,10 @@ form.member-row {
   border-radius: 999px;
   color: var(--color-text-inverse);
   display: inline-flex;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
-  padding-block: 4px;
-  padding-inline: 8px;
+  padding-block: 3px;
+  padding-inline: 7px;
   text-transform: uppercase;
 }
 

@@ -443,9 +443,12 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
         </div>
       ) : null}
 
-      <section className="tex-form-panel" aria-labelledby="tex-expense-list-title">
+      <section className="tex-form-panel tex-expense-panel" aria-labelledby="tex-expense-list-title">
         <div className="section-heading-row">
-          <h3 id="tex-expense-list-title">Expense queue</h3>
+          <div>
+            <h3 id="tex-expense-list-title">Expense queue</h3>
+            <p>Review OCR receipts, status, and approvals in one list.</p>
+          </div>
           <div className="tex-panel-actions">
             <button
               type="button"
@@ -464,17 +467,20 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
             </button>
           </div>
         </div>
-        <div className="tex-segmented-control" aria-label="Expense status filter">
-          {(["all", "pending", "approved", "rejected", "paid"] as const).map((status) => (
-            <button
-              key={status}
-              type="button"
-              aria-pressed={statusFilter === status}
-              onClick={() => setStatusFilter(status)}
-            >
-              {status}
-            </button>
-          ))}
+        <div className="tex-expense-toolbar">
+          <div className="tex-segmented-control" aria-label="Expense status filter">
+            {(["all", "pending", "approved", "rejected", "paid"] as const).map((status) => (
+              <button
+                key={status}
+                type="button"
+                aria-pressed={statusFilter === status}
+                onClick={() => setStatusFilter(status)}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+          <span>{visibleExpenses.length} shown</span>
         </div>
         {notice ? <p className="tex-notice">{notice}</p> : null}
         {error && !isExpenseDrawerOpen ? <p className="tex-error">{error}</p> : null}
