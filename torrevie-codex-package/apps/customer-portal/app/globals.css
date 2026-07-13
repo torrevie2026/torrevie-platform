@@ -1084,6 +1084,281 @@ form.member-row {
   font-size: 16px;
 }
 
+.fsm-shell {
+  grid-template-columns: 256px minmax(0, 1fr);
+}
+
+.fsm-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100vh;
+  padding: 0;
+  position: sticky;
+  inset-block-start: 0;
+}
+
+.fsm-sidebar-header {
+  border-block-end: 1px solid var(--color-border);
+  padding-block: 24px 18px;
+  padding-inline: 20px;
+}
+
+.fsm-brand {
+  margin: 0;
+}
+
+.fsm-brand span {
+  display: grid;
+  gap: 2px;
+  text-transform: none;
+}
+
+.fsm-brand strong {
+  color: var(--color-text-primary);
+}
+
+.fsm-brand small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fsm-nav {
+  display: grid;
+  gap: 6px;
+  padding-block: 18px;
+  padding-inline: 16px;
+}
+
+.fsm-nav a {
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  font-weight: 700;
+  padding-block: 10px;
+  padding-inline: 12px;
+}
+
+.fsm-nav a:hover,
+.fsm-nav a[aria-current="page"] {
+  background: var(--color-bg-surface);
+}
+
+.fsm-nav a[aria-current="page"] {
+  border-inline-start: 3px solid var(--color-accent);
+}
+
+.fsm-main {
+  display: grid;
+  gap: 24px;
+  padding-block: 28px;
+  padding-inline: clamp(20px, 4vw, 48px);
+}
+
+.fsm-topbar {
+  align-items: flex-start;
+}
+
+.fsm-progress-band {
+  align-items: center;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-inline-start: 4px solid var(--color-accent);
+  border-radius: 8px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 18px;
+}
+
+.fsm-progress-band div {
+  display: grid;
+  gap: 4px;
+}
+
+.fsm-progress-band span,
+.fsm-widget span,
+.fsm-widget small,
+.fsm-onboarding-step > span,
+.fsm-onboarding-step p,
+.fsm-plan-option small,
+.fsm-term-list dt {
+  color: var(--color-text-muted);
+}
+
+.fsm-progress-band strong,
+.fsm-progress-band a {
+  color: var(--color-text-primary);
+}
+
+.fsm-progress-band a {
+  border: 1px solid var(--color-accent);
+  border-radius: 6px;
+  color: var(--color-accent);
+  font-weight: 800;
+  padding-block: 10px;
+  padding-inline: 14px;
+  white-space: nowrap;
+}
+
+.fsm-widget-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.fsm-widget,
+.fsm-panel,
+.fsm-onboarding-step {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.fsm-widget {
+  display: grid;
+  gap: 8px;
+  min-block-size: 138px;
+  padding: 18px;
+}
+
+.fsm-widget strong {
+  color: var(--color-text-primary);
+  font-size: 34px;
+  line-height: 1;
+}
+
+.fsm-workspace-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+}
+
+.fsm-panel {
+  padding: 20px;
+}
+
+.fsm-panel h2,
+.fsm-onboarding-step h2 {
+  color: var(--color-text-primary);
+  font-size: 20px;
+  margin: 0;
+}
+
+.fsm-flow-list {
+  counter-reset: flow-step;
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+}
+
+.fsm-flow-list li {
+  align-items: center;
+  background: var(--color-bg-surface);
+  border-radius: 6px;
+  display: flex;
+  gap: 10px;
+  padding-block: 10px;
+  padding-inline: 12px;
+}
+
+.fsm-flow-list li::before {
+  align-items: center;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-accent-secondary);
+  content: counter(flow-step);
+  counter-increment: flow-step;
+  display: inline-flex;
+  font-weight: 800;
+  block-size: 28px;
+  inline-size: 28px;
+  justify-content: center;
+}
+
+.fsm-term-list {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0 0;
+}
+
+.fsm-term-list div {
+  align-items: center;
+  border-block-end: 1px solid var(--color-border);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding-block-end: 10px;
+}
+
+.fsm-term-list dd,
+.fsm-term-list dt {
+  margin: 0;
+}
+
+.fsm-term-list dd {
+  color: var(--color-text-primary);
+  font-weight: 800;
+  text-align: end;
+}
+
+.fsm-onboarding {
+  display: grid;
+  gap: 18px;
+}
+
+.fsm-onboarding-step {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.fsm-form-grid,
+.fsm-plan-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.fsm-form-grid label {
+  color: var(--color-text-primary);
+  display: grid;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.fsm-form-grid input,
+.fsm-form-grid select {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  min-block-size: 42px;
+  padding-inline: 12px;
+}
+
+.fsm-plan-option {
+  align-items: flex-start;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-primary);
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.fsm-plan-option input {
+  accent-color: var(--color-accent);
+}
+
+.fsm-plan-option strong {
+  color: var(--color-text-primary);
+  text-transform: capitalize;
+}
+
 .crm-workspace {
   align-items: start;
   display: grid;
@@ -2057,6 +2332,10 @@ form.member-row {
   .tex-expense-workspace,
   .tex-trip-workspace,
   .tex-finance-workspace,
+  .fsm-widget-grid,
+  .fsm-workspace-grid,
+  .fsm-form-grid,
+  .fsm-plan-grid,
   .customer-account-grid,
   .tenant-limit-strip,
   .invite-user-form,
@@ -2177,7 +2456,16 @@ form.member-row {
     display: block;
   }
 
+  .fsm-shell {
+    display: block;
+  }
+
   .tex-sidebar {
+    min-block-size: auto;
+    position: static;
+  }
+
+  .fsm-sidebar {
     min-block-size: auto;
     position: static;
   }
@@ -2187,12 +2475,28 @@ form.member-row {
     display: none;
   }
 
+  .fsm-sidebar .fsm-nav {
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    overflow-x: auto;
+    padding-block: 12px;
+  }
+
   .tex-sidebar-header {
+    padding-block: 14px;
+  }
+
+  .fsm-sidebar-header {
     padding-block: 14px;
   }
 
   .tex-main {
     padding-block-end: 92px;
+    padding-inline: 16px;
+  }
+
+  .fsm-main {
+    padding-block: 18px;
     padding-inline: 16px;
   }
 
@@ -2209,6 +2513,15 @@ form.member-row {
   .tex-context {
     inline-size: 100%;
     min-inline-size: 0;
+  }
+
+  .fsm-progress-band {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .fsm-widget strong {
+    font-size: 28px;
   }
 
   .tex-mobile-nav {

@@ -59,8 +59,8 @@ const appCatalog: Record<ProductKey, Omit<LauncherApp, "metricValue">> = {
     key: "fsm",
     label: "FSM",
     description: "Field service work orders, assignments, and site activity.",
-    href: null,
-    status: "coming_soon",
+    href: "/fsm",
+    status: "online",
     metricLabel: "Work orders",
     accent: "navy"
   },

@@ -527,3 +527,34 @@ Status: Completed on 2026-07-13.
   - Seat limits are enforced server-side in user invitation paths.
 - Report:
   - `docs/fsm/reports/PHASE_1.md`
+
+## WP-28: FSM adaptive UX and onboarding
+
+Status: Completed on 2026-07-13.
+
+- Scope:
+  - Added data-driven FSM segment detection, suggested plan tiers, dashboard widget presets, and default flow settings.
+  - Added one adaptive navigation profile per FSM segment with entitlement filtering.
+  - Added locale-aware terminology packs and a client `useTerm` hook.
+  - Added `/fsm` in the customer portal with segment-specific navigation, dashboard widgets, terminology preview, default flow display, and onboarding.
+  - Added a five-step onboarding form that writes segment answers, confirmed segment, plan tier, baseline metrics, activated channel, nav profile, terminology pack, and flow settings to the tenant.
+  - Updated the app launcher so subscribed FSM tenants open Torrevie FSM.
+- Decisions:
+  - Used a single shared FSM route rather than one page copy per segment.
+  - Used the WP-27 tenant fields as the system of record for adaptive UX settings.
+  - Filtered navigation through `get_org_entitlements(public.current_tenant_id())`.
+  - Kept Arabic content as English fallback while preserving locale-aware terminology structure and RTL-safe layout.
+- Verification:
+  - `pnpm test:fsm-adaptive-ux`
+  - `pnpm test`
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm build`
+- Acceptance:
+  - Segment detection maps signup answers to the expected segment in tests.
+  - Entry-style feature filtering hides PM and contracts while channel features remain visible when entitled.
+  - Terminology changes by segment through the terminology pack.
+  - The FSM route reads tenant segment, plan, flow settings, and entitlements.
+  - Onboarding writes tenant adaptive settings and audit events.
+- Report:
+  - `docs/fsm/reports/PHASE_2.md`
