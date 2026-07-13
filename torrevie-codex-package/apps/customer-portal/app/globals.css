@@ -1649,7 +1649,8 @@ form.member-row {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.tex-form-grid label {
+.tex-form-grid label,
+.tex-place-field {
   color: var(--color-text-muted);
   display: grid;
   font-size: 13px;
@@ -1658,13 +1659,39 @@ form.member-row {
 }
 
 .tex-form-grid input,
-.tex-form-grid select {
+.tex-form-grid select,
+.tex-place-field input {
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
   border-radius: 6px;
   color: var(--color-text-primary);
   min-block-size: 42px;
   padding-inline: 10px;
+}
+
+.tex-place-suggestions {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  display: grid;
+  gap: 2px;
+  padding: 4px;
+}
+
+.tex-place-suggestions button {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font: inherit;
+  min-block-size: 34px;
+  padding-inline: 8px;
+  text-align: start;
+}
+
+.tex-place-suggestions button:hover {
+  background: var(--color-bg-primary);
 }
 
 .tex-primary-button,

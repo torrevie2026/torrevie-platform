@@ -481,6 +481,7 @@ async function main() {
       process.env.GOOGLE_MAPS_API_KEY = previousKey;
     }
     assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /configured/);
     assert.match(JSON.stringify(response.body), /Hamriya Port/);
   }
 
@@ -507,7 +508,7 @@ async function main() {
       }
     }
     assert.equal(response.status, 200);
-    assert.deepEqual(response.body, { places: [] });
+    assert.deepEqual(response.body, { configured: false, places: [] });
   }
 
   {

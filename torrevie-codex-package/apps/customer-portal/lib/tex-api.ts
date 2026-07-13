@@ -60,6 +60,11 @@ type GooglePlaceSuggestion = {
   text: string;
 };
 
+type GooglePlaceSuggestionResult = {
+  configured: boolean;
+  places: GooglePlaceSuggestion[];
+};
+
 export async function handleTexApiRequest(
   client: TenantQueryClient,
   actor: TexActorContext,
@@ -95,7 +100,7 @@ export async function handleTexApiRequest(
   }
 
   if (path === "/places" && method === "GET") {
-    return json(200, { places: await googlePlaceSuggestions(request.query?.input ?? "") });
+    return json(200, await googlePlaceSuggestions(request.query?.input ?? ""));
   }
 
   const tripLegsMatch = path.match(/^\/trips\/([0-9a-f-]+)\/legs$/i);
@@ -229,16 +234,16 @@ function googleMapsApiKey() {
   );
 }
 
-async function googlePlaceSuggestions(input: string): Promise<GooglePlaceSuggestion[]> {
+async function googlePlaceSuggestions(input: string): Promise<GooglePlaceSuggestionResult> {
   const key = googleMapsApiKey();
   const trimmed = input.trim();
 
   if (trimmed.length < 3) {
-    return [];
+    return { configured: Boolean(key), places: [] };
   }
 
   if (!key) {
-    return [];
+    return { configured: false, places: [] };
   }
 
   const response = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
@@ -261,13 +266,16 @@ async function googlePlaceSuggestions(input: string): Promise<GooglePlaceSuggest
     throw error;
   }
 
-  return (result.suggestions ?? [])
-    .map((suggestion) => ({
-      placeId: suggestion.placePrediction?.placeId ?? "",
-      text: suggestion.placePrediction?.text?.text ?? ""
-    }))
-    .filter((suggestion) => suggestion.placeId && suggestion.text)
-    .slice(0, 6);
+  return {
+    configured: true,
+    places: (result.suggestions ?? [])
+      .map((suggestion) => ({
+        placeId: suggestion.placePrediction?.placeId ?? "",
+        text: suggestion.placePrediction?.text?.text ?? ""
+      }))
+      .filter((suggestion) => suggestion.placeId && suggestion.text)
+      .slice(0, 6)
+  };
 }
 
 function googleWaypoint(input: { placeId?: string | null; address: string }) {
