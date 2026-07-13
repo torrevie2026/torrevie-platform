@@ -238,9 +238,7 @@ async function googlePlaceSuggestions(input: string): Promise<GooglePlaceSuggest
   }
 
   if (!key) {
-    const error = new Error("Google Maps API key is not configured.");
-    (error as Error & { statusCode?: number }).statusCode = 501;
-    throw error;
+    return [];
   }
 
   const response = await fetch("https://places.googleapis.com/v1/places:autocomplete", {

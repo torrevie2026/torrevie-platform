@@ -486,6 +486,32 @@ async function main() {
 
   {
     const client = new RecordingTexApiClient();
+    const previousKeys = {
+      GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
+      GOOGLE_MAPS_PLATFORM_KEY: process.env.GOOGLE_MAPS_PLATFORM_KEY,
+      GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+      GOOGLE_AI_KEY: process.env.GOOGLE_AI_KEY
+    };
+    delete process.env.GOOGLE_MAPS_API_KEY;
+    delete process.env.GOOGLE_MAPS_PLATFORM_KEY;
+    delete process.env.GOOGLE_API_KEY;
+    delete process.env.GOOGLE_AI_KEY;
+    const response = await handleTexApiRequest(client, actor, {
+      method: "GET",
+      path: "/places",
+      query: { input: "Hamriya" }
+    });
+    for (const [key, value] of Object.entries(previousKeys)) {
+      if (value !== undefined) {
+        process.env[key] = value;
+      }
+    }
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body, { places: [] });
+  }
+
+  {
+    const client = new RecordingTexApiClient();
     const response = await handleTexApiRequest(client, actor, {
       method: "PUT",
       path: "/trips/00000000-0000-4000-8000-000000008001/legs",

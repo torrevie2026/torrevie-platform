@@ -1041,7 +1041,8 @@ async function loadPlaceSuggestions(
     setPlaceSearchError(null);
   } catch (caught) {
     setSuggestions([]);
-    setPlaceSearchError(errorMessage(caught));
+    const message = errorMessage(caught);
+    setPlaceSearchError(message === "Google Maps API key is not configured." ? null : message);
   }
 }
 
