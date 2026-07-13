@@ -2,7 +2,10 @@ import { getMessages, isLocale, type Locale } from "@torrevie/localization";
 import { roleKeys, type RoleKey } from "@torrevie/permissions";
 import { notFound, redirect } from "next/navigation";
 import {
+  assignableCustomerRoles,
   getTenantWhatsappSettings,
+  getTenantUsageLimits,
+  listWhatsappProviderProfiles,
   listCustomerMembers,
   type CustomerAdminContext
 } from "../../../../lib/customer-administration";
@@ -12,7 +15,12 @@ import {
   resolveCustomerTenantContext
 } from "../../../../lib/server/customer-session";
 import { PostgresTenantQueryClient } from "../../../../lib/server/tenant-query-client";
-import { updateTenantWhatsappSettingsAction } from "./actions";
+import {
+  inviteCustomerUserAction,
+  saveWhatsappProviderProfileAction,
+  updateCustomerUserAction,
+  updateTenantWhatsappSettingsAction
+} from "./actions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +30,7 @@ export default async function CustomerUsersPage({
   searchParams
 }: {
   params: Promise<{ locale: string }>;
-  searchParams?: Promise<{ integration?: string }>;
+  searchParams?: Promise<{ integration?: string; users?: string; message?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const status = await searchParams;
@@ -37,8 +45,12 @@ export default async function CustomerUsersPage({
 
   try {
     const { actor, client, tenantName } = await resolveActor();
-    const members = await listCustomerMembers(client, actor);
-    const whatsappSettings = await getTenantWhatsappSettings(client, actor);
+    const [members, whatsappSettings, usageLimits, providerProfiles] = await Promise.all([
+      listCustomerMembers(client, actor),
+      getTenantWhatsappSettings(client, actor),
+      getTenantUsageLimits(client, actor),
+      listWhatsappProviderProfiles(client, actor)
+    ]);
 
     return (
       <main className="customer-shell admin-users-shell" data-visual-check="customer-admin-users">
@@ -60,8 +72,8 @@ export default async function CustomerUsersPage({
           <header className="customer-topbar">
             <div>
               <p className="eyebrow">{admin.eyebrow}</p>
-              <h1>Tenant setup</h1>
-              <p>Manage tenant users and app-level configuration for subscribed Torrevie modules.</p>
+              <h1>App-level tenant setup</h1>
+              <p>Manage web users, TEX WhatsApp hooks, provider profiles, and email notifications inside the customer app.</p>
             </div>
             <div className="customer-context" aria-label="Administration guardrails">
               <span>{admin.requiredRole}: customer_admin</span>
@@ -73,16 +85,99 @@ export default async function CustomerUsersPage({
           </header>
 
           {status?.integration === "updated" ? <p className="tex-notice">WhatsApp integration settings updated.</p> : null}
+          {status?.integration === "profile_saved" ? <p className="tex-notice">WhatsApp provider profile saved.</p> : null}
           {status?.integration === "failed" ? <p className="tex-error">WhatsApp integration settings could not be updated.</p> : null}
+          {status?.users === "invited" ? <p className="tex-notice">Tenant web user invitation created.</p> : null}
+          {status?.users === "updated" ? <p className="tex-notice">Tenant web user updated.</p> : null}
+          {status?.users === "failed" ? <p className="tex-error">{status.message ?? "Tenant web user update failed."}</p> : null}
+
+          <section className="tenant-limit-strip" aria-label="Plan limits">
+            <LimitCard label="Web users" used={usageLimits.webUsersUsed} limit={usageLimits.webUsersLimit} />
+            <LimitCard label="WhatsApp providers" used={providerProfiles.length} limit={usageLimits.whatsappProviderProfilesLimit} />
+            <LimitCard label="Email notifications" usedLabel="monthly" limit={usageLimits.emailNotificationsMonthlyLimit} />
+            <LimitCard label="Database storage" usedLabel="tenant DB" limit={usageLimits.databaseStorageMbLimit} suffix="MB" />
+          </section>
 
           <section className="admin-layout tenant-setup-layout" aria-label="Tenant administration">
-            <section className="admin-panel tenant-integration-panel" aria-labelledby="whatsapp-settings-title">
+            <section className="admin-panel member-panel" aria-labelledby="members-title">
               <div className="section-heading-row">
-                <h2 id="whatsapp-settings-title">TEX WhatsApp setup</h2>
+                <h2 id="members-title">Web users</h2>
+                <span className="module-status module-status-active">app managed</span>
+              </div>
+              <p className="admin-panel-copy">
+                Tenant admins create customer portal users here. Invitations count against the active tier user limit.
+              </p>
+              <form action={inviteCustomerUserAction} className="tenant-integration-form invite-user-form">
+                <input type="hidden" name="locale" value={locale} />
+                <label>
+                  Email
+                  <input name="email" type="email" required dir="ltr" placeholder="employee@customer.com" />
+                </label>
+                <label>
+                  Name
+                  <input name="displayName" placeholder="Full name" />
+                </label>
+                <label>
+                  Role
+                  <select name="role" defaultValue="customer_standard_user">
+                    {assignableCustomerRoles.map((role) => (
+                      <option key={role} value={role}>
+                        {formatRole(role)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button type="submit" disabled={usageLimits.webUsersLimit !== null && usageLimits.webUsersUsed >= usageLimits.webUsersLimit}>
+                  Invite web user
+                </button>
+              </form>
+
+              <div className="member-table" role="table" aria-label={admin.tenantUsers}>
+                <div role="row" className="member-row member-row-head">
+                  <span role="columnheader">{admin.user}</span>
+                  <span role="columnheader">{admin.status}</span>
+                  <span role="columnheader">{admin.role}</span>
+                  <span role="columnheader">{admin.action}</span>
+                </div>
+                {members.map((member) => (
+                  <form action={updateCustomerUserAction} role="row" className="member-row" key={member.userId}>
+                    <input type="hidden" name="locale" value={locale} />
+                    <input type="hidden" name="userId" value={member.userId} />
+                    <span role="cell">
+                      <strong>{member.displayName ?? member.email}</strong>
+                      <small>{member.email}</small>
+                    </span>
+                    <span role="cell">
+                      <select name="status" defaultValue={member.status}>
+                        <option value="active">Active</option>
+                        <option value="invited">Invited</option>
+                        <option value="disabled">Disabled</option>
+                      </select>
+                    </span>
+                    <span role="cell">
+                      <select name="role" defaultValue={member.roles[0] ?? "customer_standard_user"}>
+                        {assignableCustomerRoles.map((role) => (
+                          <option key={role} value={role}>
+                            {formatRole(role)}
+                          </option>
+                        ))}
+                      </select>
+                    </span>
+                    <span role="cell">
+                      <button type="submit">{admin.update}</button>
+                    </span>
+                  </form>
+                ))}
+              </div>
+            </section>
+
+            <section className="admin-panel tenant-integration-panel" id="tex-whatsapp-settings" aria-labelledby="whatsapp-settings-title">
+              <div className="section-heading-row">
+                <h2 id="whatsapp-settings-title">TEX WhatsApp hooks</h2>
                 <span className="module-status module-status-active">tenant scoped</span>
               </div>
               <p className="admin-panel-copy">
-                Configure webhook routing and provider keys at tenant level. Existing secrets are never shown after saving.
+                Configure the active webhook route used by receipt OCR and STATUS replies. Existing secrets are never shown after saving.
               </p>
               <form action={updateTenantWhatsappSettingsAction} className="tenant-integration-form">
                 <input type="hidden" name="locale" value={locale} />
@@ -152,35 +247,114 @@ export default async function CustomerUsersPage({
                   <input name="duplicateAutoRejectEnabled" type="checkbox" defaultChecked={whatsappSettings.duplicateAutoRejectEnabled} />
                   Auto-reject likely duplicates instead of sending them to manager review
                 </label>
+                <div className="tenant-email-settings">
+                  <h3>Email reports and notifications</h3>
+                  <label className="tex-checkbox-row">
+                    <input name="emailNotificationsEnabled" type="checkbox" defaultChecked={whatsappSettings.emailNotificationsEnabled} />
+                    Send automatic TEX notifications by email
+                  </label>
+                  <label>
+                    Report frequency
+                    <select name="emailReportFrequency" defaultValue={whatsappSettings.emailReportFrequency}>
+                      <option value="off">Off</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </label>
+                  <label>
+                    Report recipients
+                    <textarea
+                      name="emailReportRecipients"
+                      defaultValue={whatsappSettings.emailReportRecipients.join("\n")}
+                      placeholder="finance@customer.com"
+                      rows={4}
+                      dir="ltr"
+                    />
+                  </label>
+                </div>
                 <button type="submit">Save WhatsApp setup</button>
               </form>
             </section>
 
-            <section className="admin-panel member-panel" aria-labelledby="members-title">
-              <h2 id="members-title">{admin.tenantUsers}</h2>
-              <div className="member-table" role="table" aria-label={admin.tenantUsers}>
-                <div role="row" className="member-row member-row-head">
-                  <span role="columnheader">{admin.user}</span>
-                  <span role="columnheader">{admin.status}</span>
-                  <span role="columnheader">{admin.role}</span>
-                  <span role="columnheader">{admin.action}</span>
-                </div>
-                {members.map((member) => (
-                  <div role="row" className="member-row" key={member.userId}>
-                    <span role="cell">
-                      <strong>{member.displayName ?? member.email}</strong>
-                      <small>{member.email}</small>
-                    </span>
-                    <span role="cell">
-                      <mark>{member.status}</mark>
-                    </span>
-                    <span role="cell">{member.roles.join(", ") || "No role"}</span>
-                    <span role="cell">
-                      <button type="button">{admin.update}</button>
-                    </span>
-                  </div>
+            <section className="admin-panel tenant-integration-panel" aria-labelledby="provider-profiles-title">
+              <div className="section-heading-row">
+                <h2 id="provider-profiles-title">WhatsApp provider profiles</h2>
+                <span className="module-status module-status-pending">multi-provider</span>
+              </div>
+              <p className="admin-panel-copy">
+                Keep multiple provider configurations ready, then mark the live one as default. The default profile also updates active TEX webhook settings.
+              </p>
+              <div className="provider-profile-list">
+                {providerProfiles.length === 0 ? <p className="empty">No provider profiles saved yet.</p> : null}
+                {providerProfiles.map((profile) => (
+                  <article key={profile.id} className="provider-profile-card">
+                    <div>
+                      <strong>{profile.label}</strong>
+                      <span>{formatProvider(profile.provider)} / {profile.status}</span>
+                    </div>
+                    <mark>{profile.isDefault ? "Default" : "Standby"}</mark>
+                    <small>{profile.apiKeyConfigured ? `API key ending ${profile.apiKeyLast4 || "****"}` : "API key not saved"}</small>
+                  </article>
                 ))}
               </div>
+              <form action={saveWhatsappProviderProfileAction} className="tenant-integration-form">
+                <input type="hidden" name="locale" value={locale} />
+                <div className="tenant-integration-grid">
+                  <label>
+                    Profile name
+                    <input name="profileLabel" required placeholder="Primary UltraMsg" />
+                  </label>
+                  <label>
+                    Provider
+                    <select name="profileProvider" defaultValue="ultramsg">
+                      <option value="ultramsg">UltraMsg</option>
+                      <option value="wappfly">Wappfly</option>
+                      <option value="meta">Meta WhatsApp Cloud API</option>
+                    </select>
+                  </label>
+                  <label>
+                    Status
+                    <select name="profileStatus" defaultValue="active">
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </label>
+                  <label>
+                    Webhook URL
+                    <input name="profileWebhookUrl" type="url" placeholder="https://app.torrevie.com/api/tex/webhook" dir="ltr" />
+                  </label>
+                </div>
+                <div className="tenant-integration-grid">
+                  <label>
+                    UltraMsg instance ID
+                    <input name="profileWhatsappInstanceId" dir="ltr" />
+                  </label>
+                  <label>
+                    Wappfly session ID
+                    <input name="profileWappflySessionId" dir="ltr" />
+                  </label>
+                  <label>
+                    Meta phone number ID
+                    <input name="profileMetaPhoneNumberId" dir="ltr" />
+                  </label>
+                  <label>
+                    Meta business account ID
+                    <input name="profileMetaWhatsappBusinessAccountId" dir="ltr" />
+                  </label>
+                </div>
+                <label>
+                  Provider API key
+                  <input name="profileApiKey" type="password" autoComplete="new-password" dir="ltr" />
+                </label>
+                <label className="tex-checkbox-row">
+                  <input name="profileIsDefault" type="checkbox" defaultChecked />
+                  Use this profile as the live TEX WhatsApp provider
+                </label>
+                <button type="submit" disabled={usageLimits.whatsappProviderProfilesLimit !== null && providerProfiles.length >= usageLimits.whatsappProviderProfilesLimit}>
+                  Save provider profile
+                </button>
+              </form>
             </section>
           </section>
         </section>
@@ -212,6 +386,45 @@ function SecretInput({
       <input name={name} type="password" autoComplete="new-password" placeholder={configured ? `Configured ending ${last4 || "****"}` : "Not configured"} dir="ltr" />
     </label>
   );
+}
+
+function LimitCard({
+  label,
+  limit,
+  suffix = "",
+  used,
+  usedLabel
+}: {
+  label: string;
+  limit: number | null;
+  suffix?: string;
+  used?: number;
+  usedLabel?: string;
+}) {
+  const limitLabel = limit === null ? "Unlimited" : `${limit}${suffix ? ` ${suffix}` : ""}`;
+  const usageLabel = used !== undefined ? `${used} / ${limitLabel}` : limitLabel;
+
+  return (
+    <article className="tenant-limit-card">
+      <span>{label}</span>
+      <strong>{usageLabel}</strong>
+      {usedLabel ? <small>{usedLabel}</small> : null}
+    </article>
+  );
+}
+
+function formatProvider(provider: string) {
+  if (provider === "wappfly") return "Wappfly";
+  if (provider === "meta") return "Meta Cloud API";
+  return "UltraMsg";
+}
+
+function formatRole(role: string) {
+  return role
+    .replace(/^customer_/, "")
+    .split("_")
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 async function resolveActor() {

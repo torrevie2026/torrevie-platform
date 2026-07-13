@@ -4,9 +4,17 @@ import { roleKeys, type RoleKey } from "@torrevie/permissions";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
+  assignCustomerUserRole,
+  assignableCustomerRoles,
+  inviteCustomerUser,
+  membershipStatuses,
+  saveWhatsappProviderProfile,
+  setCustomerMembershipStatus,
   updateTenantWhatsappSettings,
   type CustomerAdminContext,
+  type MembershipStatus,
   type TenantWhatsappSettingsInput,
+  type WhatsappProviderProfileInput,
   type WhatsappProvider
 } from "../../../../lib/customer-administration";
 import {
@@ -35,7 +43,13 @@ export async function updateTenantWhatsappSettingsAction(formData: FormData) {
       webhookVerifyToken: stringValue(formData, "webhookVerifyToken"),
       aiReceiptExtractionEnabled: formData.get("aiReceiptExtractionEnabled") === "on",
       duplicateDetectionEnabled: formData.get("duplicateDetectionEnabled") === "on",
-      duplicateAutoRejectEnabled: formData.get("duplicateAutoRejectEnabled") === "on"
+      duplicateAutoRejectEnabled: formData.get("duplicateAutoRejectEnabled") === "on",
+      emailNotificationsEnabled: formData.get("emailNotificationsEnabled") === "on",
+      emailReportFrequency: frequencyValue(formData),
+      emailReportRecipients: stringValue(formData, "emailReportRecipients")
+        .split(/[,\n]/)
+        .map((value) => value.trim())
+        .filter(Boolean)
     };
 
     await updateTenantWhatsappSettings(client, actor, input);
@@ -49,6 +63,85 @@ export async function updateTenantWhatsappSettingsAction(formData: FormData) {
   }
 
   redirect(`/${locale}/admin/users?integration=updated`);
+}
+
+export async function inviteCustomerUserAction(formData: FormData) {
+  const locale = stringValue(formData, "locale") || "en";
+
+  try {
+    const { client, actor } = await resolveActor();
+
+    await inviteCustomerUser(client, actor, {
+      email: stringValue(formData, "email"),
+      displayName: stringValue(formData, "displayName"),
+      role: roleValue(formData)
+    });
+
+    revalidatePath(`/${locale}/admin/users`);
+  } catch (error) {
+    if (isCustomerSessionError(error)) {
+      redirect("/login");
+    }
+
+    const message = error instanceof Error ? error.message : "Invite failed";
+    redirect(`/${locale}/admin/users?users=failed&message=${encodeURIComponent(message)}`);
+  }
+
+  redirect(`/${locale}/admin/users?users=invited`);
+}
+
+export async function updateCustomerUserAction(formData: FormData) {
+  const locale = stringValue(formData, "locale") || "en";
+
+  try {
+    const { client, actor } = await resolveActor();
+    const userId = stringValue(formData, "userId");
+
+    await assignCustomerUserRole(client, actor, userId, roleValue(formData));
+    await setCustomerMembershipStatus(client, actor, userId, membershipStatusValue(formData));
+    revalidatePath(`/${locale}/admin/users`);
+  } catch (error) {
+    if (isCustomerSessionError(error)) {
+      redirect("/login");
+    }
+
+    const message = error instanceof Error ? error.message : "User update failed";
+    redirect(`/${locale}/admin/users?users=failed&message=${encodeURIComponent(message)}`);
+  }
+
+  redirect(`/${locale}/admin/users?users=updated`);
+}
+
+export async function saveWhatsappProviderProfileAction(formData: FormData) {
+  const locale = stringValue(formData, "locale") || "en";
+
+  try {
+    const { client, actor } = await resolveActor();
+    const input: WhatsappProviderProfileInput = {
+      label: stringValue(formData, "profileLabel"),
+      provider: sanitizeProvider(stringValue(formData, "profileProvider")),
+      status: formData.get("profileStatus") === "inactive" ? "inactive" : "active",
+      isDefault: formData.get("profileIsDefault") === "on",
+      webhookUrl: stringValue(formData, "profileWebhookUrl"),
+      whatsappInstanceId: stringValue(formData, "profileWhatsappInstanceId"),
+      wappflySessionId: stringValue(formData, "profileWappflySessionId"),
+      metaPhoneNumberId: stringValue(formData, "profileMetaPhoneNumberId"),
+      metaWhatsappBusinessAccountId: stringValue(formData, "profileMetaWhatsappBusinessAccountId"),
+      apiKey: stringValue(formData, "profileApiKey")
+    };
+
+    await saveWhatsappProviderProfile(client, actor, input);
+    revalidatePath(`/${locale}/admin/users`);
+  } catch (error) {
+    if (isCustomerSessionError(error)) {
+      redirect("/login");
+    }
+
+    const message = error instanceof Error ? error.message : "Provider profile update failed";
+    redirect(`/${locale}/admin/users?integration=failed&message=${encodeURIComponent(message)}`);
+  }
+
+  redirect(`/${locale}/admin/users?integration=profile_saved`);
 }
 
 async function resolveActor() {
@@ -83,6 +176,36 @@ function sanitizeProvider(value: string): WhatsappProvider {
   }
 
   return "ultramsg";
+}
+
+function frequencyValue(formData: FormData): "off" | "daily" | "weekly" | "monthly" {
+  const value = stringValue(formData, "emailReportFrequency");
+
+  if (value === "off" || value === "daily" || value === "weekly" || value === "monthly") {
+    return value;
+  }
+
+  return "weekly";
+}
+
+function roleValue(formData: FormData): RoleKey {
+  const role = stringValue(formData, "role");
+
+  if (assignableCustomerRoles.includes(role as RoleKey)) {
+    return role as RoleKey;
+  }
+
+  return "customer_standard_user";
+}
+
+function membershipStatusValue(formData: FormData): MembershipStatus {
+  const status = stringValue(formData, "status");
+
+  if (membershipStatuses.includes(status as MembershipStatus)) {
+    return status as MembershipStatus;
+  }
+
+  return "active";
 }
 
 function isRoleKey(value: string): value is RoleKey {

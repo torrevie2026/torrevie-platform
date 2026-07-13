@@ -20,6 +20,16 @@ export type CustomerMemberRecord = {
   roles: RoleKey[];
 };
 
+export type TenantUsageLimits = {
+  webUsersLimit: number | null;
+  webUsersUsed: number;
+  whatsappProviderProfilesLimit: number | null;
+  emailNotificationsMonthlyLimit: number | null;
+  databaseStorageMbLimit: number | null;
+  enabledModules: string[];
+  capabilities: Array<{ key: string; limit: number | null }>;
+};
+
 export type CustomerInviteInput = {
   email: string;
   displayName?: string | null;
@@ -45,6 +55,9 @@ export type TenantWhatsappSettings = {
   aiReceiptExtractionEnabled: boolean;
   duplicateDetectionEnabled: boolean;
   duplicateAutoRejectEnabled: boolean;
+  emailNotificationsEnabled: boolean;
+  emailReportFrequency: "off" | "daily" | "weekly" | "monthly";
+  emailReportRecipients: string[];
 };
 
 export type TenantWhatsappSettingsInput = {
@@ -61,7 +74,36 @@ export type TenantWhatsappSettingsInput = {
   aiReceiptExtractionEnabled?: boolean;
   duplicateDetectionEnabled?: boolean;
   duplicateAutoRejectEnabled?: boolean;
+  emailNotificationsEnabled?: boolean;
+  emailReportFrequency?: "off" | "daily" | "weekly" | "monthly";
+  emailReportRecipients?: string[];
 };
+
+export type WhatsappProviderProfile = {
+  id: string;
+  label: string;
+  provider: WhatsappProvider;
+  status: "active" | "inactive";
+  isDefault: boolean;
+  webhookUrl: string;
+  whatsappInstanceId: string;
+  wappflySessionId: string;
+  metaPhoneNumberId: string;
+  metaWhatsappBusinessAccountId: string;
+  apiKeyConfigured: boolean;
+  apiKeyLast4: string;
+};
+
+export type WhatsappProviderProfileInput = Omit<WhatsappProviderProfile, "id" | "apiKeyConfigured" | "apiKeyLast4"> & {
+  apiKey?: string | null;
+};
+
+const unlimitedFeatureKeys = new Set([
+  "tex.receipts.ocr.enabled",
+  "tex.whatsapp.enabled",
+  "tex.trips.enabled",
+  "tex.finance.settlements.enabled"
+]);
 
 export async function listCustomerMembers(
   client: TenantQueryClient,
@@ -109,6 +151,8 @@ export async function inviteCustomerUser(
   const role = sanitizeAssignableRole(input.role);
 
   return withTenantContext(client, actor, async () => {
+    await assertWebUserLimitAllowsInvite(client, email);
+
     const userId = await upsertUserIdentity(client, email, actor.userId);
 
     await client.query(
@@ -153,6 +197,36 @@ export async function inviteCustomerUser(
   });
 }
 
+export async function getTenantUsageLimits(
+  client: TenantQueryClient,
+  actor: CustomerAdminContext
+): Promise<TenantUsageLimits> {
+  assertCustomerPermission(actor, "tenant.user.manage");
+
+  return withTenantContext(client, actor, async () => {
+    const entitlements = await client.query<EntitlementRow>(
+      `
+        select se.feature_key, se.limit_value
+        from public.subscription_entitlements se
+        join public.subscriptions s on s.id = se.subscription_id
+        where se.tenant_id = public.current_tenant_id()
+          and s.status in ('trial', 'active')
+        order by se.feature_key asc
+      `
+    );
+    const userUsage = await client.query<{ count: number }>(
+      `
+        select count(*)::int as count
+        from public.tenant_memberships
+        where tenant_id = public.current_tenant_id()
+          and status in ('active', 'invited')
+      `
+    );
+
+    return mapUsageLimits(entitlements.rows, userUsage.rows[0]?.count ?? 0);
+  });
+}
+
 export async function getTenantWhatsappSettings(
   client: TenantQueryClient,
   actor: CustomerAdminContext
@@ -176,7 +250,10 @@ export async function getTenantWhatsappSettings(
           whatsapp_keys_configured,
           ai_receipt_extraction_enabled,
           duplicate_detection_enabled,
-          duplicate_auto_reject_enabled
+          duplicate_auto_reject_enabled,
+          email_notifications_enabled,
+          email_report_frequency,
+          email_report_recipients
         from public.tex_integration_settings
         where tenant_id = public.current_tenant_id()
         limit 1
@@ -241,6 +318,9 @@ export async function updateTenantWhatsappSettings(
           ai_receipt_extraction_enabled,
           duplicate_detection_enabled,
           duplicate_auto_reject_enabled,
+          email_notifications_enabled,
+          email_report_frequency,
+          email_report_recipients,
           created_by,
           updated_by
         )
@@ -262,7 +342,9 @@ export async function updateTenantWhatsappSettings(
           $14,
           $15,
           $16,
-          $16
+          $17::text[],
+          $18,
+          $18
         )
         on conflict (tenant_id)
         do update set
@@ -283,6 +365,9 @@ export async function updateTenantWhatsappSettings(
           ai_receipt_extraction_enabled = excluded.ai_receipt_extraction_enabled,
           duplicate_detection_enabled = excluded.duplicate_detection_enabled,
           duplicate_auto_reject_enabled = excluded.duplicate_auto_reject_enabled,
+          email_notifications_enabled = excluded.email_notifications_enabled,
+          email_report_frequency = excluded.email_report_frequency,
+          email_report_recipients = excluded.email_report_recipients,
           updated_by = excluded.updated_by
         returning
           whatsapp_provider,
@@ -298,7 +383,10 @@ export async function updateTenantWhatsappSettings(
           whatsapp_keys_configured,
           ai_receipt_extraction_enabled,
           duplicate_detection_enabled,
-          duplicate_auto_reject_enabled
+          duplicate_auto_reject_enabled,
+          email_notifications_enabled,
+          email_report_frequency,
+          email_report_recipients
       `,
       [
         provider,
@@ -315,6 +403,9 @@ export async function updateTenantWhatsappSettings(
         input.aiReceiptExtractionEnabled ?? true,
         input.duplicateDetectionEnabled ?? true,
         input.duplicateAutoRejectEnabled ?? false,
+        input.emailNotificationsEnabled ?? false,
+        sanitizeEmailReportFrequency(input.emailReportFrequency ?? "weekly"),
+        toPostgresTextArrayLiteral(sanitizeEmailRecipients(input.emailReportRecipients ?? [])),
         actor.userId
       ]
     );
@@ -324,6 +415,167 @@ export async function updateTenantWhatsappSettings(
     });
 
     return mapWhatsappSettings(result.rows[0]);
+  });
+}
+
+export async function listWhatsappProviderProfiles(
+  client: TenantQueryClient,
+  actor: CustomerAdminContext
+): Promise<WhatsappProviderProfile[]> {
+  assertTenantSettingsPermission(actor);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<WhatsappProviderProfileRow>(
+      `
+        select
+          id,
+          label,
+          provider,
+          status,
+          is_default,
+          webhook_url,
+          whatsapp_instance_id,
+          wappfly_session_id,
+          meta_phone_number_id,
+          meta_whatsapp_business_account_id,
+          api_key_last4,
+          keys_configured
+        from public.tenant_whatsapp_provider_profiles
+        where tenant_id = public.current_tenant_id()
+        order by is_default desc, label asc
+      `
+    );
+
+    return result.rows.map(mapWhatsappProviderProfile);
+  });
+}
+
+export async function saveWhatsappProviderProfile(
+  client: TenantQueryClient,
+  actor: CustomerAdminContext,
+  input: WhatsappProviderProfileInput
+): Promise<WhatsappProviderProfile> {
+  assertTenantSettingsPermission(actor);
+  const provider = sanitizeWhatsappProvider(input.provider);
+  const label = cleanRequired(input.label, "Provider profile name");
+  const webhookUrl = cleanOptional(input.webhookUrl);
+  const apiKey = cleanOptional(input.apiKey);
+  const status = input.status === "active" ? "active" : "inactive";
+
+  validateWebhookUrl(webhookUrl);
+
+  return withTenantContext(client, actor, async () => {
+    await assertWhatsappProviderProfileLimitAllowsSave(client, label);
+
+    if (input.isDefault) {
+      await client.query(
+        `
+          update public.tenant_whatsapp_provider_profiles
+             set is_default = false,
+                 updated_by = $1
+           where tenant_id = public.current_tenant_id()
+        `,
+        [actor.userId]
+      );
+    }
+
+    const result = await client.query<WhatsappProviderProfileRow>(
+      `
+        insert into public.tenant_whatsapp_provider_profiles (
+          tenant_id,
+          label,
+          provider,
+          status,
+          is_default,
+          webhook_url,
+          whatsapp_instance_id,
+          wappfly_session_id,
+          meta_phone_number_id,
+          meta_whatsapp_business_account_id,
+          api_key_last4,
+          keys_configured,
+          created_by,
+          updated_by
+        )
+        values (
+          public.current_tenant_id(),
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          $10,
+          $11,
+          $12,
+          $12
+        )
+        on conflict (tenant_id, label)
+        do update set
+          provider = excluded.provider,
+          status = excluded.status,
+          is_default = excluded.is_default,
+          webhook_url = excluded.webhook_url,
+          whatsapp_instance_id = excluded.whatsapp_instance_id,
+          wappfly_session_id = excluded.wappfly_session_id,
+          meta_phone_number_id = excluded.meta_phone_number_id,
+          meta_whatsapp_business_account_id = excluded.meta_whatsapp_business_account_id,
+          api_key_last4 = coalesce(excluded.api_key_last4, public.tenant_whatsapp_provider_profiles.api_key_last4),
+          keys_configured = public.tenant_whatsapp_provider_profiles.keys_configured or excluded.keys_configured,
+          updated_by = excluded.updated_by
+        returning
+          id,
+          label,
+          provider,
+          status,
+          is_default,
+          webhook_url,
+          whatsapp_instance_id,
+          wappfly_session_id,
+          meta_phone_number_id,
+          meta_whatsapp_business_account_id,
+          api_key_last4,
+          keys_configured
+      `,
+      [
+        label,
+        provider,
+        status,
+        input.isDefault,
+        webhookUrl,
+        cleanOptional(input.whatsappInstanceId),
+        cleanOptional(input.wappflySessionId),
+        cleanOptional(input.metaPhoneNumberId),
+        cleanOptional(input.metaWhatsappBusinessAccountId),
+        apiKey ? last4(apiKey) : null,
+        Boolean(apiKey),
+        actor.userId
+      ]
+    );
+
+    const profile = result.rows[0];
+
+    if (!profile) {
+      throw new Error("Unable to save WhatsApp provider profile.");
+    }
+
+    if (apiKey) {
+      await upsertTenantIntegrationSecret(client, actor, "api_key", apiKey, profile.id);
+    }
+
+    if (profile.is_default) {
+      await syncDefaultWhatsappProfileToActiveSettings(client, actor, profile);
+    }
+
+    await writeCustomerAdminAuditEvent(client, actor, "tenant.integration.whatsapp.profile.saved", "tenant_whatsapp_provider_profiles", profile.id, {
+      provider,
+      label
+    });
+
+    return mapWhatsappProviderProfile(profile);
   });
 }
 
@@ -409,7 +661,8 @@ async function upsertTenantIntegrationSecret(
   client: TenantQueryClient,
   actor: CustomerAdminContext,
   secretName: "api_key" | "app_secret" | "webhook_verify_token",
-  secretValue: string
+  secretValue: string,
+  profileId: string | null = null
 ) {
   await client.query(
     `
@@ -418,8 +671,12 @@ async function upsertTenantIntegrationSecret(
          and product_key = 'tex'
          and integration_key = 'whatsapp'
          and secret_name = $1
+         and (
+           (profile_id is null and $2::uuid is null)
+           or profile_id = $2::uuid
+         )
     `,
-    [secretName]
+    [secretName, profileId]
   );
 
   await client.query(
@@ -428,15 +685,165 @@ async function upsertTenantIntegrationSecret(
         tenant_id,
         product_key,
         integration_key,
+        profile_id,
         secret_name,
         secret_value,
         secret_last4,
         created_by,
         updated_by
       )
-      values (public.current_tenant_id(), 'tex', 'whatsapp', $1, $2, $3, $4, $4)
+      values (public.current_tenant_id(), 'tex', 'whatsapp', $1, $2, $3, $4, $5, $5)
     `,
-    [secretName, secretValue, last4(secretValue), actor.userId]
+    [profileId, secretName, secretValue, last4(secretValue), actor.userId]
+  );
+}
+
+async function assertWebUserLimitAllowsInvite(client: TenantQueryClient, email: string) {
+  const limitResult = await client.query<EntitlementRow>(
+    `
+      select se.feature_key, se.limit_value
+      from public.subscription_entitlements se
+      join public.subscriptions s on s.id = se.subscription_id
+      where se.tenant_id = public.current_tenant_id()
+        and s.status in ('trial', 'active')
+        and se.feature_key = 'tenant.users.web.max'
+    `
+  );
+  const existingUserResult = await client.query<{ id: string; status: MembershipStatus | null }>(
+    `
+      select u.id, tm.status
+      from public.users u
+      left join public.tenant_memberships tm
+        on tm.tenant_id = public.current_tenant_id()
+       and tm.user_id = u.id
+      where lower(u.email) = $1
+      limit 1
+    `,
+    [email]
+  );
+
+  const limit = pickMostPermissiveLimit(limitResult.rows);
+
+  if (limit === null) {
+    return;
+  }
+
+  const existing = existingUserResult.rows[0];
+
+  if (existing?.status === "active" || existing?.status === "invited") {
+    return;
+  }
+
+  const usageResult = await client.query<{ count: number }>(
+    `
+      select count(*)::int as count
+      from public.tenant_memberships
+      where tenant_id = public.current_tenant_id()
+        and status in ('active', 'invited')
+    `
+  );
+
+  if ((usageResult.rows[0]?.count ?? 0) >= limit) {
+    throw new Error(`This tenant has reached its web user limit of ${limit}. Upgrade the plan or disable a user before inviting another one.`);
+  }
+}
+
+async function assertWhatsappProviderProfileLimitAllowsSave(client: TenantQueryClient, label: string) {
+  const limitResult = await client.query<EntitlementRow>(
+    `
+      select se.feature_key, se.limit_value
+      from public.subscription_entitlements se
+      join public.subscriptions s on s.id = se.subscription_id
+      where se.tenant_id = public.current_tenant_id()
+        and s.status in ('trial', 'active')
+        and se.feature_key = 'tex.whatsapp.provider_profiles.max'
+    `
+  );
+  const existingResult = await client.query<{ id: string }>(
+    `
+      select id
+      from public.tenant_whatsapp_provider_profiles
+      where tenant_id = public.current_tenant_id()
+        and lower(label) = lower($1)
+      limit 1
+    `,
+    [label]
+  );
+  const countResult = await client.query<{ count: number }>(
+    `
+      select count(*)::int as count
+      from public.tenant_whatsapp_provider_profiles
+      where tenant_id = public.current_tenant_id()
+    `
+  );
+
+  const limit = pickMostPermissiveLimit(limitResult.rows);
+
+  if (limit === null || existingResult.rows.length > 0) {
+    return;
+  }
+
+  if ((countResult.rows[0]?.count ?? 0) >= limit) {
+    throw new Error(`This tenant has reached its WhatsApp provider profile limit of ${limit}.`);
+  }
+}
+
+async function syncDefaultWhatsappProfileToActiveSettings(
+  client: TenantQueryClient,
+  actor: CustomerAdminContext,
+  profile: WhatsappProviderProfileRow
+) {
+  await client.query(
+    `
+      insert into public.tex_integration_settings (
+        tenant_id,
+        whatsapp_provider,
+        whatsapp_instance_id,
+        wappfly_session_id,
+        meta_phone_number_id,
+        meta_whatsapp_business_account_id,
+        whatsapp_webhook_url,
+        whatsapp_api_key_last4,
+        whatsapp_keys_configured,
+        created_by,
+        updated_by
+      )
+      values (
+        public.current_tenant_id(),
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $9
+      )
+      on conflict (tenant_id)
+      do update set
+        whatsapp_provider = excluded.whatsapp_provider,
+        whatsapp_instance_id = excluded.whatsapp_instance_id,
+        wappfly_session_id = excluded.wappfly_session_id,
+        meta_phone_number_id = excluded.meta_phone_number_id,
+        meta_whatsapp_business_account_id = excluded.meta_whatsapp_business_account_id,
+        whatsapp_webhook_url = excluded.whatsapp_webhook_url,
+        whatsapp_api_key_last4 = coalesce(excluded.whatsapp_api_key_last4, public.tex_integration_settings.whatsapp_api_key_last4),
+        whatsapp_keys_configured = public.tex_integration_settings.whatsapp_keys_configured or excluded.whatsapp_keys_configured,
+        updated_by = excluded.updated_by
+    `,
+    [
+      profile.provider,
+      profile.whatsapp_instance_id,
+      profile.wappfly_session_id,
+      profile.meta_phone_number_id,
+      profile.meta_whatsapp_business_account_id,
+      profile.webhook_url,
+      profile.api_key_last4,
+      profile.keys_configured,
+      actor.userId
+    ]
   );
 }
 
@@ -570,6 +977,16 @@ function cleanOptional(value: string | null | undefined) {
   return clean ? clean : null;
 }
 
+function cleanRequired(value: string | null | undefined, label: string) {
+  const clean = cleanOptional(value);
+
+  if (!clean) {
+    throw new Error(`${label} is required.`);
+  }
+
+  return clean;
+}
+
 function sanitizeWhatsappProvider(value: string): WhatsappProvider {
   if (value === "ultramsg" || value === "wappfly" || value === "meta") {
     return value;
@@ -615,8 +1032,85 @@ function mapWhatsappSettings(row: WhatsappSettingsRow | undefined): TenantWhatsa
     webhookVerifyTokenLast4: row?.whatsapp_webhook_verify_token_last4 ?? "",
     aiReceiptExtractionEnabled: row?.ai_receipt_extraction_enabled ?? true,
     duplicateDetectionEnabled: row?.duplicate_detection_enabled ?? true,
-    duplicateAutoRejectEnabled: row?.duplicate_auto_reject_enabled ?? false
+    duplicateAutoRejectEnabled: row?.duplicate_auto_reject_enabled ?? false,
+    emailNotificationsEnabled: row?.email_notifications_enabled ?? false,
+    emailReportFrequency: sanitizeEmailReportFrequency(row?.email_report_frequency ?? "weekly"),
+    emailReportRecipients: sanitizeEmailRecipients(row?.email_report_recipients ?? [])
   };
+}
+
+function mapWhatsappProviderProfile(row: WhatsappProviderProfileRow): WhatsappProviderProfile {
+  return {
+    id: row.id,
+    label: row.label,
+    provider: row.provider,
+    status: row.status,
+    isDefault: row.is_default,
+    webhookUrl: row.webhook_url ?? "",
+    whatsappInstanceId: row.whatsapp_instance_id ?? "",
+    wappflySessionId: row.wappfly_session_id ?? "",
+    metaPhoneNumberId: row.meta_phone_number_id ?? "",
+    metaWhatsappBusinessAccountId: row.meta_whatsapp_business_account_id ?? "",
+    apiKeyConfigured: Boolean(row.api_key_last4 || row.keys_configured),
+    apiKeyLast4: row.api_key_last4 ?? ""
+  };
+}
+
+function mapUsageLimits(rows: readonly EntitlementRow[], webUsersUsed: number): TenantUsageLimits {
+  const capabilities = rows.map((row) => ({ key: row.feature_key, limit: row.limit_value }));
+
+  return {
+    webUsersLimit: pickLimit(rows, "tenant.users.web.max"),
+    webUsersUsed,
+    whatsappProviderProfilesLimit: pickLimit(rows, "tex.whatsapp.provider_profiles.max"),
+    emailNotificationsMonthlyLimit: pickLimit(rows, "tex.email.notifications.monthly_limit"),
+    databaseStorageMbLimit: pickLimit(rows, "tenant.database.storage_mb.max"),
+    enabledModules: rows
+      .filter((row) => unlimitedFeatureKeys.has(row.feature_key))
+      .map((row) => row.feature_key.replace(/^tex\./, "").replace(/\.enabled$/, "")),
+    capabilities
+  };
+}
+
+function pickLimit(rows: readonly EntitlementRow[], featureKey: string) {
+  return pickMostPermissiveLimit(rows.filter((row) => row.feature_key === featureKey));
+}
+
+function pickMostPermissiveLimit(rows: readonly EntitlementRow[]) {
+  if (rows.length === 0) {
+    return 5;
+  }
+
+  if (rows.some((row) => row.limit_value === null)) {
+    return null;
+  }
+
+  return Math.max(...rows.map((row) => row.limit_value ?? 0));
+}
+
+function sanitizeEmailReportFrequency(value: string): "off" | "daily" | "weekly" | "monthly" {
+  if (value === "off" || value === "daily" || value === "weekly" || value === "monthly") {
+    return value;
+  }
+
+  return "weekly";
+}
+
+function sanitizeEmailRecipients(values: string[] | string) {
+  const rawValues = Array.isArray(values) ? values : values.split(/[,\n]/);
+  const recipients = rawValues.map((value) => value.trim().toLowerCase()).filter(Boolean);
+
+  for (const email of recipients) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new Error(`Invalid notification email recipient: ${email}`);
+    }
+  }
+
+  return [...new Set(recipients)].slice(0, 20);
+}
+
+function toPostgresTextArrayLiteral(values: readonly string[]) {
+  return `{${values.map((value) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
 }
 
 function sanitizeAssignableRole(role: RoleKey) {
@@ -666,4 +1160,27 @@ type WhatsappSettingsRow = {
   ai_receipt_extraction_enabled: boolean | null;
   duplicate_detection_enabled: boolean | null;
   duplicate_auto_reject_enabled: boolean | null;
+  email_notifications_enabled: boolean | null;
+  email_report_frequency: string | null;
+  email_report_recipients: string[] | null;
+};
+
+type WhatsappProviderProfileRow = {
+  id: string;
+  label: string;
+  provider: WhatsappProvider;
+  status: "active" | "inactive";
+  is_default: boolean;
+  webhook_url: string | null;
+  whatsapp_instance_id: string | null;
+  wappfly_session_id: string | null;
+  meta_phone_number_id: string | null;
+  meta_whatsapp_business_account_id: string | null;
+  api_key_last4: string | null;
+  keys_configured: boolean | null;
+};
+
+type EntitlementRow = {
+  feature_key: string;
+  limit_value: number | null;
 };
