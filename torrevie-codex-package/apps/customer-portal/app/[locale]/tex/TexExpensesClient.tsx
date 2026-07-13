@@ -148,75 +148,89 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
 
     try {
       const dataUrl = await fileToDataUrl(file);
-      const upload = await texFetch<ReceiptUploadResponse>("/receipts", {
-        method: "POST",
-        body: JSON.stringify({
-          fileName: file.name,
-          contentType: file.type || "application/octet-stream",
-          dataBase64: dataUrl
-        })
-      });
-
       setForm((current) => ({
         ...current,
-        receiptFileId: upload.receipt.id,
-        receiptUrl: upload.receipt.url,
-        receiptFileName: upload.receipt.filename || file.name
+        receiptFileName: file.name
       }));
 
-      if (!file.type.startsWith("image/")) {
-        setReceiptWarning("Receipt uploaded. OCR currently supports image receipts only, so please fill in the fields manually.");
-        return;
+      let parseMessage: string | null = null;
+      if (file.type.startsWith("image/")) {
+        try {
+          const parsed = await texFetch<ParsedReceipt>("/receipts/parse", {
+            method: "POST",
+            body: JSON.stringify({
+              contentType: file.type,
+              dataBase64: dataUrl
+            })
+          });
+          const filled = new Set<keyof ExpenseFormState>();
+          setForm((current) => {
+            const next = { ...current, extractionConfidence: parsed.confidence, extractionPayload: parsed as unknown as Record<string, unknown> };
+
+            if (parsed.vendor) {
+              next.vendor = parsed.vendor;
+              filled.add("vendor");
+            }
+            if (parsed.expenseDate) {
+              next.expenseDate = parsed.expenseDate;
+              filled.add("expenseDate");
+            }
+            if (parsed.amount) {
+              next.amount = String(parsed.amount);
+              filled.add("amount");
+            }
+            if (parsed.currency) {
+              next.currency = parsed.currency.toUpperCase();
+              filled.add("currency");
+            }
+            if (parsed.category && activeCategories.some((category) => category.name === parsed.category)) {
+              next.category = parsed.category;
+              filled.add("category");
+            }
+            if (parsed.taxIdNumber) {
+              next.taxIdNumber = parsed.taxIdNumber;
+              filled.add("taxIdNumber");
+            }
+            if (parsed.taxAmount != null) {
+              next.taxAmount = String(parsed.taxAmount);
+              filled.add("taxAmount");
+            }
+            if (parsed.notes) {
+              next.notes = parsed.notes;
+              filled.add("notes");
+            }
+
+            return next;
+          });
+          setAutoFilledFields(filled);
+          parseMessage = filled.size > 0 ? null : "Receipt uploaded, but no fields could be read automatically. Please fill in the fields manually.";
+        } catch (caught) {
+          parseMessage = errorMessage(caught);
+        }
+      } else {
+        parseMessage = "OCR currently supports image receipts only, so please fill in the fields manually.";
       }
 
-      const parsed = await texFetch<ParsedReceipt>("/receipts/parse", {
-        method: "POST",
-        body: JSON.stringify({
-          contentType: file.type,
-          dataBase64: dataUrl
-        })
-      });
-      const filled = new Set<keyof ExpenseFormState>();
-      setForm((current) => {
-        const next = { ...current, extractionConfidence: parsed.confidence, extractionPayload: parsed as unknown as Record<string, unknown> };
-
-        if (parsed.vendor) {
-          next.vendor = parsed.vendor;
-          filled.add("vendor");
-        }
-        if (parsed.expenseDate) {
-          next.expenseDate = parsed.expenseDate;
-          filled.add("expenseDate");
-        }
-        if (parsed.amount) {
-          next.amount = String(parsed.amount);
-          filled.add("amount");
-        }
-        if (parsed.currency) {
-          next.currency = parsed.currency.toUpperCase();
-          filled.add("currency");
-        }
-        if (parsed.category && activeCategories.some((category) => category.name === parsed.category)) {
-          next.category = parsed.category;
-          filled.add("category");
-        }
-        if (parsed.taxIdNumber) {
-          next.taxIdNumber = parsed.taxIdNumber;
-          filled.add("taxIdNumber");
-        }
-        if (parsed.taxAmount != null) {
-          next.taxAmount = String(parsed.taxAmount);
-          filled.add("taxAmount");
-        }
-        if (parsed.notes) {
-          next.notes = parsed.notes;
-          filled.add("notes");
-        }
-
-        return next;
-      });
-      setAutoFilledFields(filled);
-      setReceiptWarning(filled.size > 0 ? null : "Receipt uploaded, but no fields could be read automatically. Please fill in the fields manually.");
+      try {
+        const upload = await texFetch<ReceiptUploadResponse>("/receipts", {
+          method: "POST",
+          body: JSON.stringify({
+            fileName: file.name,
+            contentType: file.type || "application/octet-stream",
+            dataBase64: dataUrl
+          })
+        });
+        setForm((current) => ({
+          ...current,
+          receiptFileId: upload.receipt.id,
+          receiptUrl: upload.receipt.url,
+          receiptFileName: upload.receipt.filename || file.name
+        }));
+        setReceiptWarning(parseMessage);
+      } catch (caught) {
+        const uploadMessage = `Receipt fields can still be reviewed, but the file was not stored: ${errorMessage(caught)}`;
+        setReceiptWarning(parseMessage ? `${parseMessage} ${uploadMessage}` : uploadMessage);
+      }
     } catch (caught) {
       setReceiptWarning(errorMessage(caught));
     } finally {

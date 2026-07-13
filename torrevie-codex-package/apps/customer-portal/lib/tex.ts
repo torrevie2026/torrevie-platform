@@ -2118,7 +2118,7 @@ function supabaseProjectUrl() {
 function supabaseServiceRoleKey() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!key) {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured.");
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured on the customer portal Vercel project.");
   }
 
   return key;

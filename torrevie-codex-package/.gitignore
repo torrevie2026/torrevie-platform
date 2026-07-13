@@ -20,3 +20,6 @@ reference/
 Thumbs.db
 .vscode/
 .idea/
+.vercel/
+.env.local
+.env.*.local
