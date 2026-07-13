@@ -7,6 +7,7 @@ export type FsmNavItem = {
   href: string;
   termKey?: TermKey;
   featureKey?: string;
+  featureKeys?: string[];
 };
 
 export const fsmNavProfiles: Record<BusinessSegment, FsmNavItem[]> = {
@@ -16,6 +17,7 @@ export const fsmNavProfiles: Record<BusinessSegment, FsmNavItem[]> = {
     { key: "whatsapp", label: "WhatsApp Inbox", href: "/fsm?section=whatsapp", featureKey: "fsm.channel.whatsapp.enabled" },
     { key: "customers", label: "Customers", href: "/fsm?section=customers", termKey: "customers" },
     { key: "commercial", label: "Quotes and Invoices", href: "/fsm?section=commercial" },
+    { key: "reports", label: "ROI", href: "/fsm?section=reports", featureKeys: ["fsm.roi.basic.enabled", "fsm.roi.full.enabled"] },
     { key: "settings", label: "Settings", href: "/fsm?section=settings" }
   ],
   TRADE: [
@@ -28,7 +30,7 @@ export const fsmNavProfiles: Record<BusinessSegment, FsmNavItem[]> = {
     { key: "assets", label: "Assets", href: "/fsm?section=assets", termKey: "assets" },
     { key: "commercial", label: "Quotes and Invoices", href: "/fsm?section=commercial" },
     { key: "whatsapp", label: "WhatsApp Inbox", href: "/fsm?section=whatsapp", featureKey: "fsm.channel.whatsapp.enabled" },
-    { key: "reports", label: "Reports", href: "/fsm?section=reports", featureKey: "fsm.roi.full.enabled" },
+    { key: "reports", label: "Reports", href: "/fsm?section=reports", featureKeys: ["fsm.roi.basic.enabled", "fsm.roi.full.enabled"] },
     { key: "settings", label: "Settings", href: "/fsm?section=settings" }
   ],
   FM: [
@@ -42,7 +44,7 @@ export const fsmNavProfiles: Record<BusinessSegment, FsmNavItem[]> = {
     { key: "contracts", label: "Contracts", href: "/fsm?section=contracts", featureKey: "fsm.module.contracts" },
     { key: "technicians", label: "Subcontractors", href: "/fsm?section=technicians", termKey: "technicians" },
     { key: "channels", label: "Channel Hub", href: "/fsm?section=channels", featureKey: "fsm.channel.email.enabled" },
-    { key: "reports", label: "Reports", href: "/fsm?section=reports", featureKey: "fsm.roi.full.enabled" },
+    { key: "reports", label: "Reports", href: "/fsm?section=reports", featureKeys: ["fsm.roi.basic.enabled", "fsm.roi.full.enabled"] },
     { key: "settings", label: "Settings", href: "/fsm?section=settings" }
   ],
   COMMUNITY: [
@@ -54,7 +56,7 @@ export const fsmNavProfiles: Record<BusinessSegment, FsmNavItem[]> = {
     { key: "assets", label: "Common Areas", href: "/fsm?section=assets", termKey: "assets" },
     { key: "approvals", label: "Approvals", href: "/fsm?section=approvals" },
     { key: "channels", label: "Channel Hub", href: "/fsm?section=channels", featureKey: "fsm.channel.portal.basic.enabled" },
-    { key: "reports", label: "Board Reports", href: "/fsm?section=reports", featureKey: "fsm.client_report_packs.enabled" },
+    { key: "reports", label: "Board Reports", href: "/fsm?section=reports", featureKeys: ["fsm.roi.basic.enabled", "fsm.roi.full.enabled", "fsm.client_report_packs.enabled"] },
     { key: "settings", label: "Settings", href: "/fsm?section=settings" }
   ],
   OEM: [
@@ -66,11 +68,17 @@ export const fsmNavProfiles: Record<BusinessSegment, FsmNavItem[]> = {
     { key: "parts", label: "Spare Parts", href: "/fsm?section=catalog" },
     { key: "dealers", label: "Dealers and Technicians", href: "/fsm?section=technicians", termKey: "technicians" },
     { key: "channels", label: "Channel Hub", href: "/fsm?section=channels", featureKey: "fsm.channel.email.enabled" },
-    { key: "reports", label: "Reports", href: "/fsm?section=reports", featureKey: "fsm.roi.full.enabled" },
+    { key: "reports", label: "Reports", href: "/fsm?section=reports", featureKeys: ["fsm.roi.basic.enabled", "fsm.roi.full.enabled"] },
     { key: "settings", label: "Settings", href: "/fsm?section=settings" }
   ]
 };
 
 export function navForSegment(segment: BusinessSegment, enabledFeatures: ReadonlySet<string>) {
-  return fsmNavProfiles[segment].filter((item) => !item.featureKey || enabledFeatures.has(item.featureKey));
+  return fsmNavProfiles[segment].filter((item) => {
+    if (item.featureKeys) {
+      return item.featureKeys.some((featureKey) => enabledFeatures.has(featureKey));
+    }
+
+    return !item.featureKey || enabledFeatures.has(item.featureKey);
+  });
 }

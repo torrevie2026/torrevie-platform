@@ -10,14 +10,14 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  applicationName: "Torrevie",
-  title: "Torrevie",
+  applicationName: "Torrevie FSM",
+  title: "Torrevie FSM | Field Service Management",
   description: "Optimize. Execute. Scale.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Torrevie"
+    title: "Torrevie FSM"
   },
   icons: {
     icon: [

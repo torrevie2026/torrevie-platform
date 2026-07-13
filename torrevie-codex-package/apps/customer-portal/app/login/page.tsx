@@ -10,7 +10,9 @@ export default async function LoginPage({
   return (
     <main className="login-shell">
       <section className="login-panel" aria-labelledby="login-title">
-        <p className="brand">Torrevie</p>
+        <img src="/logo/torrevie_logo_color.png" alt="" width="48" height="48" />
+        <p className="brand">Torrevie FSM</p>
+        <p className="login-slogan">Optimize. Execute. Scale.</p>
         <h1 id="login-title">Sign in</h1>
         {params.error ? <p className="error">Email or password is incorrect.</p> : null}
         <form action={signIn}>
