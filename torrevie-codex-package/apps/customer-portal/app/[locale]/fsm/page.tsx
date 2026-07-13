@@ -25,6 +25,14 @@ export const metadata: Metadata = {
 
 type FsmSection = string;
 
+type FsmSectionContent = {
+  title: string;
+  primaryTitle: string;
+  primaryEmpty: string;
+  secondaryTitle: string;
+  secondaryItems: string[];
+};
+
 export default async function FsmPage({
   params,
   searchParams
@@ -94,7 +102,7 @@ export default async function FsmPage({
           <header className="customer-topbar fsm-topbar">
             <div>
               <p className="eyebrow">Torrevie FSM</p>
-              <h1>{section === "onboarding" ? "Onboarding" : dashboardTitle(workspace)}</h1>
+              <h1>{sectionTitle(section, workspace, locale)}</h1>
               <p>{workspace.segmentLabel}. {workspace.planTier} plan.</p>
             </div>
             <div className="customer-context" aria-label="Session context">
@@ -111,14 +119,16 @@ export default async function FsmPage({
           {resolvedSearchParams?.voice === "requested" ? <p className="tex-notice">Voice setup request created.</p> : null}
           {resolvedSearchParams?.roi === "saved" ? <p className="tex-notice">ROI settings saved.</p> : null}
 
-          {section === "onboarding" ? (
+          {section === "dashboard" ? (
+            <FsmDashboard workspace={workspace} locale={locale} />
+          ) : section === "onboarding" ? (
             <FsmOnboarding workspace={workspace} locale={locale} />
           ) : section === "channels" ? (
             <ChannelHub snapshot={channelHub} workspace={workspace} locale={locale} />
           ) : section === "reports" ? (
             <RoiDashboard dashboard={roiDashboard} workspace={workspace} locale={locale} />
           ) : (
-            <FsmDashboard workspace={workspace} locale={locale} />
+            <FsmSectionWorkspace section={section} workspace={workspace} locale={locale} />
           )}
         </section>
       </main>
@@ -130,6 +140,31 @@ export default async function FsmPage({
 
     throw error;
   }
+}
+
+function FsmSectionWorkspace({ section, workspace, locale }: { section: FsmSection; workspace: FsmWorkspace; locale: Locale }) {
+  const content = sectionContent(section, workspace, locale);
+
+  return (
+    <section className="fsm-workspace-grid" aria-label={content.title}>
+      <article className="fsm-panel">
+        <div className="section-heading-row">
+          <h2>{content.primaryTitle}</h2>
+          <span className="module-status module-status-active">{workspace.planTier}</span>
+        </div>
+        <p className="empty">{content.primaryEmpty}</p>
+      </article>
+
+      <aside className="fsm-panel">
+        <h2>{content.secondaryTitle}</h2>
+        <ol className="fsm-flow-list">
+          {content.secondaryItems.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ol>
+      </aside>
+    </section>
+  );
 }
 
 function RoiDashboard({ dashboard, workspace, locale }: { dashboard: FsmRoiDashboard | null; workspace: FsmWorkspace; locale: Locale }) {
@@ -202,7 +237,7 @@ function RoiDashboard({ dashboard, workspace, locale }: { dashboard: FsmRoiDashb
               <input name="jobsPerMonthToday" type="number" min="0" defaultValue={readString(workspace.baselineMetrics["jobsPerMonthToday"], "")} />
             </label>
             <label>
-              Response hours baseline
+              Response baseline, hours
               <input
                 name="averageResponseHoursToday"
                 type="number"
@@ -525,7 +560,7 @@ function FsmOnboarding({ workspace, locale }: { workspace: FsmWorkspace; locale:
             <input name="jobsPerMonthToday" type="number" min="0" defaultValue={readString(workspace.baselineMetrics["jobsPerMonthToday"], "")} />
           </label>
           <label>
-            Average response time today
+            Average response time today (hours)
             <input name="averageResponseHoursToday" type="number" min="0" step="0.5" defaultValue={readString(workspace.baselineMetrics["averageResponseHoursToday"], "")} />
           </label>
         </div>
@@ -564,6 +599,138 @@ function dashboardTitle(workspace: FsmWorkspace) {
   }
 
   return "Dashboard";
+}
+
+function sectionTitle(section: FsmSection, workspace: FsmWorkspace, locale: Locale) {
+  if (section === "dashboard") {
+    return dashboardTitle(workspace);
+  }
+
+  return sectionContent(section, workspace, locale).title;
+}
+
+function sectionContent(section: FsmSection, workspace: FsmWorkspace, locale: Locale): FsmSectionContent {
+  const jobs = term(workspace.segment, locale, "jobs");
+  const customers = term(workspace.segment, locale, "customers");
+  const assets = term(workspace.segment, locale, "assets");
+  const requests = term(workspace.segment, locale, "requests");
+  const technicians = term(workspace.segment, locale, "technicians");
+
+  const defaults: Record<string, FsmSectionContent> = {
+    jobs: {
+      title: jobs,
+      primaryTitle: `Open ${jobs.toLowerCase()}`,
+      primaryEmpty: `No ${jobs.toLowerCase()} are open.`,
+      secondaryTitle: "Default workflow",
+      secondaryItems: workspace.flowSteps
+    },
+    scheduling: {
+      title: "Scheduling",
+      primaryTitle: "Schedule board",
+      primaryEmpty: "No scheduled work is due.",
+      secondaryTitle: "Dispatch checks",
+      secondaryItems: ["Confirm access", "Match skill and zone", "Assign field owner", "Track completion"]
+    },
+    dispatch: {
+      title: "Scheduling and Dispatch",
+      primaryTitle: "Dispatch board",
+      primaryEmpty: "No dispatch items are waiting.",
+      secondaryTitle: "Dispatch checks",
+      secondaryItems: ["Prioritize SLA risk", "Match skill and zone", "Confirm availability", "Notify the client"]
+    },
+    pm: {
+      title: workspace.segment === "FM" || workspace.segment === "COMMUNITY" ? "PPM Planner" : "PM Calendar",
+      primaryTitle: "Planned maintenance",
+      primaryEmpty: "No planned maintenance is due.",
+      secondaryTitle: "Planning rhythm",
+      secondaryItems: ["Review contracts", "Generate visits", "Balance routes", "Confirm completion"]
+    },
+    sla: {
+      title: "SLA Board",
+      primaryTitle: "SLA risk",
+      primaryEmpty: "No SLA breaches are active.",
+      secondaryTitle: "SLA controls",
+      secondaryItems: ["Classify urgency", "Start clock at intake", "Pause with reason", "Report exceptions"]
+    },
+    contracts: {
+      title: workspace.segment === "OEM" ? "Warranty and Contracts" : "Contracts",
+      primaryTitle: "Active contracts",
+      primaryEmpty: "No contract actions are due.",
+      secondaryTitle: "Contract flow",
+      secondaryItems: ["Check coverage", "Confirm billing route", "Attach service scope", "Prepare renewal"]
+    },
+    customers: {
+      title: customers,
+      primaryTitle: customers,
+      primaryEmpty: `No ${customers.toLowerCase()} need action.`,
+      secondaryTitle: "Customer context",
+      secondaryItems: ["Contacts", "Locations", "Open work", "Billing status"]
+    },
+    assets: {
+      title: assets,
+      primaryTitle: assets,
+      primaryEmpty: `No ${assets.toLowerCase()} need action.`,
+      secondaryTitle: "Asset context",
+      secondaryItems: ["Location", "Service history", "Warranty status", "QR record"]
+    },
+    commercial: {
+      title: "Quotes and Invoices",
+      primaryTitle: "Commercial queue",
+      primaryEmpty: "No quotations or invoices need action.",
+      secondaryTitle: "Commercial flow",
+      secondaryItems: ["Quote", "Approval", "Dispatch", "Invoice"]
+    },
+    whatsapp: {
+      title: "WhatsApp Inbox",
+      primaryTitle: "WhatsApp messages",
+      primaryEmpty: "No WhatsApp messages are waiting.",
+      secondaryTitle: "Message handling",
+      secondaryItems: ["Match contact", "Classify request", "Reply", "Convert to job"]
+    },
+    triage: {
+      title: requests,
+      primaryTitle: "Triage queue",
+      primaryEmpty: `No ${requests.toLowerCase()} are waiting.`,
+      secondaryTitle: "Triage actions",
+      secondaryItems: ["Classify urgency", "Match customer", "Apply SLA", "Convert or merge"]
+    },
+    technicians: {
+      title: technicians,
+      primaryTitle: technicians,
+      primaryEmpty: `No ${technicians.toLowerCase()} need action.`,
+      secondaryTitle: "Team controls",
+      secondaryItems: ["Availability", "Skill", "Zone", "Utilization"]
+    },
+    approvals: {
+      title: "Approvals",
+      primaryTitle: "Pending approvals",
+      primaryEmpty: "No approvals are waiting.",
+      secondaryTitle: "Approval checks",
+      secondaryItems: ["Cost threshold", "Resident charge", "Board approval", "Dispatch release"]
+    },
+    catalog: {
+      title: "Spare Parts",
+      primaryTitle: "Parts queue",
+      primaryEmpty: "No parts are waiting.",
+      secondaryTitle: "Parts flow",
+      secondaryItems: ["Identify part", "Reserve stock", "Assign to job", "Track return"]
+    },
+    settings: {
+      title: "Settings",
+      primaryTitle: "Workspace settings",
+      primaryEmpty: "No settings need action.",
+      secondaryTitle: "Current defaults",
+      secondaryItems: [`Segment ${workspace.segment}`, `Plan ${workspace.planTier}`, `Terminology ${workspace.terminologyPack}`, `Menu items ${workspace.navItems.length}`]
+    }
+  };
+
+  return defaults[section] ?? {
+    title: "Workspace",
+    primaryTitle: "Workspace queue",
+    primaryEmpty: "No items need action.",
+    secondaryTitle: "Operating flow",
+    secondaryItems: workspace.flowSteps
+  };
 }
 
 function readSection(value: string | undefined): FsmSection {
