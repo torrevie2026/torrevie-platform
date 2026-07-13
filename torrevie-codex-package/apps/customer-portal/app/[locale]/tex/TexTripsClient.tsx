@@ -631,167 +631,183 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
       </section>
 
       {legsTrip ? (
-        <section className="tex-form-panel" aria-labelledby="tex-trip-legs-title">
-          <div className="section-heading-row">
-            <div>
-              <h3 id="tex-trip-legs-title">Legs - {legsTrip.name}</h3>
-              <p>
-                {legs.length} legs
-                {legDistanceTotal(legs) > 0 ? ` - ${formatAmount(legDistanceTotal(legs))} km total` : ""}
-              </p>
+        <div
+          className="tex-drawer-backdrop"
+          role="presentation"
+          onMouseDown={() => {
+            setLegsTrip(null);
+            setLegsNotice(null);
+            setLegsError(null);
+          }}
+        >
+          <aside
+            className="tex-drawer tex-drawer-wide"
+            aria-labelledby="tex-trip-legs-title"
+            aria-modal="true"
+            role="dialog"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="section-heading-row">
+              <div>
+                <h3 id="tex-trip-legs-title">Legs - {legsTrip.name}</h3>
+                <p>
+                  {legs.length} legs
+                  {legDistanceTotal(legs) > 0 ? ` - ${formatAmount(legDistanceTotal(legs))} km total` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="tex-secondary-button"
+                onClick={() => {
+                  setLegsTrip(null);
+                  setLegsNotice(null);
+                  setLegsError(null);
+                }}
+              >
+                Close
+              </button>
             </div>
-            <button
-              type="button"
-              className="tex-secondary-button"
-              onClick={() => {
-                setLegsTrip(null);
-                setLegsNotice(null);
-                setLegsError(null);
-              }}
-            >
-              Close
-            </button>
-          </div>
 
-          {legsLoading ? <p>Loading legs...</p> : null}
-          {!legsLoading && legs.length === 0 ? <p>No legs yet. Add the first route leg below.</p> : null}
-          <div className="tex-trip-list">
-            {legs.map((leg, index) => (
-              <article key={leg.id ?? `new-${index}`} className="tex-trip-card">
-                <header>
-                  <div>
-                    <span className={`tex-status tex-status-${leg.status}`}>Leg {index + 1}</span>
-                    <h4>{leg.origin || "Origin"} to {leg.destination || "Destination"}</h4>
+            {legsLoading ? <p>Loading legs...</p> : null}
+            {!legsLoading && legs.length === 0 ? <p>No legs yet. Add the first route leg below.</p> : null}
+            <div className="tex-trip-list">
+              {legs.map((leg, index) => (
+                <article key={leg.id ?? `new-${index}`} className="tex-trip-card">
+                  <header>
+                    <div>
+                      <span className={`tex-status tex-status-${leg.status}`}>Leg {index + 1}</span>
+                      <h4>{leg.origin || "Origin"} to {leg.destination || "Destination"}</h4>
+                    </div>
+                    <strong>{formatAmount(legTotalDistance(leg))} km</strong>
+                  </header>
+                  <div className="tex-form-grid">
+                    <label>
+                      Origin
+                      <input value={leg.origin} onChange={(event) => updateLeg(setLegs, index, { origin: event.target.value })} />
+                    </label>
+                    <label>
+                      Destination
+                      <input value={leg.destination} onChange={(event) => updateLeg(setLegs, index, { destination: event.target.value })} />
+                    </label>
+                    <label>
+                      Mode
+                      <select value={leg.mode} onChange={(event) => updateLeg(setLegs, index, { mode: event.target.value as LegFormState["mode"] })}>
+                        <option value="">None</option>
+                        <option value="road">Road</option>
+                        <option value="sea">Sea</option>
+                        <option value="air">Air</option>
+                        <option value="rail">Rail</option>
+                      </select>
+                    </label>
+                    <label>
+                      Status
+                      <select
+                        value={leg.status}
+                        onChange={(event) => updateLeg(setLegs, index, { status: event.target.value as LegFormState["status"] })}
+                      >
+                        <option value="planned">Planned</option>
+                        <option value="in_transit">In transit</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                    </label>
+                    <label>
+                      Planned start
+                      <input type="date" value={leg.plannedStart} onChange={(event) => updateLeg(setLegs, index, { plannedStart: event.target.value })} />
+                    </label>
+                    <label>
+                      Planned end
+                      <input type="date" value={leg.plannedEnd} onChange={(event) => updateLeg(setLegs, index, { plannedEnd: event.target.value })} />
+                    </label>
+                    <label>
+                      Actual start
+                      <input type="date" value={leg.actualStart} onChange={(event) => updateLeg(setLegs, index, { actualStart: event.target.value })} />
+                    </label>
+                    <label>
+                      Actual end
+                      <input type="date" value={leg.actualEnd} onChange={(event) => updateLeg(setLegs, index, { actualEnd: event.target.value })} />
+                    </label>
+                    <label>
+                      Outbound distance km
+                      <input
+                        inputMode="decimal"
+                        value={leg.distanceKm}
+                        onChange={(event) => updateLegDistance(setLegs, index, event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Duration
+                      <input value={durationLabel(leg.durationSeconds)} disabled placeholder="Estimated" />
+                    </label>
+                    <label>
+                      Return distance km
+                      <input
+                        inputMode="decimal"
+                        disabled={!leg.isReturnTrip}
+                        value={leg.returnDistanceKm}
+                        onChange={(event) => updateLegReturnDistance(setLegs, index, event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Budget
+                      <input inputMode="decimal" value={leg.budgetAmount} onChange={(event) => updateLeg(setLegs, index, { budgetAmount: event.target.value })} />
+                    </label>
+                    <label>
+                      Container / BL
+                      <input value={leg.containerRef} onChange={(event) => updateLeg(setLegs, index, { containerRef: event.target.value })} />
+                    </label>
+                    <label>
+                      Distance source
+                      <input value={leg.distanceSource} disabled placeholder="Manual or Google Maps" />
+                    </label>
                   </div>
-                  <strong>{formatAmount(legTotalDistance(leg))} km</strong>
-                </header>
-                <div className="tex-form-grid">
-                  <label>
-                    Origin
-                    <input value={leg.origin} onChange={(event) => updateLeg(setLegs, index, { origin: event.target.value })} />
-                  </label>
-                  <label>
-                    Destination
-                    <input value={leg.destination} onChange={(event) => updateLeg(setLegs, index, { destination: event.target.value })} />
-                  </label>
-                  <label>
-                    Mode
-                    <select value={leg.mode} onChange={(event) => updateLeg(setLegs, index, { mode: event.target.value as LegFormState["mode"] })}>
-                      <option value="">None</option>
-                      <option value="road">Road</option>
-                      <option value="sea">Sea</option>
-                      <option value="air">Air</option>
-                      <option value="rail">Rail</option>
-                    </select>
-                  </label>
-                  <label>
-                    Status
-                    <select
-                      value={leg.status}
-                      onChange={(event) => updateLeg(setLegs, index, { status: event.target.value as LegFormState["status"] })}
-                    >
-                      <option value="planned">Planned</option>
-                      <option value="in_transit">In transit</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-                  </label>
-                  <label>
-                    Planned start
-                    <input type="date" value={leg.plannedStart} onChange={(event) => updateLeg(setLegs, index, { plannedStart: event.target.value })} />
-                  </label>
-                  <label>
-                    Planned end
-                    <input type="date" value={leg.plannedEnd} onChange={(event) => updateLeg(setLegs, index, { plannedEnd: event.target.value })} />
-                  </label>
-                  <label>
-                    Actual start
-                    <input type="date" value={leg.actualStart} onChange={(event) => updateLeg(setLegs, index, { actualStart: event.target.value })} />
-                  </label>
-                  <label>
-                    Actual end
-                    <input type="date" value={leg.actualEnd} onChange={(event) => updateLeg(setLegs, index, { actualEnd: event.target.value })} />
-                  </label>
-                  <label>
-                    Outbound distance km
+                  <button
+                    type="button"
+                    className="tex-secondary-button tex-inline-button"
+                    disabled={estimatingLegIndex === index || !leg.origin.trim() || !leg.destination.trim()}
+                    onClick={() => estimateLeg(index)}
+                  >
+                    {estimatingLegIndex === index ? "Estimating..." : "Estimate with Google Maps"}
+                  </button>
+                  <label className="tex-checkbox-row">
                     <input
-                      inputMode="decimal"
-                      value={leg.distanceKm}
-                      onChange={(event) => updateLegDistance(setLegs, index, event.target.value)}
+                      type="checkbox"
+                      checked={leg.isReturnTrip}
+                      onChange={(event) => updateLegReturnToggle(setLegs, index, event.target.checked)}
                     />
+                    Return to origin
                   </label>
-                  <label>
-                    Duration
-                    <input value={durationLabel(leg.durationSeconds)} disabled placeholder="Estimated" />
+                  <label className="tex-wide-label">
+                    Notes
+                    <input value={leg.notes} onChange={(event) => updateLeg(setLegs, index, { notes: event.target.value })} />
                   </label>
-                  <label>
-                    Return distance km
-                    <input
-                      inputMode="decimal"
-                      disabled={!leg.isReturnTrip}
-                      value={leg.returnDistanceKm}
-                      onChange={(event) => updateLegReturnDistance(setLegs, index, event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    Budget
-                    <input inputMode="decimal" value={leg.budgetAmount} onChange={(event) => updateLeg(setLegs, index, { budgetAmount: event.target.value })} />
-                  </label>
-                  <label>
-                    Container / BL
-                    <input value={leg.containerRef} onChange={(event) => updateLeg(setLegs, index, { containerRef: event.target.value })} />
-                  </label>
-                  <label>
-                    Distance source
-                    <input value={leg.distanceSource} disabled placeholder="Manual or Google Maps" />
-                  </label>
-                </div>
-                <button
-                  type="button"
-                  className="tex-secondary-button tex-inline-button"
-                  disabled={estimatingLegIndex === index || !leg.origin.trim() || !leg.destination.trim()}
-                  onClick={() => estimateLeg(index)}
-                >
-                  {estimatingLegIndex === index ? "Estimating..." : "Estimate with Google Maps"}
-                </button>
-                <label className="tex-checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={leg.isReturnTrip}
-                    onChange={(event) => updateLegReturnToggle(setLegs, index, event.target.checked)}
-                  />
-                  Return to origin
-                </label>
-                <label className="tex-wide-label">
-                  Notes
-                  <input value={leg.notes} onChange={(event) => updateLeg(setLegs, index, { notes: event.target.value })} />
-                </label>
-                <footer>
-                  <button type="button" disabled={index === 0} onClick={() => moveLeg(index, -1)}>
-                    Move up
-                  </button>
-                  <button type="button" disabled={index === legs.length - 1} onClick={() => moveLeg(index, 1)}>
-                    Move down
-                  </button>
-                  <button type="button" onClick={() => removeLeg(index)}>
-                    Remove
-                  </button>
-                </footer>
-              </article>
-            ))}
-          </div>
+                  <footer>
+                    <button type="button" disabled={index === 0} onClick={() => moveLeg(index, -1)}>
+                      Move up
+                    </button>
+                    <button type="button" disabled={index === legs.length - 1} onClick={() => moveLeg(index, 1)}>
+                      Move down
+                    </button>
+                    <button type="button" onClick={() => removeLeg(index)}>
+                      Remove
+                    </button>
+                  </footer>
+                </article>
+              ))}
+            </div>
 
-          <div className="tex-hero-actions">
-            <button type="button" className="tex-secondary-button" onClick={addLeg}>
-              Add leg
-            </button>
-            <button type="button" className="tex-primary-button" disabled={legsSaving || legs.length === 0} onClick={saveLegs}>
-              {legsSaving ? "Saving..." : "Save legs"}
-            </button>
-          </div>
-          {legsNotice ? <p className="tex-notice">{legsNotice}</p> : null}
-          {legsError ? <p className="tex-error">{legsError}</p> : null}
-        </section>
+            <div className="tex-hero-actions">
+              <button type="button" className="tex-secondary-button" onClick={addLeg}>
+                Add leg
+              </button>
+              <button type="button" className="tex-primary-button" disabled={legsSaving || legs.length === 0} onClick={saveLegs}>
+                {legsSaving ? "Saving..." : "Save legs"}
+              </button>
+            </div>
+            {legsNotice ? <p className="tex-notice">{legsNotice}</p> : null}
+            {legsError ? <p className="tex-error">{legsError}</p> : null}
+          </aside>
+        </div>
       ) : null}
     </div>
   );

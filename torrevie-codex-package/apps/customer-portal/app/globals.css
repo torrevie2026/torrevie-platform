@@ -1614,6 +1614,35 @@ form.member-row {
   padding: 18px;
 }
 
+.tex-drawer-wide {
+  inline-size: min(860px, 100%);
+}
+
+.tex-detail-grid {
+  border-block-start: 1px solid var(--color-border);
+  display: grid;
+  gap: 0;
+  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr);
+}
+
+.tex-detail-grid span,
+.tex-detail-grid strong {
+  border-block-end: 1px solid var(--color-border);
+  padding-block: 11px;
+}
+
+.tex-detail-grid span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.tex-detail-grid strong {
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 800;
+}
+
 .tex-form-grid {
   display: grid;
   gap: 12px;

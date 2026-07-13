@@ -39,6 +39,7 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
   const [statusFilter, setStatusFilter] = useState<"all" | TexExpenseStatus>("all");
   const [isCreating, setIsCreating] = useState(false);
   const [isExpenseDrawerOpen, setIsExpenseDrawerOpen] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<TexExpenseListItem | null>(null);
   const [busyExpenseId, setBusyExpenseId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +55,7 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
   async function refreshExpenses() {
     const response = await texFetch<{ expenses: TexExpenseListItem[] }>("/expenses");
     setExpenses(response.expenses);
+    setSelectedExpense((current) => response.expenses.find((expense) => expense.id === current?.id) ?? current);
   }
 
   async function createExpense() {
@@ -206,6 +208,68 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
         </div>
       ) : null}
 
+      {selectedExpense ? (
+        <div className="tex-drawer-backdrop" role="presentation" onMouseDown={() => setSelectedExpense(null)}>
+          <aside
+            className="tex-drawer"
+            aria-labelledby="tex-expense-detail-title"
+            aria-modal="true"
+            role="dialog"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="section-heading-row">
+              <div>
+                <h3 id="tex-expense-detail-title">{selectedExpense.vendor ?? selectedExpense.category ?? "Expense"}</h3>
+                <p>
+                  {selectedExpense.employeeName ?? "Unassigned"} - {formatDate(selectedExpense.expenseDate)}
+                </p>
+              </div>
+              <button type="button" className="tex-secondary-button" onClick={() => setSelectedExpense(null)}>
+                Close
+              </button>
+            </div>
+            <div className="tex-detail-grid">
+              <span>Status</span>
+              <strong className={`tex-status tex-status-${selectedExpense.status}`}>{selectedExpense.status}</strong>
+              <span>Amount</span>
+              <strong>
+                {formatAmount(selectedExpense.amount)} {selectedExpense.currency}
+              </strong>
+              <span>Category</span>
+              <strong>{selectedExpense.category ?? "Uncategorized"}</strong>
+              <span>Trip</span>
+              <strong>{selectedExpense.tripName ?? "No trip"}</strong>
+              <span>Duplicate review</span>
+              <strong>{selectedExpense.duplicateStatus}</strong>
+              <span>Notes</span>
+              <strong>{selectedExpense.notes ?? "No notes"}</strong>
+            </div>
+            {selectedExpense.duplicateReason ? <p className="tex-error">{selectedExpense.duplicateReason}</p> : null}
+            {selectedExpense.status === "pending" ? (
+              <div className="tex-hero-actions">
+                <button
+                  type="button"
+                  className="tex-primary-button"
+                  disabled={busyExpenseId === selectedExpense.id}
+                  onClick={() => updateStatus(selectedExpense.id, "approved")}
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  className="tex-secondary-button"
+                  disabled={busyExpenseId === selectedExpense.id}
+                  onClick={() => updateStatus(selectedExpense.id, "rejected")}
+                >
+                  Reject
+                </button>
+              </div>
+            ) : null}
+            {error ? <p className="tex-error">{error}</p> : null}
+          </aside>
+        </div>
+      ) : null}
+
       <section className="tex-form-panel" aria-labelledby="tex-expense-list-title">
         <div className="section-heading-row">
           <h3 id="tex-expense-list-title">Expense queue</h3>
@@ -260,6 +324,9 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
                   {formatAmount(expense.amount)} {expense.currency}
                 </strong>
                 <div className="tex-card-actions">
+                  <button type="button" onClick={() => setSelectedExpense(expense)}>
+                    Open
+                  </button>
                   {expense.status === "pending" ? (
                     <>
                       <button
