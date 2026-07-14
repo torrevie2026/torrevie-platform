@@ -56,6 +56,7 @@ Completed platform migration checkpoints so far:
 - Added shared Postmark email dispatch in `@torrevie/notifications` and a tenant-scoped `/api/tex/reports/email` endpoint that honors TEX integration email settings, audits sent/skipped/failed outcomes, and keeps outbound email inside the platform app.
 - Added a read-only TEX integration status panel and `/api/tex/integrations` workspace for active WhatsApp routing, provider-profile summaries, and receipt storage boundary visibility.
 - Kept WhatsApp provider profile writes in the shared customer administration module so TEX does not own a parallel integration-admin surface.
+- Resolved source single-provider routing through shared tenant WhatsApp provider profiles: customer administrators may save multiple profiles, and the selected default syncs into active TEX inbound/outbound settings.
 - Rejected the source `company-logos` bucket and `companies.logo_url` path as TEX-owned storage; tenant branding must use shared `tenant_settings.branding` plus tenant-prefixed `files` storage when a platform branding editor is added.
 - Verified migrated receipt uploads persist under `tenant/{tenant_id}/tex/receipts/{file_id}.{extension}` and remain backed by the root `files.storage_path` tenant-prefix constraint.
 - Added platform-native role-specific dashboard cards for admin, finance, manager, and employee users using shared role/entitlement context and already tenant-scoped TEX data.
@@ -65,7 +66,6 @@ Completed platform migration checkpoints so far:
 ## Remaining Gaps
 
 - Source manager assignment needs a dedicated shared-user decision before it is surfaced, because the platform schema relates employee records to shared `users` rather than standalone TEX profiles.
-- Outbound WhatsApp profile routing is currently limited to the default TEX WhatsApp integration settings; tenant provider-profile selection still needs a dedicated pass if multiple sending numbers are required per tenant.
 - Remaining source Edge Functions need a dedicated pass to decide whether each becomes an App Router route, a shared notification integration, or remains deferred.
 - Storage bucket policies need live Supabase verification before production promotion; code-level receipt path coverage now asserts the platform `tenant/{tenant_id}/tex/receipts/...` convention.
 - End-to-end browser verification against seeded TEX data remains required.
