@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import type { QueryResult, QueryValue, TenantQueryClient } from "@torrevie/tenant-context";
 import {
   createTexExpense,
+  createTexEmployeeProfile,
   closeTexTrip,
   createTexTrip,
   deleteTexEmployeeProfile,
@@ -102,6 +103,21 @@ class RecordingTexClient implements TenantQueryClient {
             phone_number: values[2],
             department: values[3],
             is_active: values[4]
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_employee_profiles")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000004002",
+            user_id: null,
+            name: values[0],
+            phone_number: values[1],
+            department: values[2],
+            is_active: values[3]
           }
         ] as Row[]
       };
@@ -563,6 +579,20 @@ async function main() {
     assert.equal(bootstrap.integrationSettings?.whatsappProvider, "wappfly");
     assert.equal(client.hasSql("public.tex_expense_categories"), true);
     assert.equal(client.hasSql("app.current_tenant_id"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const employee = await createTexEmployeeProfile(client, actor, {
+      name: "Omar Faris",
+      phoneNumber: "+971 50 000 0002",
+      department: "Logistics",
+      isActive: true
+    });
+    assert.equal(employee.name, "Omar Faris");
+    assert.equal(employee.phoneNumber, "971500000002");
+    assert.equal(client.hasSql("insert into public.tex_employee_profiles"), true);
+    assert.equal(client.valuesContain("tex.employee.created"), true);
   }
 
   {

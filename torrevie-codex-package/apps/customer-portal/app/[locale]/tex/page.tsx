@@ -1,4 +1,5 @@
 import { getMessages, isLocale, type Locale } from "@torrevie/localization";
+import { hasPermission } from "@torrevie/permissions";
 import { notFound, redirect } from "next/navigation";
 import {
   isCustomerSessionError,
@@ -17,6 +18,7 @@ import {
 } from "../../../lib/tex";
 import { TexExpensesClient } from "./TexExpensesClient";
 import { TexFinanceClient } from "./TexFinanceClient";
+import { TexPeopleClient } from "./TexPeopleClient";
 import { TexSettingsClient } from "./TexSettingsClient";
 import { TexTripsClient } from "./TexTripsClient";
 import { TexWhatsappReviewClient } from "./TexWhatsappReviewClient";
@@ -65,6 +67,13 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
     const canManagePolicies = actor.roles.some((role) =>
       ["customer_admin", "customer_module_admin", "torrevie_platform_admin"].includes(role)
     );
+    const canManagePeople = hasPermission({
+      roles: actor.roles,
+      permission: "tex.people.manage",
+      entitledProducts: actor.entitledProducts,
+      moduleAdminProducts: actor.moduleAdminProducts,
+      integrationPermissions: actor.integrationPermissions
+    }).allowed;
 
     return (
       <main className="customer-shell tex-shell" data-visual-check="tex-platform">
@@ -158,6 +167,11 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
           </section>
 
           <TexFinanceClient initialReview={financeReview} />
+          <TexPeopleClient
+            adminUsersHref={`/${locale}/admin/users`}
+            canManage={canManagePeople}
+            initialEmployees={bootstrap.employeeProfiles}
+          />
           <TexWhatsappReviewClient
             employees={bootstrap.employeeProfiles}
             initialSubmissions={whatsappSubmissions}

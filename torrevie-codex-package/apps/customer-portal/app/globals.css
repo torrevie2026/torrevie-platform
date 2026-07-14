@@ -2902,6 +2902,102 @@ form.member-row {
   grid-template-columns: minmax(160px, 0.8fr) minmax(180px, 1fr) minmax(92px, auto) auto;
 }
 
+.tex-people-workspace {
+  display: grid;
+  gap: 16px;
+}
+
+.tex-people-summary {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tex-people-summary article {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 16px;
+}
+
+.tex-people-summary span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.tex-people-summary strong {
+  color: var(--color-text);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.tex-people-grid {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+}
+
+.tex-people-list {
+  display: grid;
+  gap: 10px;
+}
+
+.tex-people-row {
+  align-items: center;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding: 12px;
+}
+
+.tex-people-row span {
+  display: grid;
+  gap: 3px;
+  min-inline-size: 0;
+}
+
+.tex-people-row small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tex-people-row b {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.tex-row-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.tex-secondary-link {
+  align-items: center;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-accent);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 900;
+  min-block-size: 40px;
+  padding: 0 14px;
+  text-decoration: none;
+}
+
 .tex-muted-row {
   opacity: 0.62;
 }
@@ -3051,6 +3147,7 @@ form.member-row {
   .tex-expense-workspace,
   .tex-trip-workspace,
   .tex-finance-workspace,
+  .tex-people-grid,
   .tex-settings-grid,
   .fsm-widget-grid,
   .fsm-workspace-grid,
@@ -3075,11 +3172,13 @@ form.member-row {
   .tex-dashboard-hero,
   .tex-section-intro-row,
   .tex-kpi-grid,
+  .tex-people-summary,
   .tex-flow-strip,
   .tex-analytics-grid,
   .tex-dashboard-grid,
   .tex-expense-card,
   .tex-finance-row,
+  .tex-people-row,
   .tex-whatsapp-card,
   .tex-policy-row,
   .tex-budget-admin-row,

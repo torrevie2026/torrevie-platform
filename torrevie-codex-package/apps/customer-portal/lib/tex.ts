@@ -618,6 +618,55 @@ export async function listTexExpenses(
   });
 }
 
+export async function createTexEmployeeProfile(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexEmployeeProfileInput
+): Promise<TexEmployeeProfile> {
+  assertTexPermission(actor, "tex.people.manage");
+
+  const name = cleanRequired(input.name, "Employee name");
+  const phoneNumber = normalizePhoneDigits(input.phoneNumber);
+  const department = cleanOptional(input.department);
+
+  if (!phoneNumber) {
+    throw new Error("Employee WhatsApp phone is required.");
+  }
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexEmployeeProfileRow>(
+      `
+        insert into public.tex_employee_profiles (
+          tenant_id,
+          name,
+          phone_number,
+          department,
+          is_active,
+          created_by,
+          updated_by
+        )
+        values (public.current_tenant_id(), $1, $2, $3, $4, $5, $5)
+        returning id, user_id, name, phone_number, department, is_active
+      `,
+      [name, phoneNumber, department, input.isActive, actor.userId]
+    );
+    const employee = requireSingleRow(result.rows, "employee profile");
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.employee.created",
+      "tex_employee_profile",
+      employee.id,
+      {
+        employee_name: employee.name
+      }
+    );
+
+    return mapEmployeeProfile(employee);
+  });
+}
+
 export async function updateTexEmployeeProfile(
   client: TenantQueryClient,
   actor: TexActorContext,

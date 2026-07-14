@@ -46,11 +46,15 @@ Completed platform migration checkpoints so far:
 - Added the unregistered WhatsApp review queue to the platform TEX page, with API support to list, ignore, or resolve submissions into employee profiles and pending TEX expenses.
 - Added the shared `@torrevie/notifications` WhatsApp dispatcher and wired TEX inbound/review replies to tenant-scoped Wappfly, UltraMsg, or Meta default integration settings with audit logging for sent, skipped, and failed replies.
 - Added platform-native TEX controls for expense categories, spend policies, and department budgets, including tenant-scoped API routes and audit events for category, policy, and budget mutations.
+- Added platform-native TEX People controls for tenant-scoped WhatsApp employee profile create/update/delete, plus compatibility routes for `/api/tex/people` and `/api/tex/people/employees`.
+- Kept TEX web user invitations, role assignment, and account status management in the shared customer administration module instead of porting source standalone auth/user-reset flows.
+- Rejected the source standalone company onboarding flow as a TEX-specific tenancy mechanism; platform tenant provisioning remains the canonical onboarding path.
 - Kept `tex1.torrevie.com` untouched; no DNS, Vercel, live environment, or shutdown action is part of this migration branch.
 
 ## Remaining Gaps
 
-- Source reports, employee invitation UX, onboarding flow, dashboard metrics, email queue behavior, remaining integration-profile administration, and several admin-only source screens still need platform-specific migration or explicit rejection.
+- Source reports, dashboard metrics, email queue behavior, remaining integration-profile administration, and several admin-only source screens still need platform-specific migration or explicit rejection.
+- Source employee fields that are present in the platform schema but not yet exposed in the migrated UI, such as salary, submission frequency, and manager assignment, need a dedicated product decision before they are surfaced.
 - Outbound WhatsApp profile routing is currently limited to the default TEX WhatsApp integration settings; tenant provider-profile selection still needs a dedicated pass if multiple sending numbers are required per tenant.
 - Remaining source Edge Functions need a dedicated pass to decide whether each becomes an App Router route, a shared notification integration, or remains deferred.
 - Storage bucket policies need verification against the platform `tenant/{tenant_id}/tex/...` convention for all receipt and company-logo behavior.

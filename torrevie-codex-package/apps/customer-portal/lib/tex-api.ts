@@ -2,12 +2,14 @@ import type { TenantQueryClient } from "@torrevie/tenant-context";
 import {
   closeTexTrip,
   createTexDriverAdvance,
+  createTexEmployeeProfile,
   createTexExpense,
   createTexExpenseCategory,
   createTexNotification,
   createTexTrip,
   deleteTexBudget,
   deleteTexDriverAdvance,
+  deleteTexEmployeeProfile,
   deleteTexExpenseCategory,
   deleteTexTripLeg,
   ignoreTexUnregisteredWhatsappSubmission,
@@ -28,6 +30,7 @@ import {
   resolveTexUnregisteredWhatsappSubmission,
   replaceTexTripLegs,
   updateTexExpenseCategory,
+  updateTexEmployeeProfile,
   updateTexTrip,
   updateTexExpenseStatus,
   uploadTexReceiptFile,
@@ -37,6 +40,7 @@ import {
   type TexBudgetInput,
   type TexDriverAdvanceInput,
   type TexExpenseCategoryInput,
+  type TexEmployeeProfileInput,
   type TexExpenseInput,
   type TexExpenseStatus,
   type TexFinancePaymentInput,
@@ -107,6 +111,21 @@ export async function handleTexApiRequest(
 
   if (path === "/bootstrap" && method === "GET") {
     return json(200, await listTexBootstrap(client, actor));
+  }
+
+  if (path === "/people" && method === "GET") {
+    const bootstrap = await listTexBootstrap(client, actor);
+    return json(200, {
+      employees: bootstrap.employeeProfiles,
+      employeeProfiles: bootstrap.employeeProfiles,
+      teams: bootstrap.teams
+    });
+  }
+
+  if ((path === "/people/employees" || path === "/employees") && method === "POST") {
+    return json(201, {
+      employee: await createTexEmployeeProfile(client, actor, readEmployeeInput(request.body))
+    });
   }
 
   if (path === "/expenses" && method === "GET") {
@@ -212,6 +231,25 @@ export async function handleTexApiRequest(
   const driverAdvanceMatch = path.match(/^\/driver-advances\/([0-9a-f-]+)$/i);
   if (driverAdvanceMatch && method === "DELETE") {
     await deleteTexDriverAdvance(client, actor, driverAdvanceMatch[1] ?? "");
+    return json(200, { ok: true });
+  }
+
+  const employeeMatch =
+    path.match(/^\/people\/employees\/([0-9a-f-]+)$/i) ??
+    path.match(/^\/employees\/([0-9a-f-]+)$/i);
+  if (employeeMatch && method === "PATCH") {
+    return json(200, {
+      employee: await updateTexEmployeeProfile(
+        client,
+        actor,
+        employeeMatch[1] ?? "",
+        readEmployeeInput(request.body)
+      )
+    });
+  }
+
+  if (employeeMatch && method === "DELETE") {
+    await deleteTexEmployeeProfile(client, actor, employeeMatch[1] ?? "");
     return json(200, { ok: true });
   }
 
@@ -445,6 +483,22 @@ function readCategoryInput(value: unknown): TexExpenseCategoryInput {
     name: readOptionalString(body.name) ?? "",
     isActive: readOptionalBoolean(body.isActive) ?? readOptionalBoolean(body.is_active),
     sortOrder: readOptionalInteger(body.sortOrder) ?? readOptionalInteger(body.sort_order)
+  };
+}
+
+function readEmployeeInput(value: unknown): TexEmployeeProfileInput {
+  const body = readRecord(value);
+
+  return {
+    name: readOptionalString(body.name) ?? readOptionalString(body.full_name) ?? "",
+    phoneNumber:
+      readOptionalString(body.phoneNumber) ??
+      readOptionalString(body.phone_number) ??
+      readOptionalString(body.whatsappPhone) ??
+      readOptionalString(body.whatsapp_phone) ??
+      "",
+    department: readOptionalString(body.department),
+    isActive: readOptionalBoolean(body.isActive) ?? readOptionalBoolean(body.is_active) ?? true
   };
 }
 
