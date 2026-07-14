@@ -162,6 +162,35 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("from public.tex_expenses e") && sql.includes("e.expense_date >= $1::date")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000006001",
+            employee_profile_id: "00000000-0000-4000-8000-000000004001",
+            employee_name: "Maya Haddad",
+            vendor: "Airport Cafe",
+            expense_date: values[0],
+            amount: 120,
+            currency: "AED",
+            base_amount: 120,
+            category: "Meals",
+            trip_id: null,
+            trip_name: null,
+            payment_method: "personal",
+            source: "web",
+            status: "approved",
+            policy_flag: false,
+            tax_amount: null,
+            tax_id_number: null,
+            approved_at: "2026-07-12T10:00:00.000Z",
+            paid_at: null,
+            created_at: "2026-07-12T09:00:00.000Z"
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("select id, user_id, name, phone_number, department, is_active")) {
       return { rows: [] };
     }
@@ -1281,6 +1310,18 @@ async function main() {
     assert.equal(response.status, 200);
     assert.equal(client.hasSql("delete from public.tex_employee_profiles"), true);
     assert.equal(client.valuesContain("tex.employee.deleted"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "GET",
+      path: "/reports",
+      query: { date_from: "2026-07-01", date_to: "2026-07-31" }
+    });
+    assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /Maya Haddad/);
+    assert.equal(client.hasSql("e.expense_date >= $1::date"), true);
   }
 
   {

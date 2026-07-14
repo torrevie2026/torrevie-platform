@@ -17,6 +17,7 @@ import {
   listTexExpenses,
   listTexFinanceReview,
   listTexNotifications,
+  listTexReportWorkspace,
   listTexSettingsWorkspace,
   listTexTripLegs,
   listTexTrips,
@@ -46,6 +47,7 @@ import {
   type TexFinancePaymentInput,
   type TexNotificationInput,
   type TexReceiptUploadInput,
+  type TexReportInput,
   type TexSpendPolicyInput,
   type TexTripLegInput,
   type TexTripInput,
@@ -213,6 +215,10 @@ export async function handleTexApiRequest(
       200,
       await listTexFinanceReview(client, actor, readInteger(query.month), readInteger(query.year))
     );
+  }
+
+  if ((path === "/reports" || path === "/dashboard") && method === "GET") {
+    return json(200, await listTexReportWorkspace(client, actor, readReportInput(request.query)));
   }
 
   if (path === "/finance-review/pay" && method === "POST") {
@@ -524,6 +530,15 @@ function readBudgetInput(value: unknown): TexBudgetInput {
     year: readOptionalInteger(body.year) ?? 0,
     budgetAmount:
       readOptionalNumber(body.budgetAmount) ?? readOptionalNumber(body.budget_amount) ?? -1
+  };
+}
+
+function readReportInput(value: unknown): TexReportInput {
+  const body = readRecord(value);
+
+  return {
+    dateFrom: readOptionalString(body.dateFrom) ?? readOptionalString(body.date_from),
+    dateTo: readOptionalString(body.dateTo) ?? readOptionalString(body.date_to)
   };
 }
 

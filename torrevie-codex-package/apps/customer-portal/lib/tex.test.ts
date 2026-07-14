@@ -10,6 +10,7 @@ import {
   listTexTripLegs,
   listTexExpenses,
   listTexFinanceReview,
+  listTexReportWorkspace,
   listTexTrips,
   listTexBootstrap,
   payTexFinanceItems,
@@ -254,6 +255,35 @@ class RecordingTexClient implements TenantQueryClient {
             status: "pending",
             amount: values[4],
             currency: values[5]
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("from public.tex_expenses e") && sql.includes("e.expense_date >= $1::date")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000006001",
+            employee_profile_id: "00000000-0000-4000-8000-000000004001",
+            employee_name: "Maya Haddad",
+            vendor: "Airport Cafe",
+            expense_date: values[0],
+            amount: 120,
+            currency: "AED",
+            base_amount: 120,
+            category: "Meals",
+            trip_id: "00000000-0000-4000-8000-000000008001",
+            trip_name: "Dubai run",
+            payment_method: "personal",
+            source: "web",
+            status: "approved",
+            policy_flag: false,
+            tax_amount: 5,
+            tax_id_number: "TRN123",
+            approved_at: "2026-07-12T10:00:00.000Z",
+            paid_at: null,
+            created_at: "2026-07-12T09:00:00.000Z"
           }
         ] as Row[]
       };
@@ -629,6 +659,19 @@ async function main() {
     assert.equal(expenses[0]?.tripName, "Dubai run");
     assert.equal(expenses[0]?.status, "pending");
     assert.equal(client.hasSql("from public.tex_expenses e"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const report = await listTexReportWorkspace(client, actor, {
+      dateFrom: "2026-07-01",
+      dateTo: "2026-07-31"
+    });
+    assert.equal(report.dateFrom, "2026-07-01");
+    assert.equal(report.previousDateFrom, "2026-05-31");
+    assert.equal(report.expenses[0]?.employeeName, "Maya Haddad");
+    assert.equal(report.expenses[0]?.baseAmount, 120);
+    assert.equal(client.hasSql("e.expense_date >= $1::date"), true);
   }
 
   {

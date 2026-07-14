@@ -11,6 +11,7 @@ import {
   listTexBootstrap,
   listTexExpenses,
   listTexFinanceReview,
+  listTexReportWorkspace,
   listTexSettingsWorkspace,
   listTexTrips,
   listTexUnregisteredWhatsappSubmissions,
@@ -19,6 +20,7 @@ import {
 import { TexExpensesClient } from "./TexExpensesClient";
 import { TexFinanceClient } from "./TexFinanceClient";
 import { TexPeopleClient } from "./TexPeopleClient";
+import { TexReportsClient } from "./TexReportsClient";
 import { TexSettingsClient } from "./TexSettingsClient";
 import { TexTripsClient } from "./TexTripsClient";
 import { TexWhatsappReviewClient } from "./TexWhatsappReviewClient";
@@ -55,6 +57,7 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
       actor,
       "open"
     ).catch(() => []);
+    const reportWorkspace = await listTexReportWorkspace(client, actor).catch(() => null);
     const settingsWorkspace = await listTexSettingsWorkspace(
       client,
       actor,
@@ -167,6 +170,7 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
           </section>
 
           <TexFinanceClient initialReview={financeReview} />
+          <TexReportsClient initialReport={reportWorkspace} />
           <TexPeopleClient
             adminUsersHref={`/${locale}/admin/users`}
             canManage={canManagePeople}

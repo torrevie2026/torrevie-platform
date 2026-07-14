@@ -2998,6 +2998,123 @@ form.member-row {
   text-decoration: none;
 }
 
+.tex-reports-workspace {
+  display: grid;
+  gap: 16px;
+}
+
+.tex-report-controls .tex-form-grid {
+  align-items: end;
+  grid-template-columns: repeat(5, minmax(120px, 1fr)) auto;
+}
+
+.tex-report-kpis {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.tex-report-kpi {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  padding: 16px;
+}
+
+.tex-report-kpi span,
+.tex-report-kpi small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tex-report-kpi span {
+  text-transform: uppercase;
+}
+
+.tex-report-kpi strong {
+  color: var(--color-text);
+  font-size: 24px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.tex-report-kpi .tex-good-delta {
+  color: var(--color-status-success);
+}
+
+.tex-report-kpi .tex-bad-delta {
+  color: var(--color-status-error);
+}
+
+.tex-report-grid {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tex-report-breakdown,
+.tex-report-ledger {
+  display: grid;
+  gap: 10px;
+}
+
+.tex-report-breakdown article {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 0.8fr) minmax(90px, 1fr) auto;
+}
+
+.tex-report-breakdown span,
+.tex-report-row span {
+  display: grid;
+  gap: 3px;
+  min-inline-size: 0;
+}
+
+.tex-report-breakdown small,
+.tex-report-row small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tex-report-breakdown b,
+.tex-report-row b {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.tex-report-bar-track {
+  background: var(--color-bg-primary);
+  border-radius: 999px;
+  block-size: 10px;
+  overflow: hidden;
+}
+
+.tex-report-bar-track i {
+  background: var(--color-accent);
+  block-size: 100%;
+  border-radius: inherit;
+  display: block;
+}
+
+.tex-report-row {
+  align-items: center;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.5fr) auto;
+  padding: 12px;
+}
+
 .tex-muted-row {
   opacity: 0.62;
 }
@@ -3148,6 +3265,7 @@ form.member-row {
   .tex-trip-workspace,
   .tex-finance-workspace,
   .tex-people-grid,
+  .tex-report-grid,
   .tex-settings-grid,
   .fsm-widget-grid,
   .fsm-workspace-grid,
@@ -3173,12 +3291,16 @@ form.member-row {
   .tex-section-intro-row,
   .tex-kpi-grid,
   .tex-people-summary,
+  .tex-report-kpis,
   .tex-flow-strip,
   .tex-analytics-grid,
   .tex-dashboard-grid,
   .tex-expense-card,
   .tex-finance-row,
   .tex-people-row,
+  .tex-report-row,
+  .tex-report-breakdown article,
+  .tex-report-controls .tex-form-grid,
   .tex-whatsapp-card,
   .tex-policy-row,
   .tex-budget-admin-row,

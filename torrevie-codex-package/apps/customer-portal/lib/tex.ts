@@ -299,6 +299,44 @@ export type TexFinancePaymentInput = {
   tripIds?: string[];
 };
 
+export type TexReportInput = {
+  dateFrom?: string | null;
+  dateTo?: string | null;
+};
+
+export type TexReportExpense = {
+  id: string;
+  employeeProfileId: string | null;
+  employeeName: string | null;
+  vendor: string | null;
+  expenseDate: string;
+  amount: number;
+  currency: string;
+  baseAmount: number;
+  category: string | null;
+  tripId: string | null;
+  tripName: string | null;
+  paymentMethod: string | null;
+  source: string | null;
+  status: TexExpenseStatus;
+  policyFlag: boolean;
+  taxAmount: number | null;
+  taxIdNumber: string | null;
+  approvedAt: string | null;
+  paidAt: string | null;
+  createdAt: string;
+};
+
+export type TexReportWorkspace = {
+  dateFrom: string;
+  dateTo: string;
+  previousDateFrom: string;
+  previousDateTo: string;
+  currency: string;
+  expenses: TexReportExpense[];
+  previousExpenses: TexReportExpense[];
+};
+
 export type TexDriverAdvanceInput = {
   employeeProfileId?: string | null;
   amount: number;
@@ -1355,6 +1393,29 @@ export async function listTexFinanceReview(
         tripPayoutAmount,
         netPayable: approvedExpenseAmount + tripPayoutAmount
       }
+    };
+  });
+}
+
+export async function listTexReportWorkspace(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexReportInput = {}
+): Promise<TexReportWorkspace> {
+  assertTexPermission(actor, "tex.expense.read");
+  const period = sanitizeReportPeriod(input.dateFrom, input.dateTo);
+
+  return withTenantContext(client, actor, async () => {
+    const [expenses, previousExpenses] = await Promise.all([
+      queryTexReportExpenses(client, period.dateFrom, period.dateTo),
+      queryTexReportExpenses(client, period.previousDateFrom, period.previousDateTo)
+    ]);
+
+    return {
+      ...period,
+      currency: "AED",
+      expenses: expenses.rows.map(mapReportExpense),
+      previousExpenses: previousExpenses.rows.map(mapReportExpense)
     };
   });
 }
@@ -3016,6 +3077,47 @@ async function findEmployeeByPhone(client: TenantQueryClient, phone: string | nu
   return result.rows[0] ?? null;
 }
 
+function queryTexReportExpenses(client: TenantQueryClient, dateFrom: string, dateTo: string) {
+  return client.query<TexReportExpenseRow>(
+    `
+      select
+        e.id,
+        e.employee_profile_id,
+        coalesce(ep.name, e.employee_name) as employee_name,
+        e.vendor,
+        e.expense_date::text as expense_date,
+        e.amount::float as amount,
+        e.currency,
+        coalesce(e.base_amount, e.amount)::float as base_amount,
+        e.category,
+        e.trip_id,
+        coalesce(t.name, e.trip_name) as trip_name,
+        e.payment_method,
+        e.source,
+        e.status,
+        e.policy_flag,
+        e.tax_amount::float as tax_amount,
+        e.tax_id_number,
+        e.approved_at::text as approved_at,
+        e.paid_at::text as paid_at,
+        e.created_at::text as created_at
+      from public.tex_expenses e
+      left join public.tex_employee_profiles ep
+        on ep.tenant_id = e.tenant_id
+       and ep.id = e.employee_profile_id
+      left join public.tex_trips t
+        on t.tenant_id = e.tenant_id
+       and t.id = e.trip_id
+      where e.tenant_id = public.current_tenant_id()
+        and e.expense_date >= $1::date
+        and e.expense_date <= $2::date
+      order by e.expense_date desc, e.created_at desc
+      limit 1000
+    `,
+    [dateFrom, dateTo]
+  );
+}
+
 async function buildWhatsappStatusReply(client: TenantQueryClient, phone: string | null) {
   const employee = await findEmployeeByPhone(client, phone);
 
@@ -3671,6 +3773,57 @@ function sanitizeFinancePeriod(month: number, year: number) {
   }
 
   return { month: parsedMonth, year: parsedYear };
+}
+
+function sanitizeReportPeriod(dateFrom?: string | null, dateTo?: string | null) {
+  const now = new Date();
+  const defaultFrom = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const defaultTo = toIsoDate(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)));
+  const from = sanitizeIsoDate(dateFrom, "report start date") ?? defaultFrom;
+  const to = sanitizeIsoDate(dateTo, "report end date") ?? defaultTo;
+
+  if (from > to) {
+    throw new Error("Report start date must be before the end date.");
+  }
+
+  const fromDate = parseReportIsoDate(from);
+  const toDate = parseReportIsoDate(to);
+  const dayCount = Math.max(1, Math.round((toDate.getTime() - fromDate.getTime()) / 86400000) + 1);
+  const previousTo = new Date(fromDate.getTime() - 86400000);
+  const previousFrom = new Date(previousTo.getTime() - (dayCount - 1) * 86400000);
+
+  return {
+    dateFrom: from,
+    dateTo: to,
+    previousDateFrom: toIsoDate(previousFrom),
+    previousDateTo: toIsoDate(previousTo)
+  };
+}
+
+function sanitizeIsoDate(value: string | null | undefined, label: string) {
+  if (!value) {
+    return null;
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error(`Invalid ${label}.`);
+  }
+
+  return toIsoDate(parseReportIsoDate(value));
+}
+
+function parseReportIsoDate(value: string) {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+
+  if (Number.isNaN(parsed.getTime()) || toIsoDate(parsed) !== value) {
+    throw new Error("Invalid report date.");
+  }
+
+  return parsed;
+}
+
+function toIsoDate(value: Date) {
+  return value.toISOString().slice(0, 10);
 }
 
 function sanitizeDriverAdvance(input: TexDriverAdvanceInput): Required<TexDriverAdvanceInput> {
@@ -4363,6 +4516,31 @@ function mapFinanceTripPayout(row: TexFinanceTripPayoutRow): TexFinanceTripPayou
   };
 }
 
+function mapReportExpense(row: TexReportExpenseRow): TexReportExpense {
+  return {
+    id: row.id,
+    employeeProfileId: row.employee_profile_id,
+    employeeName: row.employee_name,
+    vendor: row.vendor,
+    expenseDate: row.expense_date,
+    amount: row.amount,
+    currency: row.currency,
+    baseAmount: row.base_amount,
+    category: row.category,
+    tripId: row.trip_id,
+    tripName: row.trip_name,
+    paymentMethod: row.payment_method,
+    source: row.source,
+    status: row.status,
+    policyFlag: row.policy_flag,
+    taxAmount: row.tax_amount,
+    taxIdNumber: row.tax_id_number,
+    approvedAt: row.approved_at,
+    paidAt: row.paid_at,
+    createdAt: row.created_at
+  };
+}
+
 function mapDriverAdvance(row: TexDriverAdvanceRow): TexDriverAdvance {
   return {
     id: row.id,
@@ -4578,6 +4756,29 @@ type TexFinanceTripPayoutRow = {
   subcontractor_driver_name: string | null;
   subcontractor_amount: number;
   total_amount: number;
+};
+
+type TexReportExpenseRow = {
+  id: string;
+  employee_profile_id: string | null;
+  employee_name: string | null;
+  vendor: string | null;
+  expense_date: string;
+  amount: number;
+  currency: string;
+  base_amount: number;
+  category: string | null;
+  trip_id: string | null;
+  trip_name: string | null;
+  payment_method: string | null;
+  source: string | null;
+  status: TexExpenseStatus;
+  policy_flag: boolean;
+  tax_amount: number | null;
+  tax_id_number: string | null;
+  approved_at: string | null;
+  paid_at: string | null;
+  created_at: string;
 };
 
 type TexDriverAdvanceRow = {
