@@ -190,6 +190,7 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
             canManage={canManagePeople}
             initialEmployees={bootstrap.employeeProfiles}
             initialManagerUsers={bootstrap.managerUsers}
+            initialTeams={bootstrap.teams}
           />
           <TexWhatsappReviewClient
             employees={bootstrap.employeeProfiles}

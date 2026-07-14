@@ -86,6 +86,18 @@ export type TexTeam = {
   id: string;
   name: string;
   description: string | null;
+  managerEmployeeProfileId: string | null;
+  managerName: string | null;
+  memberEmployeeProfileIds: string[];
+  memberNames: string[];
+  memberCount: number;
+};
+
+export type TexTeamInput = {
+  name: string;
+  description?: string | null;
+  managerEmployeeProfileId?: string | null;
+  memberEmployeeProfileIds?: string[] | null;
 };
 
 export type TexIntegrationSettings = {
@@ -733,10 +745,36 @@ export async function listTexBootstrap(
         ),
         client.query<TexTeamRow>(
           `
-          select id, name, description
-          from public.tex_teams
-          where tenant_id = public.current_tenant_id()
-          order by name asc
+          select
+            t.id,
+            t.name,
+            t.description,
+            t.manager_employee_profile_id,
+            manager.name as manager_name,
+            coalesce(
+              string_agg(member.id::text, ',' order by member.name)
+                filter (where member.id is not null),
+              ''
+            ) as member_employee_profile_ids,
+            coalesce(
+              string_agg(member.name, '|' order by member.name)
+                filter (where member.id is not null),
+              ''
+            ) as member_names,
+            count(member.id)::int as member_count
+          from public.tex_teams t
+          left join public.tex_employee_profiles manager
+            on manager.tenant_id = t.tenant_id
+           and manager.id = t.manager_employee_profile_id
+          left join public.tex_team_members tm
+            on tm.tenant_id = t.tenant_id
+           and tm.team_id = t.id
+          left join public.tex_employee_profiles member
+            on member.tenant_id = tm.tenant_id
+           and member.id = tm.employee_profile_id
+          where t.tenant_id = public.current_tenant_id()
+          group by t.id, manager.name
+          order by t.name asc
         `
         ),
         client.query<TexIntegrationSettingsRow>(
@@ -1057,6 +1095,136 @@ export async function deleteTexEmployeeProfile(
         employee_name: employee.name
       }
     );
+  });
+}
+
+export async function createTexTeam(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexTeamInput
+): Promise<TexTeam> {
+  assertTexPermission(actor, "tex.people.manage");
+  const sanitized = sanitizeTeamInput(input);
+
+  return withTenantContext(client, actor, async () => {
+    await assertTenantEmployeeProfiles(client, [
+      sanitized.managerEmployeeProfileId,
+      ...sanitized.memberEmployeeProfileIds
+    ]);
+
+    const result = await client.query<TexTeamRow>(
+      `
+        insert into public.tex_teams (
+          tenant_id,
+          name,
+          description,
+          manager_employee_profile_id,
+          created_by,
+          updated_by
+        )
+        values (public.current_tenant_id(), $1, $2, $3, $4, $4)
+        returning
+          id,
+          name,
+          description,
+          manager_employee_profile_id,
+          null::text as manager_name,
+          ''::text as member_employee_profile_ids,
+          ''::text as member_names,
+          0::int as member_count
+      `,
+      [sanitized.name, sanitized.description, sanitized.managerEmployeeProfileId, actor.userId]
+    );
+    const team = requireSingleRow(result.rows, "team");
+
+    await replaceTexTeamMembers(client, team.id, sanitized.memberEmployeeProfileIds, actor.userId);
+    await writeTexAuditEvent(client, actor, "tex.team.created", "tex_team", team.id, {
+      team_name: sanitized.name,
+      members: sanitized.memberEmployeeProfileIds.join(",")
+    });
+
+    return getTexTeam(client, team.id);
+  });
+}
+
+export async function updateTexTeam(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  teamId: string,
+  input: TexTeamInput
+): Promise<TexTeam> {
+  assertTexPermission(actor, "tex.people.manage");
+  assertUuid(teamId, "team id");
+  const sanitized = sanitizeTeamInput(input);
+
+  return withTenantContext(client, actor, async () => {
+    await assertTenantEmployeeProfiles(client, [
+      sanitized.managerEmployeeProfileId,
+      ...sanitized.memberEmployeeProfileIds
+    ]);
+
+    const result = await client.query<{ id: string; name: string }>(
+      `
+        update public.tex_teams
+           set name = $2,
+               description = $3,
+               manager_employee_profile_id = $4,
+               updated_by = $5
+         where tenant_id = public.current_tenant_id()
+           and id = $1
+        returning id, name
+      `,
+      [
+        teamId,
+        sanitized.name,
+        sanitized.description,
+        sanitized.managerEmployeeProfileId,
+        actor.userId
+      ]
+    );
+    const team = requireSingleRow(result.rows, "team");
+
+    await replaceTexTeamMembers(client, team.id, sanitized.memberEmployeeProfileIds, actor.userId);
+    await writeTexAuditEvent(client, actor, "tex.team.updated", "tex_team", team.id, {
+      team_name: team.name,
+      members: sanitized.memberEmployeeProfileIds.join(",")
+    });
+
+    return getTexTeam(client, team.id);
+  });
+}
+
+export async function deleteTexTeam(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  teamId: string
+): Promise<void> {
+  assertTexPermission(actor, "tex.people.manage");
+  assertUuid(teamId, "team id");
+
+  await withTenantContext(client, actor, async () => {
+    await client.query(
+      `
+        delete from public.tex_team_members
+         where tenant_id = public.current_tenant_id()
+           and team_id = $1
+      `,
+      [teamId]
+    );
+    const result = await client.query<{ id: string; name: string }>(
+      `
+        delete from public.tex_teams
+         where tenant_id = public.current_tenant_id()
+           and id = $1
+        returning id, name
+      `,
+      [teamId]
+    );
+    const team = requireSingleRow(result.rows, "team");
+
+    await writeTexAuditEvent(client, actor, "tex.team.deleted", "tex_team", team.id, {
+      team_name: team.name
+    });
   });
 }
 
@@ -4461,6 +4629,34 @@ function sanitizeSubmissionFrequency(
   return "realtime";
 }
 
+function sanitizeTeamInput(input: TexTeamInput): {
+  name: string;
+  description: string | null;
+  managerEmployeeProfileId: string | null;
+  memberEmployeeProfileIds: string[];
+} {
+  const name = cleanRequired(input.name, "Team name");
+  const description = cleanOptional(input.description);
+  const managerEmployeeProfileId = sanitizeOptionalUuid(
+    input.managerEmployeeProfileId,
+    "team manager employee profile id"
+  );
+  const memberEmployeeProfileIds = Array.from(
+    new Set(
+      (input.memberEmployeeProfileIds ?? [])
+        .map((id) => sanitizeOptionalUuid(id, "team member employee profile id"))
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+
+  return {
+    name,
+    description,
+    managerEmployeeProfileId,
+    memberEmployeeProfileIds
+  };
+}
+
 function sanitizeEmailRecipients(values: readonly string[]) {
   return values
     .flatMap((value) => String(value).split(/[,\n;]/))
@@ -4731,6 +4927,105 @@ async function assertTenantManagerUser(client: TenantQueryClient, managerUserId:
   );
 
   requireSingleRow(result.rows, "manager user");
+}
+
+async function assertTenantEmployeeProfiles(
+  client: TenantQueryClient,
+  employeeProfileIds: Array<string | null>
+) {
+  for (const employeeProfileId of employeeProfileIds) {
+    if (!employeeProfileId) {
+      continue;
+    }
+
+    const result = await client.query<{ id: string }>(
+      `
+        select id
+        from public.tex_employee_profiles
+        where tenant_id = public.current_tenant_id()
+          and id = $1
+          and is_active = true
+        limit 1
+      `,
+      [employeeProfileId]
+    );
+
+    requireSingleRow(result.rows, "employee profile");
+  }
+}
+
+async function replaceTexTeamMembers(
+  client: TenantQueryClient,
+  teamId: string,
+  employeeProfileIds: readonly string[],
+  actorUserId: string
+) {
+  await client.query(
+    `
+      delete from public.tex_team_members
+       where tenant_id = public.current_tenant_id()
+         and team_id = $1
+    `,
+    [teamId]
+  );
+
+  for (const employeeProfileId of employeeProfileIds) {
+    await client.query(
+      `
+        insert into public.tex_team_members (
+          tenant_id,
+          team_id,
+          employee_profile_id,
+          created_by,
+          updated_by
+        )
+        values (public.current_tenant_id(), $1, $2, $3, $3)
+        on conflict (team_id, employee_profile_id) do nothing
+      `,
+      [teamId, employeeProfileId, actorUserId]
+    );
+  }
+}
+
+async function getTexTeam(client: TenantQueryClient, teamId: string): Promise<TexTeam> {
+  const result = await client.query<TexTeamRow>(
+    `
+      select
+        t.id,
+        t.name,
+        t.description,
+        t.manager_employee_profile_id,
+        manager.name as manager_name,
+        coalesce(
+          string_agg(member.id::text, ',' order by member.name)
+            filter (where member.id is not null),
+          ''
+        ) as member_employee_profile_ids,
+        coalesce(
+          string_agg(member.name, '|' order by member.name)
+            filter (where member.id is not null),
+          ''
+        ) as member_names,
+        count(member.id)::int as member_count
+      from public.tex_teams t
+      left join public.tex_employee_profiles manager
+        on manager.tenant_id = t.tenant_id
+       and manager.id = t.manager_employee_profile_id
+      left join public.tex_team_members tm
+        on tm.tenant_id = t.tenant_id
+       and tm.team_id = t.id
+      left join public.tex_employee_profiles member
+        on member.tenant_id = tm.tenant_id
+       and member.id = tm.employee_profile_id
+      where t.tenant_id = public.current_tenant_id()
+        and t.id = $1
+      group by t.id, manager.name
+      limit 1
+    `,
+    [teamId]
+  );
+
+  return mapTeam(requireSingleRow(result.rows, "team"));
 }
 
 function parseSubmissionExtraction(value: unknown): TexReceiptExtraction | null {
@@ -5145,7 +5440,12 @@ function mapTeam(row: TexTeamRow): TexTeam {
   return {
     id: row.id,
     name: row.name,
-    description: row.description
+    description: row.description,
+    managerEmployeeProfileId: row.manager_employee_profile_id,
+    managerName: row.manager_name,
+    memberEmployeeProfileIds: splitDelimited(row.member_employee_profile_ids, ","),
+    memberNames: splitDelimited(row.member_names, "|"),
+    memberCount: row.member_count
   };
 }
 
@@ -5362,6 +5662,10 @@ function mapCurrencyPeg(row: TexCurrencyPegRow): TexCurrencyPeg {
   };
 }
 
+function splitDelimited(value: string | null, delimiter: string) {
+  return value ? value.split(delimiter).filter(Boolean) : [];
+}
+
 function mapNotification(row: TexNotificationRow): TexNotification {
   return {
     id: row.id,
@@ -5454,6 +5758,11 @@ type TexTeamRow = {
   id: string;
   name: string;
   description: string | null;
+  manager_employee_profile_id: string | null;
+  manager_name: string | null;
+  member_employee_profile_ids: string;
+  member_names: string;
+  member_count: number;
 };
 
 type TexIntegrationSettingsRow = {

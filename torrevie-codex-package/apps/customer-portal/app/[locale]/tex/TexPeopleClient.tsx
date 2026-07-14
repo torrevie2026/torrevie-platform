@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { TexEmployeeProfile, TexManagerUser } from "../../../lib/tex";
+import type { TexEmployeeProfile, TexManagerUser, TexTeam } from "../../../lib/tex";
 
 type TexPeopleClientProps = {
   adminUsersHref: string;
   canManage: boolean;
   initialEmployees: TexEmployeeProfile[];
   initialManagerUsers: TexManagerUser[];
+  initialTeams: TexTeam[];
 };
 
 type EmployeeForm = {
@@ -20,6 +21,13 @@ type EmployeeForm = {
   isActive: boolean;
 };
 
+type TeamForm = {
+  name: string;
+  description: string;
+  managerEmployeeProfileId: string;
+  memberEmployeeProfileIds: string[];
+};
+
 const emptyEmployeeForm: EmployeeForm = {
   name: "",
   phoneNumber: "",
@@ -30,15 +38,26 @@ const emptyEmployeeForm: EmployeeForm = {
   isActive: true
 };
 
+const emptyTeamForm: TeamForm = {
+  name: "",
+  description: "",
+  managerEmployeeProfileId: "",
+  memberEmployeeProfileIds: []
+};
+
 export function TexPeopleClient({
   adminUsersHref,
   canManage,
   initialEmployees,
-  initialManagerUsers
+  initialManagerUsers,
+  initialTeams
 }: TexPeopleClientProps) {
   const [employees, setEmployees] = useState(initialEmployees);
+  const [teams, setTeams] = useState(initialTeams);
   const [form, setForm] = useState<EmployeeForm>(emptyEmployeeForm);
+  const [teamForm, setTeamForm] = useState<TeamForm>(emptyTeamForm);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +75,8 @@ export function TexPeopleClient({
     [employees]
   );
   const editingEmployee = employees.find((employee) => employee.id === editingEmployeeId) ?? null;
+  const activeEmployeeOptions = employees.filter((employee) => employee.isActive);
+  const editingTeam = teams.find((team) => team.id === editingTeamId) ?? null;
 
   function editEmployee(employee: TexEmployeeProfile) {
     setEditingEmployeeId(employee.id);
@@ -77,12 +98,31 @@ export function TexPeopleClient({
     setForm(emptyEmployeeForm);
   }
 
+  function editTeam(team: TexTeam) {
+    setEditingTeamId(team.id);
+    setTeamForm({
+      name: team.name,
+      description: team.description ?? "",
+      managerEmployeeProfileId: team.managerEmployeeProfileId ?? "",
+      memberEmployeeProfileIds: team.memberEmployeeProfileIds
+    });
+    setNotice(null);
+    setError(null);
+  }
+
+  function resetTeamForm() {
+    setEditingTeamId(null);
+    setTeamForm(emptyTeamForm);
+  }
+
   async function refreshPeople() {
     const result = await texFetch<{
       employeeProfiles?: TexEmployeeProfile[];
       employees?: TexEmployeeProfile[];
+      teams?: TexTeam[];
     }>("/people");
     setEmployees(result.employeeProfiles ?? result.employees ?? []);
+    setTeams(result.teams ?? []);
   }
 
   async function saveEmployee() {
@@ -133,6 +173,57 @@ export function TexPeopleClient({
       setNotice("Employee removed.");
       if (editingEmployeeId === employee.id) {
         resetForm();
+      }
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function saveTeam() {
+    setBusy("team");
+    setNotice(null);
+    setError(null);
+
+    try {
+      const path = editingTeamId ? `/people/teams/${editingTeamId}` : "/people/teams";
+      const method = editingTeamId ? "PATCH" : "POST";
+      const response = await texFetch<{ team: TexTeam }>(path, {
+        method,
+        body: JSON.stringify({
+          ...teamForm,
+          managerEmployeeProfileId: teamForm.managerEmployeeProfileId || null
+        })
+      });
+
+      setTeams((current) => {
+        const exists = current.some((team) => team.id === response.team.id);
+        return exists
+          ? current.map((team) => (team.id === response.team.id ? response.team : team))
+          : [...current, response.team].sort((a, b) => a.name.localeCompare(b.name));
+      });
+      setNotice(editingTeamId ? "Team updated." : "Team added.");
+      resetTeamForm();
+      await refreshPeople();
+    } catch (requestError) {
+      setError(errorMessage(requestError));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function deleteTeam(team: TexTeam) {
+    setBusy(team.id);
+    setNotice(null);
+    setError(null);
+
+    try {
+      await texFetch(`/people/teams/${team.id}`, { method: "DELETE" });
+      setTeams((current) => current.filter((item) => item.id !== team.id));
+      setNotice("Team removed.");
+      if (editingTeamId === team.id) {
+        resetTeamForm();
       }
     } catch (requestError) {
       setError(errorMessage(requestError));
@@ -230,6 +321,43 @@ export function TexPeopleClient({
             </div>
           ) : (
             <p className="tex-empty-state">No TEX employees have been registered yet.</p>
+          )}
+        </section>
+
+        <section className="tex-form-panel" aria-labelledby="tex-team-list-title">
+          <h3 id="tex-team-list-title">Teams</h3>
+          {teams.length ? (
+            <div className="tex-people-list">
+              {teams.map((team) => (
+                <article className="tex-people-row" key={team.id}>
+                  <span>
+                    <strong>{team.name}</strong>
+                    <small>{team.description || "No description"}</small>
+                    <small>Manager {team.managerName || "not assigned"}</small>
+                    <small>
+                      {team.memberCount} member{team.memberCount === 1 ? "" : "s"}
+                      {team.memberNames.length ? ` - ${team.memberNames.join(", ")}` : ""}
+                    </small>
+                  </span>
+                  {canManage ? (
+                    <div className="tex-row-actions">
+                      <button type="button" disabled={busy !== null} onClick={() => editTeam(team)}>
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy !== null}
+                        onClick={() => deleteTeam(team)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="tex-empty-state">No TEX teams have been configured yet.</p>
           )}
         </section>
 
@@ -335,6 +463,87 @@ export function TexPeopleClient({
             </p>
           )}
         </section>
+
+        <section className="tex-form-panel" aria-labelledby="tex-team-form-title">
+          <h3 id="tex-team-form-title">{editingTeam ? `Edit ${editingTeam.name}` : "Add team"}</h3>
+          <div className="tex-form-grid">
+            <label>
+              Team name
+              <input
+                value={teamForm.name}
+                disabled={!canManage}
+                onChange={(event) => setTeamForm({ ...teamForm, name: event.target.value })}
+              />
+            </label>
+            <label>
+              Description
+              <input
+                value={teamForm.description}
+                disabled={!canManage}
+                onChange={(event) => setTeamForm({ ...teamForm, description: event.target.value })}
+              />
+            </label>
+            <label>
+              Team manager
+              <select
+                value={teamForm.managerEmployeeProfileId}
+                disabled={!canManage}
+                onChange={(event) =>
+                  setTeamForm({ ...teamForm, managerEmployeeProfileId: event.target.value })
+                }
+              >
+                <option value="">No assigned manager</option>
+                {activeEmployeeOptions.map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <fieldset className="tex-checkbox-group">
+              <legend>Members</legend>
+              {activeEmployeeOptions.length ? (
+                activeEmployeeOptions.map((employee) => (
+                  <label key={employee.id} className="tex-toggle-label">
+                    <input
+                      type="checkbox"
+                      checked={teamForm.memberEmployeeProfileIds.includes(employee.id)}
+                      disabled={!canManage}
+                      onChange={() =>
+                        setTeamForm({
+                          ...teamForm,
+                          memberEmployeeProfileIds: toggleId(
+                            teamForm.memberEmployeeProfileIds,
+                            employee.id
+                          )
+                        })
+                      }
+                    />
+                    {employee.name}
+                  </label>
+                ))
+              ) : (
+                <p className="tex-empty-state">Add active employees before assigning members.</p>
+              )}
+            </fieldset>
+          </div>
+          {canManage ? (
+            <div className="tex-panel-actions">
+              <button type="button" disabled={busy !== null} onClick={saveTeam}>
+                {editingTeam ? "Save team" : "Add team"}
+              </button>
+              {editingTeam ? (
+                <button type="button" disabled={busy !== null} onClick={resetTeamForm}>
+                  Cancel
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <p className="tex-empty-state">
+              You need TEX people management permission to edit teams.
+            </p>
+          )}
+        </section>
       </div>
     </section>
   );
@@ -360,6 +569,10 @@ function managerLabel(manager: TexManagerUser) {
 function managerUserLabel(managers: TexManagerUser[], managerUserId: string | null) {
   const manager = managers.find((candidate) => candidate.id === managerUserId);
   return manager ? managerLabel(manager) : null;
+}
+
+function toggleId(values: string[], id: string) {
+  return values.includes(id) ? values.filter((value) => value !== id) : [...values, id];
 }
 
 async function texFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {

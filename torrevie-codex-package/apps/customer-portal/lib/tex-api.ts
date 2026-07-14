@@ -6,11 +6,13 @@ import {
   createTexExpense,
   createTexExpenseCategory,
   createTexNotification,
+  createTexTeam,
   createTexTrip,
   deleteTexBudget,
   deleteTexDriverAdvance,
   deleteTexEmployeeProfile,
   deleteTexExpenseCategory,
+  deleteTexTeam,
   deleteTexTripLeg,
   ignoreTexUnregisteredWhatsappSubmission,
   listTexBootstrap,
@@ -36,6 +38,7 @@ import {
   sendTexEmailReport,
   updateTexExpenseCategory,
   updateTexEmployeeProfile,
+  updateTexTeam,
   updateTexTrip,
   updateTexExpenseStatus,
   uploadTexReceiptFile,
@@ -54,6 +57,7 @@ import {
   type TexEmailReportInput,
   type TexReportInput,
   type TexSpendPolicyInput,
+  type TexTeamInput,
   type TexTripLegInput,
   type TexTripInput,
   type TexUnregisteredWhatsappResolveInput,
@@ -133,6 +137,12 @@ export async function handleTexApiRequest(
   if ((path === "/people/employees" || path === "/employees") && method === "POST") {
     return json(201, {
       employee: await createTexEmployeeProfile(client, actor, readEmployeeInput(request.body))
+    });
+  }
+
+  if ((path === "/people/teams" || path === "/teams") && method === "POST") {
+    return json(201, {
+      team: await createTexTeam(client, actor, readTeamInput(request.body))
     });
   }
 
@@ -283,6 +293,19 @@ export async function handleTexApiRequest(
 
   if (employeeMatch && method === "DELETE") {
     await deleteTexEmployeeProfile(client, actor, employeeMatch[1] ?? "");
+    return json(200, { ok: true });
+  }
+
+  const teamMatch =
+    path.match(/^\/people\/teams\/([0-9a-f-]+)$/i) ?? path.match(/^\/teams\/([0-9a-f-]+)$/i);
+  if (teamMatch && method === "PATCH") {
+    return json(200, {
+      team: await updateTexTeam(client, actor, teamMatch[1] ?? "", readTeamInput(request.body))
+    });
+  }
+
+  if (teamMatch && method === "DELETE") {
+    await deleteTexTeam(client, actor, teamMatch[1] ?? "");
     return json(200, { ok: true });
   }
 
@@ -546,6 +569,27 @@ function readEmployeeInput(value: unknown): TexEmployeeProfileInput {
   };
 }
 
+function readTeamInput(value: unknown): TexTeamInput {
+  const body = readRecord(value);
+  const members =
+    readStringArray(body.memberEmployeeProfileIds) ??
+    readStringArray(body.member_employee_profile_ids) ??
+    readStringArray(body.memberIds) ??
+    readStringArray(body.member_ids) ??
+    [];
+
+  return {
+    name: readOptionalString(body.name) ?? "",
+    description: readOptionalString(body.description),
+    managerEmployeeProfileId:
+      readOptionalString(body.managerEmployeeProfileId) ??
+      readOptionalString(body.manager_employee_profile_id) ??
+      readOptionalString(body.managerId) ??
+      readOptionalString(body.manager_id),
+    memberEmployeeProfileIds: members
+  };
+}
+
 function readSpendPolicyInput(value: unknown): TexSpendPolicyInput {
   const body = readRecord(value);
 
@@ -652,6 +696,16 @@ function readSubmissionFrequency(value: unknown) {
 
 function readOptionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  return value
+    .map((item) => readOptionalString(item))
+    .filter((item): item is string => Boolean(item));
 }
 
 function readOptionalBoolean(value: unknown) {

@@ -224,8 +224,31 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
+    if (
+      sql.includes("from public.tex_employee_profiles") &&
+      sql.includes("and id = $1") &&
+      sql.includes("limit 1")
+    ) {
+      return {
+        rows: [{ id: values[0] }] as Row[]
+      };
+    }
+
     if (sql.includes("from public.tex_teams")) {
-      return { rows: [] };
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000005001",
+            name: "Ops",
+            description: "Operations",
+            manager_employee_profile_id: "00000000-0000-4000-8000-000000004001",
+            manager_name: "Maya Haddad",
+            member_employee_profile_ids: "00000000-0000-4000-8000-000000004001",
+            member_names: "Maya Haddad",
+            member_count: 1
+          }
+        ] as Row[]
+      };
     }
 
     if (sql.includes("from public.tex_fx_rates")) {
@@ -482,6 +505,49 @@ class RecordingTexApiClient implements TenantQueryClient {
           }
         ] as Row[]
       };
+    }
+
+    if (sql.includes("insert into public.tex_teams")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000005002",
+            name: values[0],
+            description: values[1],
+            manager_employee_profile_id: values[2],
+            manager_name: null,
+            member_employee_profile_ids: "",
+            member_names: "",
+            member_count: 0
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("update public.tex_teams")) {
+      return {
+        rows: [
+          {
+            id: values[0],
+            name: values[1]
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("delete from public.tex_teams")) {
+      return {
+        rows: [
+          {
+            id: values[0],
+            name: "Ops"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_team_members")) {
+      return { rows: [] };
     }
 
     if (sql.includes("delete from public.tex_employee_profiles")) {
@@ -1448,6 +1514,50 @@ async function main() {
     assert.equal(response.status, 200);
     assert.equal(client.hasSql("delete from public.tex_employee_profiles"), true);
     assert.equal(client.valuesContain("tex.employee.deleted"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "POST",
+      path: "/people/teams",
+      body: {
+        name: "Field Ops",
+        description: "Field operations",
+        manager_id: "00000000-0000-4000-8000-000000004001",
+        member_ids: ["00000000-0000-4000-8000-000000004001"]
+      }
+    });
+    assert.equal(response.status, 201);
+    assert.equal(client.hasSql("insert into public.tex_teams"), true);
+    assert.equal(client.hasSql("insert into public.tex_team_members"), true);
+    assert.equal(client.valuesContain("tex.team.created"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "PATCH",
+      path: "/people/teams/00000000-0000-4000-8000-000000005001",
+      body: {
+        name: "Ops Updated",
+        memberEmployeeProfileIds: ["00000000-0000-4000-8000-000000004001"]
+      }
+    });
+    assert.equal(response.status, 200);
+    assert.equal(client.hasSql("update public.tex_teams"), true);
+    assert.equal(client.valuesContain("tex.team.updated"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "DELETE",
+      path: "/people/teams/00000000-0000-4000-8000-000000005001"
+    });
+    assert.equal(response.status, 200);
+    assert.equal(client.hasSql("delete from public.tex_teams"), true);
+    assert.equal(client.valuesContain("tex.team.deleted"), true);
   }
 
   {

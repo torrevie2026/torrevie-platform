@@ -49,6 +49,7 @@ Completed platform migration checkpoints so far:
 - Added platform-native TEX People controls for tenant-scoped WhatsApp employee profile create/update/delete, plus compatibility routes for `/api/tex/people` and `/api/tex/people/employees`.
 - Surfaced TEX employee monthly salary and submission cadence in the People API/UI, preserving source fields already present in the platform schema.
 - Restored source employee manager assignment through the platform `manager_user_id` relationship, with manager options resolved from active shared tenant users and source-compatible manager field names accepted by the People API.
+- Restored source team management through platform-native `/api/tex/people/teams` routes and People workspace controls for team manager/member assignment, backed by `tex_teams` and `tex_team_members`.
 - Kept TEX web user invitations, role assignment, and account status management in the shared customer administration module instead of porting source standalone auth/user-reset flows.
 - Rejected the source standalone company onboarding flow as a TEX-specific tenancy mechanism; platform tenant provisioning remains the canonical onboarding path.
 - Rejected source standalone auth/admin surfaces (`Login`, `Signup`, `SetPassword`, `Onboarding`, `AdminPanel`, demo login, list-user-emails, delete-user, invite-user, and provision-tenant-admin) as TEX-owned flows; they are covered by shared Supabase auth, Admin Portal tenant lifecycle, and customer administration.

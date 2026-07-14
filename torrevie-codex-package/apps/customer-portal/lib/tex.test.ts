@@ -3,9 +3,11 @@ import type { QueryResult, QueryValue, TenantQueryClient } from "@torrevie/tenan
 import {
   createTexExpense,
   createTexEmployeeProfile,
+  createTexTeam,
   closeTexTrip,
   createTexTrip,
   deleteTexEmployeeProfile,
+  deleteTexTeam,
   deleteTexTripLeg,
   listTexTripLegs,
   listTexExpenses,
@@ -26,6 +28,7 @@ import {
   setTexWhatsappNotificationDispatcherForTest,
   updateTexTrip,
   updateTexEmployeeProfile,
+  updateTexTeam,
   updateTexExpenseStatus,
   uploadTexReceiptFile,
   type TexActorContext
@@ -164,16 +167,74 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("insert into public.tex_teams")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000005002",
+            name: values[0],
+            description: values[1],
+            manager_employee_profile_id: values[2],
+            manager_name: null,
+            member_employee_profile_ids: "",
+            member_names: "",
+            member_count: 0
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("update public.tex_teams")) {
+      return {
+        rows: [
+          {
+            id: values[0],
+            name: values[1]
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("delete from public.tex_teams")) {
+      return {
+        rows: [
+          {
+            id: values[0],
+            name: "Ops"
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("from public.tex_teams")) {
       return {
         rows: [
           {
             id: "00000000-0000-4000-8000-000000005001",
             name: "Ops",
-            description: "Operations"
+            description: "Operations",
+            manager_employee_profile_id: "00000000-0000-4000-8000-000000004001",
+            manager_name: "Maya Haddad",
+            member_employee_profile_ids: "00000000-0000-4000-8000-000000004001",
+            member_names: "Maya Haddad",
+            member_count: 1
           }
         ] as Row[]
       };
+    }
+
+    if (
+      sql.includes("from public.tex_employee_profiles") &&
+      sql.includes("and id = $1") &&
+      sql.includes("limit 1")
+    ) {
+      return {
+        rows: [{ id: values[0] }] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_team_members")) {
+      return { rows: [] };
     }
 
     if (sql.includes("from public.tex_fx_rates")) {
@@ -730,6 +791,8 @@ async function main() {
     assert.equal(bootstrap.employeeProfiles[0]?.managerName, "Omar Faris");
     assert.equal(bootstrap.managerUsers[0]?.email, "omar@example.test");
     assert.equal(bootstrap.teams[0]?.name, "Ops");
+    assert.equal(bootstrap.teams[0]?.managerName, "Maya Haddad");
+    assert.equal(bootstrap.teams[0]?.memberCount, 1);
     assert.equal(bootstrap.integrationSettings?.whatsappProvider, "wappfly");
     assert.equal(client.hasSql("public.tex_expense_categories"), true);
     assert.equal(client.hasSql("app.current_tenant_id"), true);
@@ -791,6 +854,40 @@ async function main() {
     await deleteTexEmployeeProfile(client, actor, "00000000-0000-4000-8000-000000004001");
     assert.equal(client.hasSql("delete from public.tex_employee_profiles"), true);
     assert.equal(client.valuesContain("tex.employee.deleted"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const team = await createTexTeam(client, actor, {
+      name: "Field Ops",
+      description: "Field operations",
+      managerEmployeeProfileId: "00000000-0000-4000-8000-000000004001",
+      memberEmployeeProfileIds: ["00000000-0000-4000-8000-000000004001"]
+    });
+    assert.equal(team.name, "Ops");
+    assert.equal(client.hasSql("insert into public.tex_teams"), true);
+    assert.equal(client.hasSql("insert into public.tex_team_members"), true);
+    assert.equal(client.valuesContain("tex.team.created"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const team = await updateTexTeam(client, actor, "00000000-0000-4000-8000-000000005001", {
+      name: "Ops Updated",
+      description: "Operations",
+      memberEmployeeProfileIds: ["00000000-0000-4000-8000-000000004001"]
+    });
+    assert.equal(team.memberCount, 1);
+    assert.equal(client.hasSql("update public.tex_teams"), true);
+    assert.equal(client.hasSql("delete from public.tex_team_members"), true);
+    assert.equal(client.valuesContain("tex.team.updated"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    await deleteTexTeam(client, actor, "00000000-0000-4000-8000-000000005001");
+    assert.equal(client.hasSql("delete from public.tex_teams"), true);
+    assert.equal(client.valuesContain("tex.team.deleted"), true);
   }
 
   {
