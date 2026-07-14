@@ -31,6 +31,7 @@ import {
   recordTexWebhookSubmission,
   resolveTexUnregisteredWhatsappSubmission,
   replaceTexTripLegs,
+  sendTexEmailReport,
   updateTexExpenseCategory,
   updateTexEmployeeProfile,
   updateTexTrip,
@@ -48,6 +49,7 @@ import {
   type TexFinancePaymentInput,
   type TexNotificationInput,
   type TexReceiptUploadInput,
+  type TexEmailReportInput,
   type TexReportInput,
   type TexSpendPolicyInput,
   type TexTripLegInput,
@@ -220,6 +222,10 @@ export async function handleTexApiRequest(
 
   if ((path === "/reports" || path === "/dashboard") && method === "GET") {
     return json(200, await listTexReportWorkspace(client, actor, readReportInput(request.query)));
+  }
+
+  if ((path === "/reports/email" || path === "/email-reports/send") && method === "POST") {
+    return json(200, await sendTexEmailReport(client, actor, readEmailReportInput(request.body)));
   }
 
   if (path === "/integrations" && method === "GET") {
@@ -545,6 +551,31 @@ function readReportInput(value: unknown): TexReportInput {
     dateFrom: readOptionalString(body.dateFrom) ?? readOptionalString(body.date_from),
     dateTo: readOptionalString(body.dateTo) ?? readOptionalString(body.date_to)
   };
+}
+
+function readEmailReportInput(value: unknown): TexEmailReportInput {
+  const body = readRecord(value);
+  const recipients = readRecipients(body.recipients);
+
+  return {
+    ...readReportInput(value),
+    recipients: recipients.length ? recipients : undefined
+  };
+}
+
+function readRecipients(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.filter((recipient): recipient is string => typeof recipient === "string");
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(/[,\n;]/)
+      .map((recipient) => recipient.trim())
+      .filter(Boolean);
+  }
+
+  return [];
 }
 
 function readUnregisteredResolveInput(value: unknown): TexUnregisteredWhatsappResolveInput {

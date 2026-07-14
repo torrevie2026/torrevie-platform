@@ -1,7 +1,11 @@
 import { strict as assert } from "node:assert";
 import type { QueryResult, QueryValue, TenantQueryClient } from "@torrevie/tenant-context";
 import { handleTexApiRequest } from "./tex-api";
-import { setTexWhatsappNotificationDispatcherForTest, type TexActorContext } from "./tex";
+import {
+  setTexEmailNotificationDispatcherForTest,
+  setTexWhatsappNotificationDispatcherForTest,
+  type TexActorContext
+} from "./tex";
 
 setTexWhatsappNotificationDispatcherForTest(async (input) => ({
   ok: true,
@@ -10,6 +14,15 @@ setTexWhatsappNotificationDispatcherForTest(async (input) => ({
   messageId: "test-whatsapp-message",
   error: null,
   httpStatus: 200
+}));
+
+setTexEmailNotificationDispatcherForTest(async () => ({
+  ok: false,
+  provider: "postmark",
+  status: "skipped",
+  messageId: null,
+  error: "Postmark server token is not configured.",
+  httpStatus: null
 }));
 
 const actor: TexActorContext = {
@@ -208,6 +221,18 @@ class RecordingTexApiClient implements TenantQueryClient {
             wappfly_session_id: "session-a",
             meta_phone_number_id: null,
             api_key: "test-api-key"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("email_notifications_enabled") && sql.includes("email_report_recipients")) {
+      return {
+        rows: [
+          {
+            email_notifications_enabled: true,
+            email_report_frequency: "weekly",
+            email_report_recipients: ["finance@example.test"]
           }
         ] as Row[]
       };
@@ -1339,6 +1364,19 @@ async function main() {
     assert.equal(response.status, 200);
     assert.match(JSON.stringify(response.body), /Maya Haddad/);
     assert.equal(client.hasSql("e.expense_date >= $1::date"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "POST",
+      path: "/reports/email",
+      body: { date_from: "2026-07-01", date_to: "2026-07-31" }
+    });
+    assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /finance@example\.test/);
+    assert.equal(client.hasSql("email_report_recipients"), true);
+    assert.equal(client.valuesContain("tex.email_report.skipped"), true);
   }
 
   {

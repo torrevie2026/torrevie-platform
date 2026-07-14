@@ -20,6 +20,26 @@ export type WhatsAppDispatchResult = {
   httpStatus: number | null;
 };
 
+export type EmailDispatchInput = {
+  to: string | string[];
+  subject: string;
+  text: string;
+  html?: string | null;
+  provider?: "postmark" | null;
+  from?: string | null;
+  postmarkServerToken?: string | null;
+  postmarkMessageStream?: string | null;
+};
+
+export type EmailDispatchResult = {
+  ok: boolean;
+  provider: "postmark" | null;
+  status: "sent" | "skipped" | "failed";
+  messageId: string | null;
+  error: string | null;
+  httpStatus: number | null;
+};
+
 export type NotificationFetch = (
   input: string | URL | Request,
   init?: RequestInit
@@ -51,9 +71,91 @@ export async function dispatchWhatsAppNotification(
   return sendUltramsgMessage(input, to, message, fetcher);
 }
 
+export async function dispatchEmailNotification(
+  input: EmailDispatchInput,
+  fetcher: NotificationFetch = globalThis.fetch.bind(globalThis)
+): Promise<EmailDispatchResult> {
+  const recipients = normalizeEmailRecipients(input.to);
+  const subject = input.subject.trim();
+  const text = input.text.trim();
+  const provider =
+    input.provider ?? (process.env.EMAIL_PROVIDER === "postmark" ? "postmark" : null);
+  const token = input.postmarkServerToken?.trim() || process.env.POSTMARK_SERVER_TOKEN?.trim();
+
+  if (!recipients.length || !subject || !text) {
+    return skippedEmail(provider, "Recipient, subject, and text body are required.");
+  }
+
+  if (provider !== "postmark" && !token) {
+    return skippedEmail(null, "Email provider is not configured.");
+  }
+
+  if (!token) {
+    return skippedEmail("postmark", "Postmark server token is not configured.");
+  }
+
+  const response = await fetcher("https://api.postmarkapp.com/email", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-Postmark-Server-Token": token
+    },
+    body: JSON.stringify({
+      From:
+        input.from?.trim() ||
+        process.env.EMAIL_FROM ||
+        process.env.EMAIL_FROM_ADDRESS ||
+        "Torrevie <no-reply@torrevie.com>",
+      To: recipients.join(","),
+      Subject: subject,
+      HtmlBody: input.html?.trim() || text,
+      TextBody: text,
+      MessageStream:
+        input.postmarkMessageStream?.trim() || process.env.POSTMARK_MESSAGE_STREAM || "outbound"
+    })
+  });
+  const body = await safeJson(response);
+  const error = readError(body);
+
+  if (!response.ok || error) {
+    return {
+      ok: false,
+      provider: "postmark",
+      status: "failed",
+      messageId: null,
+      error: error ?? `HTTP ${response.status}`,
+      httpStatus: response.status
+    };
+  }
+
+  return {
+    ok: true,
+    provider: "postmark",
+    status: "sent",
+    messageId: firstPathString(body, ["MessageID", "MessageId", "messageId", "id"]),
+    error: null,
+    httpStatus: response.status
+  };
+}
+
 export function normalizeWhatsAppRecipient(value: string | null | undefined) {
   const digits = value?.replace(/\D/g, "") ?? "";
   return digits.length >= 8 && digits.length <= 15 ? digits : null;
+}
+
+export function normalizeEmailRecipients(value: string | string[] | null | undefined) {
+  const recipients = Array.isArray(value)
+    ? value
+    : String(value ?? "")
+        .split(/[,\n;]/)
+        .map((item) => item.trim());
+
+  return recipients
+    .map((recipient) => recipient.trim().toLowerCase())
+    .filter(
+      (recipient, index, all) => isEmailAddress(recipient) && all.indexOf(recipient) === index
+    );
 }
 
 async function sendWappflyMessage(
@@ -200,6 +302,21 @@ function skipped(provider: WhatsAppProvider, error: string): WhatsAppDispatchRes
     error,
     httpStatus: null
   };
+}
+
+function skippedEmail(provider: "postmark" | null, error: string): EmailDispatchResult {
+  return {
+    ok: false,
+    provider,
+    status: "skipped",
+    messageId: null,
+    error,
+    httpStatus: null
+  };
+}
+
+function isEmailAddress(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 function readError(body: Record<string, unknown>) {

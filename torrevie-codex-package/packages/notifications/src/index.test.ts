@@ -1,6 +1,8 @@
 import { strict as assert } from "node:assert";
 import {
+  dispatchEmailNotification,
   dispatchWhatsAppNotification,
+  normalizeEmailRecipients,
   normalizeWhatsAppRecipient,
   type NotificationFetch
 } from "./index.js";
@@ -8,6 +10,10 @@ import {
 async function main() {
   assert.equal(normalizeWhatsAppRecipient("+971 50 000 0001"), "971500000001");
   assert.equal(normalizeWhatsAppRecipient("123"), null);
+  assert.deepEqual(normalizeEmailRecipients("A@Example.com; bad; b@example.com"), [
+    "a@example.com",
+    "b@example.com"
+  ]);
 
   {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
@@ -58,6 +64,60 @@ async function main() {
 
     assert.equal(result.ok, true);
     assert.equal(result.messageId, "meta-1");
+  }
+
+  {
+    const previousEnv = {
+      EMAIL_PROVIDER: process.env.EMAIL_PROVIDER,
+      POSTMARK_SERVER_TOKEN: process.env.POSTMARK_SERVER_TOKEN
+    };
+    let result: Awaited<ReturnType<typeof dispatchEmailNotification>> | null = null;
+
+    try {
+      delete process.env.EMAIL_PROVIDER;
+      delete process.env.POSTMARK_SERVER_TOKEN;
+      result = await dispatchEmailNotification({
+        to: "finance@example.test",
+        subject: "TEX summary",
+        text: "Summary"
+      });
+    } finally {
+      for (const [key, value] of Object.entries(previousEnv)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    }
+
+    assert.equal(result?.status, "skipped");
+    assert.match(result?.error ?? "", /provider/);
+  }
+
+  {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const result = await dispatchEmailNotification(
+      {
+        provider: "postmark",
+        postmarkServerToken: "pm-secret",
+        from: "Torrevie <no-reply@torrevie.com>",
+        to: ["finance@example.test", "ops@example.test"],
+        subject: "TEX summary",
+        text: "Summary",
+        html: "<p>Summary</p>"
+      },
+      async (url: Parameters<NotificationFetch>[0], init?: RequestInit) => {
+        calls.push({ url: String(url), init });
+        return Response.json({ MessageID: "pm-1" });
+      }
+    );
+    const body = JSON.parse(String(calls[0]?.init?.body ?? "{}")) as { To?: string };
+
+    assert.equal(result.ok, true);
+    assert.equal(result.messageId, "pm-1");
+    assert.equal(calls[0]?.url, "https://api.postmarkapp.com/email");
+    assert.equal(body.To, "finance@example.test,ops@example.test");
   }
 
   console.log("Notification dispatch tests passed.");

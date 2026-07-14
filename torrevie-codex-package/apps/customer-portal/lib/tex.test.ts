@@ -19,6 +19,8 @@ import {
   recordTexWebhookSubmission,
   replaceTexTripLegs,
   resolveTexActorContext,
+  sendTexEmailReport,
+  setTexEmailNotificationDispatcherForTest,
   setTexWhatsappNotificationDispatcherForTest,
   updateTexTrip,
   updateTexEmployeeProfile,
@@ -34,6 +36,15 @@ setTexWhatsappNotificationDispatcherForTest(async (input) => ({
   messageId: "test-whatsapp-message",
   error: null,
   httpStatus: 200
+}));
+
+setTexEmailNotificationDispatcherForTest(async () => ({
+  ok: false,
+  provider: "postmark",
+  status: "skipped",
+  messageId: null,
+  error: "Postmark server token is not configured.",
+  httpStatus: null
 }));
 
 const actor: TexActorContext = {
@@ -157,6 +168,18 @@ class RecordingTexClient implements TenantQueryClient {
             wappfly_session_id: "session-a",
             meta_phone_number_id: null,
             api_key: "test-api-key"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("email_notifications_enabled") && sql.includes("email_report_recipients")) {
+      return {
+        rows: [
+          {
+            email_notifications_enabled: true,
+            email_report_frequency: "weekly",
+            email_report_recipients: ["finance@example.test", " Ops@Example.test "]
           }
         ] as Row[]
       };
@@ -702,6 +725,20 @@ async function main() {
     assert.equal(report.expenses[0]?.employeeName, "Maya Haddad");
     assert.equal(report.expenses[0]?.baseAmount, 120);
     assert.equal(client.hasSql("e.expense_date >= $1::date"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const result = await sendTexEmailReport(client, actor, {
+      dateFrom: "2026-07-01",
+      dateTo: "2026-07-31"
+    });
+    assert.equal(result.status, "skipped");
+    assert.equal(result.provider, "postmark");
+    assert.deepEqual(result.recipients, ["finance@example.test", "ops@example.test"]);
+    assert.equal(client.hasSql("email_report_recipients"), true);
+    assert.equal(client.hasSql("e.expense_date >= $1::date"), true);
+    assert.equal(client.valuesContain("tex.email_report.skipped"), true);
   }
 
   {

@@ -7,7 +7,9 @@ import {
   type RoleKey
 } from "@torrevie/permissions";
 import {
+  dispatchEmailNotification,
   dispatchWhatsAppNotification,
+  type EmailDispatchResult,
   type WhatsAppDispatchResult,
   type WhatsAppProvider
 } from "@torrevie/notifications";
@@ -321,6 +323,20 @@ export type TexFinancePaymentInput = {
   tripIds?: string[];
 };
 
+export type TexEmailReportInput = {
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  recipients?: string[];
+};
+
+export type TexEmailReportResult = {
+  status: EmailDispatchResult["status"];
+  provider: EmailDispatchResult["provider"];
+  recipients: string[];
+  messageId: string | null;
+  error: string | null;
+};
+
 export type TexReportInput = {
   dateFrom?: string | null;
   dateTo?: string | null;
@@ -510,6 +526,7 @@ export type TexWhatsappReceiptResult = {
 };
 
 let texWhatsappNotificationDispatcher = dispatchWhatsAppNotification;
+let texEmailNotificationDispatcher = dispatchEmailNotification;
 
 export async function resolveTexActorContext(
   client: TenantQueryClient,
@@ -1499,6 +1516,112 @@ export async function listTexReportWorkspace(
   });
 }
 
+export async function sendTexEmailReport(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexEmailReportInput = {}
+): Promise<TexEmailReportResult> {
+  assertTexPermission(actor, "tex.finance.review");
+
+  return withTenantContext(client, actor, async () => {
+    const settings = await getTexEmailNotificationSettings(client);
+    const recipients = sanitizeEmailRecipients(
+      input.recipients?.length ? input.recipients : (settings?.email_report_recipients ?? [])
+    );
+
+    if (!settings?.email_notifications_enabled || settings.email_report_frequency === "off") {
+      const result: TexEmailReportResult = {
+        status: "skipped",
+        provider: null,
+        recipients,
+        messageId: null,
+        error: "TEX email notifications are disabled for this tenant."
+      };
+      await writeTexAuditEvent(
+        client,
+        actor,
+        "tex.email_report.skipped",
+        "tex_integration_settings",
+        actor.tenantId,
+        {
+          reason: "disabled"
+        }
+      );
+      return result;
+    }
+
+    if (!recipients.length) {
+      const result: TexEmailReportResult = {
+        status: "skipped",
+        provider: null,
+        recipients,
+        messageId: null,
+        error: "No TEX email report recipients are configured."
+      };
+      await writeTexAuditEvent(
+        client,
+        actor,
+        "tex.email_report.skipped",
+        "tex_integration_settings",
+        actor.tenantId,
+        {
+          reason: "no_recipients"
+        }
+      );
+      return result;
+    }
+
+    const report = await listTexReportWorkspace(client, actor, input);
+    const metrics = summarizeEmailReport(report);
+    const dispatch = await texEmailNotificationDispatcher({
+      provider: "postmark",
+      to: recipients,
+      subject: `Torrevie TEX report: ${report.dateFrom} to ${report.dateTo}`,
+      text: [
+        `Torrevie TEX report for ${report.dateFrom} to ${report.dateTo}`,
+        `Total spend: ${formatMoney(metrics.totalSpend, report.currency)}`,
+        `Expenses: ${metrics.expenseCount}`,
+        `Pending: ${metrics.pendingCount}`,
+        `Approved: ${metrics.approvedCount}`,
+        `Paid: ${metrics.paidCount}`,
+        `Flagged: ${metrics.flaggedCount}`
+      ].join("\n"),
+      html: [
+        `<p>Torrevie TEX report for <strong>${escapeHtml(report.dateFrom)} to ${escapeHtml(report.dateTo)}</strong></p>`,
+        "<ul>",
+        `<li>Total spend: ${escapeHtml(formatMoney(metrics.totalSpend, report.currency))}</li>`,
+        `<li>Expenses: ${metrics.expenseCount}</li>`,
+        `<li>Pending: ${metrics.pendingCount}</li>`,
+        `<li>Approved: ${metrics.approvedCount}</li>`,
+        `<li>Paid: ${metrics.paidCount}</li>`,
+        `<li>Flagged: ${metrics.flaggedCount}</li>`,
+        "</ul>"
+      ].join("")
+    });
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      `tex.email_report.${dispatch.status}`,
+      "tex_integration_settings",
+      actor.tenantId,
+      {
+        recipients: String(recipients.length),
+        message_id: dispatch.messageId ?? "",
+        error: dispatch.error ?? ""
+      }
+    );
+
+    return {
+      status: dispatch.status,
+      provider: dispatch.provider,
+      recipients,
+      messageId: dispatch.messageId,
+      error: dispatch.error
+    };
+  });
+}
+
 export async function payTexFinanceItems(
   client: TenantQueryClient,
   actor: TexActorContext,
@@ -2207,6 +2330,12 @@ export function setTexWhatsappNotificationDispatcherForTest(
   dispatcher: typeof dispatchWhatsAppNotification | null
 ) {
   texWhatsappNotificationDispatcher = dispatcher ?? dispatchWhatsAppNotification;
+}
+
+export function setTexEmailNotificationDispatcherForTest(
+  dispatcher: typeof dispatchEmailNotification | null
+) {
+  texEmailNotificationDispatcher = dispatcher ?? dispatchEmailNotification;
 }
 
 export async function uploadTexReceiptFile(
@@ -3134,6 +3263,24 @@ async function getTexIntegrationSettingsForProcessing(
   );
 }
 
+async function getTexEmailNotificationSettings(
+  client: TenantQueryClient
+): Promise<TexEmailNotificationSettingsRow | null> {
+  const result = await client.query<TexEmailNotificationSettingsRow>(
+    `
+      select
+        email_notifications_enabled,
+        email_report_frequency,
+        email_report_recipients
+      from public.tex_integration_settings
+      where tenant_id = public.current_tenant_id()
+      limit 1
+    `
+  );
+
+  return result.rows[0] ?? null;
+}
+
 async function findEmployeeByPhone(client: TenantQueryClient, phone: string | null) {
   const digits = normalizePhoneDigits(phone);
 
@@ -3877,6 +4024,47 @@ function sanitizeReportPeriod(dateFrom?: string | null, dateTo?: string | null) 
     previousDateFrom: toIsoDate(previousFrom),
     previousDateTo: toIsoDate(previousTo)
   };
+}
+
+function sanitizeEmailRecipients(values: readonly string[]) {
+  return values
+    .flatMap((value) => String(value).split(/[,\n;]/))
+    .map((value) => value.trim().toLowerCase())
+    .filter((value, index, all) => isEmailAddress(value) && all.indexOf(value) === index);
+}
+
+function isEmailAddress(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function summarizeEmailReport(report: TexReportWorkspace) {
+  const expenses = report.expenses.filter((expense) => expense.status !== "rejected");
+
+  return {
+    totalSpend: sum(expenses.map((expense) => expense.baseAmount)),
+    expenseCount: report.expenses.length,
+    pendingCount: report.expenses.filter((expense) => expense.status === "pending").length,
+    approvedCount: report.expenses.filter((expense) => expense.status === "approved").length,
+    paidCount: report.expenses.filter((expense) => expense.status === "paid").length,
+    flaggedCount: report.expenses.filter((expense) => expense.policyFlag).length
+  };
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => {
+    switch (character) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      default:
+        return "&#39;";
+    }
+  });
 }
 
 function sanitizeIsoDate(value: string | null | undefined, label: string) {
@@ -4739,6 +4927,12 @@ type TexIntegrationSettingsRow = {
   duplicate_detection_enabled: boolean;
   duplicate_auto_reject_enabled: boolean;
   duplicate_similarity_threshold: number;
+};
+
+type TexEmailNotificationSettingsRow = {
+  email_notifications_enabled: boolean;
+  email_report_frequency: "off" | "daily" | "weekly" | "monthly";
+  email_report_recipients: string[] | null;
 };
 
 type TexProviderProfileSummaryRow = {
