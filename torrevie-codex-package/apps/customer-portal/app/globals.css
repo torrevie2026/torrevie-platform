@@ -3115,6 +3115,141 @@ form.member-row {
   padding: 12px;
 }
 
+.tex-role-dashboard {
+  display: grid;
+  gap: 16px;
+}
+
+.tex-role-header {
+  align-items: end;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.tex-role-header h2 {
+  margin-block: 4px 0;
+}
+
+.tex-role-header p:last-child {
+  color: var(--color-text-muted);
+  margin-block: 6px 0;
+}
+
+.tex-role-card-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.tex-role-card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  padding: 16px;
+}
+
+.tex-role-card span,
+.tex-role-card small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tex-role-card span {
+  text-transform: uppercase;
+}
+
+.tex-role-card strong {
+  color: var(--color-text);
+  font-size: 24px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.tex-role-card-accent {
+  border-color: rgba(13, 148, 136, 0.42);
+}
+
+.tex-role-card-accent strong {
+  color: var(--color-accent);
+}
+
+.tex-role-card-danger {
+  border-color: var(--color-status-error);
+}
+
+.tex-role-card-danger strong {
+  color: var(--color-status-error);
+}
+
+.tex-role-card-warning {
+  border-color: var(--color-status-warning);
+}
+
+.tex-role-card-warning strong {
+  color: var(--color-status-warning);
+}
+
+.tex-role-list {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.tex-role-list h3 {
+  margin: 0;
+}
+
+.tex-role-list article {
+  align-items: center;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 12px;
+}
+
+.tex-role-list span {
+  display: grid;
+  gap: 3px;
+  min-inline-size: 0;
+}
+
+.tex-role-list small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tex-role-list b {
+  font-size: 13px;
+}
+
+.tex-role-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tex-role-shortcuts a {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-accent);
+  font-size: 13px;
+  font-weight: 900;
+  padding: 10px 12px;
+  text-decoration: none;
+}
+
 .tex-integrations-workspace {
   display: grid;
   gap: 16px;
@@ -3368,6 +3503,7 @@ form.member-row {
   .tex-kpi-grid,
   .tex-people-summary,
   .tex-report-kpis,
+  .tex-role-card-grid,
   .tex-flow-strip,
   .tex-analytics-grid,
   .tex-dashboard-grid,
@@ -3379,6 +3515,7 @@ form.member-row {
   .tex-report-controls .tex-form-grid,
   .tex-integration-details div,
   .tex-provider-profile-row,
+  .tex-role-list article,
   .tex-whatsapp-card,
   .tex-policy-row,
   .tex-budget-admin-row,

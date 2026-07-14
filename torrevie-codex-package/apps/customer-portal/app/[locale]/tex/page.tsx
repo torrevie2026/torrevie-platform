@@ -23,6 +23,7 @@ import { TexFinanceClient } from "./TexFinanceClient";
 import { TexIntegrationsClient } from "./TexIntegrationsClient";
 import { TexPeopleClient } from "./TexPeopleClient";
 import { TexReportsClient } from "./TexReportsClient";
+import { TexRoleDashboard } from "./TexRoleDashboard";
 import { TexSettingsClient } from "./TexSettingsClient";
 import { TexTripsClient } from "./TexTripsClient";
 import { TexWhatsappReviewClient } from "./TexWhatsappReviewClient";
@@ -157,6 +158,16 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
               <small>{financeReview.currency} this period</small>
             </article>
           </section>
+
+          <TexRoleDashboard
+            bootstrap={bootstrap}
+            currentUserId={session.userId}
+            expenses={expenses}
+            financeReview={financeReview}
+            report={reportWorkspace}
+            roles={actor.roles}
+            trips={trips}
+          />
 
           <section className="tex-dashboard-grid" aria-label="TEX workspace">
             <TexExpensesClient
