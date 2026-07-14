@@ -54,13 +54,14 @@ Completed platform migration checkpoints so far:
 - Added shared Postmark email dispatch in `@torrevie/notifications` and a tenant-scoped `/api/tex/reports/email` endpoint that honors TEX integration email settings, audits sent/skipped/failed outcomes, and keeps outbound email inside the platform app.
 - Added a read-only TEX integration status panel and `/api/tex/integrations` workspace for active WhatsApp routing, provider-profile summaries, and receipt storage boundary visibility.
 - Kept WhatsApp provider profile writes in the shared customer administration module so TEX does not own a parallel integration-admin surface.
+- Rejected the source `company-logos` bucket and `companies.logo_url` path as TEX-owned storage; tenant branding must use shared `tenant_settings.branding` plus tenant-prefixed `files` storage when a platform branding editor is added.
 - Verified migrated receipt uploads persist under `tenant/{tenant_id}/tex/receipts/{file_id}.{extension}` and remain backed by the root `files.storage_path` tenant-prefix constraint.
 - Added platform-native role-specific dashboard cards for admin, finance, manager, and employee users using shared role/entitlement context and already tenant-scoped TEX data.
 - Kept `tex1.torrevie.com` untouched; no DNS, Vercel, live environment, or shutdown action is part of this migration branch.
 
 ## Remaining Gaps
 
-- Source email retry queues, suppression tables, company-logo storage behavior, and several admin-only source screens still need platform-specific migration or explicit rejection.
+- Source email retry queues, suppression tables, and several admin-only source screens still need platform-specific migration or explicit rejection.
 - Source employee fields that are present in the platform schema but not yet exposed in the migrated UI, such as salary, submission frequency, and manager assignment, need a dedicated product decision before they are surfaced.
 - Outbound WhatsApp profile routing is currently limited to the default TEX WhatsApp integration settings; tenant provider-profile selection still needs a dedicated pass if multiple sending numbers are required per tenant.
 - Remaining source Edge Functions need a dedicated pass to decide whether each becomes an App Router route, a shared notification integration, or remains deferred.
