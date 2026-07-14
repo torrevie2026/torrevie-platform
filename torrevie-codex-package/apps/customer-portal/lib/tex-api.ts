@@ -3,15 +3,19 @@ import {
   closeTexTrip,
   createTexDriverAdvance,
   createTexExpense,
+  createTexExpenseCategory,
   createTexNotification,
   createTexTrip,
+  deleteTexBudget,
   deleteTexDriverAdvance,
+  deleteTexExpenseCategory,
   deleteTexTripLeg,
   ignoreTexUnregisteredWhatsappSubmission,
   listTexBootstrap,
   listTexExpenses,
   listTexFinanceReview,
   listTexNotifications,
+  listTexSettingsWorkspace,
   listTexTripLegs,
   listTexTrips,
   listTexUnregisteredWhatsappSubmissions,
@@ -23,16 +27,22 @@ import {
   recordTexWebhookSubmission,
   resolveTexUnregisteredWhatsappSubmission,
   replaceTexTripLegs,
+  updateTexExpenseCategory,
   updateTexTrip,
   updateTexExpenseStatus,
   uploadTexReceiptFile,
+  upsertTexBudget,
+  upsertTexSpendPolicy,
   type TexActorContext,
+  type TexBudgetInput,
   type TexDriverAdvanceInput,
+  type TexExpenseCategoryInput,
   type TexExpenseInput,
   type TexExpenseStatus,
   type TexFinancePaymentInput,
   type TexNotificationInput,
   type TexReceiptUploadInput,
+  type TexSpendPolicyInput,
   type TexTripLegInput,
   type TexTripInput,
   type TexUnregisteredWhatsappResolveInput,
@@ -226,6 +236,57 @@ export async function handleTexApiRequest(
     });
   }
 
+  if (path === "/settings" && method === "GET") {
+    return json(
+      200,
+      await listTexSettingsWorkspace(
+        client,
+        actor,
+        readOptionalInteger(request.query?.month) ?? undefined,
+        readOptionalInteger(request.query?.year) ?? undefined
+      )
+    );
+  }
+
+  if (path === "/settings/categories" && method === "POST") {
+    return json(201, {
+      category: await createTexExpenseCategory(client, actor, readCategoryInput(request.body))
+    });
+  }
+
+  const settingsCategoryMatch = path.match(/^\/settings\/categories\/([0-9a-f-]+)$/i);
+  if (settingsCategoryMatch && method === "PATCH") {
+    return json(200, {
+      category: await updateTexExpenseCategory(
+        client,
+        actor,
+        settingsCategoryMatch[1] ?? "",
+        readCategoryInput(request.body)
+      )
+    });
+  }
+
+  if (settingsCategoryMatch && method === "DELETE") {
+    return json(200, await deleteTexExpenseCategory(client, actor, settingsCategoryMatch[1] ?? ""));
+  }
+
+  if (path === "/settings/policies" && method === "PUT") {
+    return json(200, {
+      policy: await upsertTexSpendPolicy(client, actor, readSpendPolicyInput(request.body))
+    });
+  }
+
+  if (path === "/settings/budgets" && method === "PUT") {
+    return json(200, {
+      budget: await upsertTexBudget(client, actor, readBudgetInput(request.body))
+    });
+  }
+
+  const settingsBudgetMatch = path.match(/^\/settings\/budgets\/([0-9a-f-]+)$/i);
+  if (settingsBudgetMatch && method === "DELETE") {
+    return json(200, await deleteTexBudget(client, actor, settingsBudgetMatch[1] ?? ""));
+  }
+
   if (path === "/unregistered-whatsapp" && method === "GET") {
     return json(200, {
       submissions: await listTexUnregisteredWhatsappSubmissions(
@@ -377,6 +438,41 @@ function readNotificationInput(value: unknown): TexNotificationInput {
   };
 }
 
+function readCategoryInput(value: unknown): TexExpenseCategoryInput {
+  const body = readRecord(value);
+
+  return {
+    name: readOptionalString(body.name) ?? "",
+    isActive: readOptionalBoolean(body.isActive) ?? readOptionalBoolean(body.is_active),
+    sortOrder: readOptionalInteger(body.sortOrder) ?? readOptionalInteger(body.sort_order)
+  };
+}
+
+function readSpendPolicyInput(value: unknown): TexSpendPolicyInput {
+  const body = readRecord(value);
+
+  return {
+    category: readOptionalString(body.category) ?? "",
+    dailyLimit: readOptionalNumber(body.dailyLimit) ?? readOptionalNumber(body.daily_limit),
+    monthlyLimit: readOptionalNumber(body.monthlyLimit) ?? readOptionalNumber(body.monthly_limit),
+    requiresNotesAbove:
+      readOptionalNumber(body.requiresNotesAbove) ?? readOptionalNumber(body.requires_notes_above),
+    isBlocked: readOptionalBoolean(body.isBlocked) ?? readOptionalBoolean(body.is_blocked)
+  };
+}
+
+function readBudgetInput(value: unknown): TexBudgetInput {
+  const body = readRecord(value);
+
+  return {
+    department: readOptionalString(body.department) ?? "",
+    month: readOptionalInteger(body.month) ?? 0,
+    year: readOptionalInteger(body.year) ?? 0,
+    budgetAmount:
+      readOptionalNumber(body.budgetAmount) ?? readOptionalNumber(body.budget_amount) ?? -1
+  };
+}
+
 function readUnregisteredResolveInput(value: unknown): TexUnregisteredWhatsappResolveInput {
   const body = readRecord(value);
   const mode = readOptionalString(body.mode);
@@ -416,6 +512,10 @@ function readExpenseStatus(value: unknown): Exclude<TexExpenseStatus, "pending">
 
 function readOptionalString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readOptionalBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : null;
 }
 
 function readInteger(value: unknown) {

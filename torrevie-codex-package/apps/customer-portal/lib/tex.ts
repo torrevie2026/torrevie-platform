@@ -39,6 +39,13 @@ export type TexExpenseCategory = {
   name: string;
   isActive: boolean;
   isSystem: boolean;
+  sortOrder: number;
+};
+
+export type TexExpenseCategoryInput = {
+  name: string;
+  isActive?: boolean | null;
+  sortOrder?: number | null;
 };
 
 export type TexEmployeeProfile = {
@@ -336,6 +343,49 @@ export type TexNotification = {
   createdAt: string;
 };
 
+export type TexSpendPolicy = {
+  id: string | null;
+  category: string;
+  dailyLimit: number | null;
+  monthlyLimit: number | null;
+  requiresNotesAbove: number | null;
+  isBlocked: boolean;
+};
+
+export type TexSpendPolicyInput = {
+  category: string;
+  dailyLimit?: number | null;
+  monthlyLimit?: number | null;
+  requiresNotesAbove?: number | null;
+  isBlocked?: boolean | null;
+};
+
+export type TexBudget = {
+  id: string;
+  department: string;
+  month: number;
+  year: number;
+  budgetAmount: number;
+  spentAmount: number;
+  remainingAmount: number;
+};
+
+export type TexBudgetInput = {
+  department: string;
+  month: number;
+  year: number;
+  budgetAmount: number;
+};
+
+export type TexSettingsWorkspace = {
+  categories: TexExpenseCategory[];
+  policies: TexSpendPolicy[];
+  budgets: TexBudget[];
+  departments: string[];
+  month: number;
+  year: number;
+};
+
 export type TexWebhookSubmissionInput = {
   senderRaw?: string | null;
   senderPhone?: string | null;
@@ -475,7 +525,7 @@ export async function listTexBootstrap(
     const [categories, employeeProfiles, teams, integrationSettings] = await Promise.all([
       client.query<TexExpenseCategoryRow>(
         `
-          select id, name, is_active, is_system
+          select id, name, is_active, is_system, sort_order
           from public.tex_expense_categories
           where tenant_id = public.current_tenant_id()
           order by sort_order asc, name asc
@@ -1623,6 +1673,344 @@ export async function markAllTexNotificationsRead(
     );
 
     return { updated: result.rows.length };
+  });
+}
+
+export async function listTexSettingsWorkspace(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  month = new Date().getUTCMonth() + 1,
+  year = new Date().getUTCFullYear()
+): Promise<TexSettingsWorkspace> {
+  assertTexPermission(actor, "tex.expense.read");
+  const normalizedMonth = sanitizeMonth(month);
+  const normalizedYear = sanitizeYear(year);
+
+  return withTenantContext(client, actor, async () => {
+    const [categoriesResult, policiesResult, budgetsResult, departmentsResult] = await Promise.all([
+      client.query<TexExpenseCategoryRow>(
+        `
+          select id, name, is_active, is_system, sort_order
+          from public.tex_expense_categories
+          where tenant_id = public.current_tenant_id()
+          order by sort_order asc, name asc
+        `
+      ),
+      client.query<TexSpendPolicyRow>(
+        `
+          select
+            id,
+            category,
+            daily_limit::float as daily_limit,
+            monthly_limit::float as monthly_limit,
+            requires_notes_above::float as requires_notes_above,
+            is_blocked
+          from public.tex_spend_policies
+          where tenant_id = public.current_tenant_id()
+          order by category asc
+        `
+      ),
+      client.query<TexBudgetRow>(
+        `
+          select
+            b.id,
+            b.department,
+            b.month,
+            b.year,
+            b.budget_amount::float as budget_amount,
+            coalesce(spent.spent_amount, 0)::float as spent_amount
+          from public.tex_budgets b
+          left join lateral (
+            select coalesce(sum(coalesce(e.base_amount, e.amount)), 0) as spent_amount
+            from public.tex_expenses e
+            left join public.tex_employee_profiles ep
+              on ep.tenant_id = e.tenant_id
+             and ep.id = e.employee_profile_id
+            where e.tenant_id = public.current_tenant_id()
+              and e.status <> 'rejected'
+              and extract(month from e.expense_date)::int = b.month
+              and extract(year from e.expense_date)::int = b.year
+              and coalesce(ep.department, '') = b.department
+          ) spent on true
+          where b.tenant_id = public.current_tenant_id()
+            and b.month = $1
+            and b.year = $2
+          order by b.department asc
+        `,
+        [normalizedMonth, normalizedYear]
+      ),
+      client.query<{ department: string }>(
+        `
+          select distinct department
+          from public.tex_employee_profiles
+          where tenant_id = public.current_tenant_id()
+            and department is not null
+            and trim(department) <> ''
+          order by department asc
+        `
+      )
+    ]);
+
+    return {
+      categories: categoriesResult.rows.map(mapCategory),
+      policies: mergePoliciesWithCategories(categoriesResult.rows, policiesResult.rows),
+      budgets: budgetsResult.rows.map(mapBudget),
+      departments: departmentsResult.rows.map((row) => row.department),
+      month: normalizedMonth,
+      year: normalizedYear
+    };
+  });
+}
+
+export async function createTexExpenseCategory(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexExpenseCategoryInput
+): Promise<TexExpenseCategory> {
+  assertTexPermission(actor, "tex.policy.manage");
+  const category = sanitizeExpenseCategoryInput(input);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexExpenseCategoryRow>(
+      `
+        insert into public.tex_expense_categories (
+          tenant_id,
+          name,
+          is_active,
+          is_system,
+          sort_order,
+          created_by,
+          updated_by
+        )
+        values (public.current_tenant_id(), $1, $2, false, $3, $4, $4)
+        returning id, name, is_active, is_system, sort_order
+      `,
+      [category.name, category.isActive, category.sortOrder, actor.userId]
+    );
+    const row = requireSingleRow(result.rows, "expense category");
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.category.created",
+      "tex_expense_category",
+      row.id,
+      {
+        name: row.name
+      }
+    );
+
+    return mapCategory(row);
+  });
+}
+
+export async function updateTexExpenseCategory(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  categoryId: string,
+  input: TexExpenseCategoryInput
+): Promise<TexExpenseCategory> {
+  assertTexPermission(actor, "tex.policy.manage");
+  assertUuid(categoryId, "expense category id");
+  const category = sanitizeExpenseCategoryInput(input);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexExpenseCategoryRow>(
+      `
+        update public.tex_expense_categories
+           set name = $1,
+               is_active = $2,
+               sort_order = $3,
+               updated_by = $4
+         where tenant_id = public.current_tenant_id()
+           and id = $5
+        returning id, name, is_active, is_system, sort_order
+      `,
+      [category.name, category.isActive, category.sortOrder, actor.userId, categoryId]
+    );
+    const row = requireSingleRow(result.rows, "expense category");
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.category.updated",
+      "tex_expense_category",
+      row.id,
+      {
+        name: row.name
+      }
+    );
+
+    return mapCategory(row);
+  });
+}
+
+export async function deleteTexExpenseCategory(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  categoryId: string
+): Promise<{ deleted: string }> {
+  assertTexPermission(actor, "tex.policy.manage");
+  assertUuid(categoryId, "expense category id");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<{ id: string; name: string }>(
+      `
+        delete from public.tex_expense_categories
+        where tenant_id = public.current_tenant_id()
+          and id = $1
+          and is_system = false
+        returning id, name
+      `,
+      [categoryId]
+    );
+    const row = requireSingleRow(result.rows, "expense category");
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.category.deleted",
+      "tex_expense_category",
+      row.id,
+      {
+        name: row.name
+      }
+    );
+
+    return { deleted: row.id };
+  });
+}
+
+export async function upsertTexSpendPolicy(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexSpendPolicyInput
+): Promise<TexSpendPolicy> {
+  assertTexPermission(actor, "tex.policy.manage");
+  const policy = sanitizeSpendPolicyInput(input);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexSpendPolicyRow>(
+      `
+        insert into public.tex_spend_policies (
+          tenant_id,
+          category,
+          daily_limit,
+          monthly_limit,
+          requires_notes_above,
+          is_blocked,
+          created_by,
+          updated_by
+        )
+        values (public.current_tenant_id(), $1, $2, $3, $4, $5, $6, $6)
+        on conflict (tenant_id, category)
+        do update set
+          daily_limit = excluded.daily_limit,
+          monthly_limit = excluded.monthly_limit,
+          requires_notes_above = excluded.requires_notes_above,
+          is_blocked = excluded.is_blocked,
+          updated_by = excluded.updated_by,
+          updated_at = now()
+        returning
+          id,
+          category,
+          daily_limit::float as daily_limit,
+          monthly_limit::float as monthly_limit,
+          requires_notes_above::float as requires_notes_above,
+          is_blocked
+      `,
+      [
+        policy.category,
+        policy.dailyLimit,
+        policy.monthlyLimit,
+        policy.requiresNotesAbove,
+        policy.isBlocked,
+        actor.userId
+      ]
+    );
+    const row = requireSingleRow(result.rows, "spend policy");
+
+    await writeTexAuditEvent(client, actor, "tex.policy.updated", "tex_spend_policy", row.id, {
+      category: row.category
+    });
+
+    return mapSpendPolicy(row);
+  });
+}
+
+export async function upsertTexBudget(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexBudgetInput
+): Promise<TexBudget> {
+  assertTexPermission(actor, "tex.policy.manage");
+  const budget = sanitizeBudgetInput(input);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexBudgetRow>(
+      `
+        insert into public.tex_budgets (
+          tenant_id,
+          department,
+          month,
+          year,
+          budget_amount,
+          created_by,
+          updated_by
+        )
+        values (public.current_tenant_id(), $1, $2, $3, $4, $5, $5)
+        on conflict (tenant_id, department, month, year)
+        do update set
+          budget_amount = excluded.budget_amount,
+          updated_by = excluded.updated_by,
+          updated_at = now()
+        returning
+          id,
+          department,
+          month,
+          year,
+          budget_amount::float as budget_amount,
+          0::float as spent_amount
+      `,
+      [budget.department, budget.month, budget.year, budget.budgetAmount, actor.userId]
+    );
+    const row = requireSingleRow(result.rows, "budget");
+
+    await writeTexAuditEvent(client, actor, "tex.budget.updated", "tex_budget", row.id, {
+      department: row.department,
+      month: String(row.month),
+      year: String(row.year)
+    });
+
+    return mapBudget(row);
+  });
+}
+
+export async function deleteTexBudget(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  budgetId: string
+): Promise<{ deleted: string }> {
+  assertTexPermission(actor, "tex.policy.manage");
+  assertUuid(budgetId, "budget id");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<{ id: string; department: string }>(
+      `
+        delete from public.tex_budgets
+        where tenant_id = public.current_tenant_id()
+          and id = $1
+        returning id, department
+      `,
+      [budgetId]
+    );
+    const row = requireSingleRow(result.rows, "budget");
+
+    await writeTexAuditEvent(client, actor, "tex.budget.deleted", "tex_budget", row.id, {
+      department: row.department
+    });
+
+    return { deleted: row.id };
   });
 }
 
@@ -3604,6 +3992,81 @@ function cleanRequired(value: string | null | undefined, label: string) {
   return clean;
 }
 
+function sanitizeExpenseCategoryInput(input: TexExpenseCategoryInput) {
+  return {
+    name: cleanRequired(input.name, "Category name"),
+    isActive: input.isActive ?? true,
+    sortOrder: sanitizeInteger(input.sortOrder, "Sort order", 0)
+  };
+}
+
+function sanitizeSpendPolicyInput(input: TexSpendPolicyInput): Required<TexSpendPolicyInput> {
+  return {
+    category: cleanRequired(input.category, "Policy category"),
+    dailyLimit: sanitizeOptionalAmount(input.dailyLimit, "Daily limit"),
+    monthlyLimit: sanitizeOptionalAmount(input.monthlyLimit, "Monthly limit"),
+    requiresNotesAbove: sanitizeOptionalAmount(input.requiresNotesAbove, "Notes threshold"),
+    isBlocked: input.isBlocked ?? false
+  };
+}
+
+function sanitizeBudgetInput(input: TexBudgetInput) {
+  return {
+    department: cleanRequired(input.department, "Department"),
+    month: sanitizeMonth(input.month),
+    year: sanitizeYear(input.year),
+    budgetAmount: sanitizeRequiredAmount(input.budgetAmount, "Budget amount")
+  };
+}
+
+function sanitizeMonth(value: number) {
+  const month = sanitizeInteger(value, "Month", 1);
+
+  if (month < 1 || month > 12) {
+    throw new Error("Month must be between 1 and 12.");
+  }
+
+  return month;
+}
+
+function sanitizeYear(value: number) {
+  const year = sanitizeInteger(value, "Year", new Date().getUTCFullYear());
+
+  if (year < 2000 || year > 2200) {
+    throw new Error("Year must be between 2000 and 2200.");
+  }
+
+  return year;
+}
+
+function sanitizeInteger(value: number | null | undefined, label: string, fallback: number) {
+  const numberValue = value === null || value === undefined ? fallback : Number(value);
+
+  if (!Number.isInteger(numberValue)) {
+    throw new Error(`${label} must be a whole number.`);
+  }
+
+  return numberValue;
+}
+
+function sanitizeOptionalAmount(value: number | null | undefined, label: string) {
+  if (value === null || value === undefined || value === 0) {
+    return null;
+  }
+
+  return sanitizeRequiredAmount(value, label);
+}
+
+function sanitizeRequiredAmount(value: number, label: string) {
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error(`${label} must be a positive amount.`);
+  }
+
+  return Math.round(amount * 100) / 100;
+}
+
 function classifyWhatsappMessage(
   submission: Required<TexWebhookSubmissionInput>
 ): "receipt" | "status" | "text" {
@@ -3638,7 +4101,58 @@ function mapCategory(row: TexExpenseCategoryRow): TexExpenseCategory {
     id: row.id,
     name: row.name,
     isActive: row.is_active,
-    isSystem: row.is_system
+    isSystem: row.is_system,
+    sortOrder: row.sort_order
+  };
+}
+
+function mergePoliciesWithCategories(
+  categories: readonly TexExpenseCategoryRow[],
+  policies: readonly TexSpendPolicyRow[]
+) {
+  const policyByCategory = new Map(policies.map((policy) => [policy.category, policy]));
+  const merged = categories.map((category) => {
+    const policy = policyByCategory.get(category.name);
+    return policy
+      ? mapSpendPolicy(policy)
+      : {
+          id: null,
+          category: category.name,
+          dailyLimit: null,
+          monthlyLimit: null,
+          requiresNotesAbove: null,
+          isBlocked: false
+        };
+  });
+  const categoryNames = new Set(categories.map((category) => category.name));
+  const customPolicies = policies
+    .filter((policy) => !categoryNames.has(policy.category))
+    .map(mapSpendPolicy);
+
+  return [...merged, ...customPolicies];
+}
+
+function mapSpendPolicy(row: TexSpendPolicyRow): TexSpendPolicy {
+  return {
+    id: row.id,
+    category: row.category,
+    dailyLimit: row.daily_limit,
+    monthlyLimit: row.monthly_limit,
+    requiresNotesAbove: row.requires_notes_above,
+    isBlocked: row.is_blocked
+  };
+}
+
+function mapBudget(row: TexBudgetRow): TexBudget {
+  const spentAmount = row.spent_amount ?? 0;
+  return {
+    id: row.id,
+    department: row.department,
+    month: row.month,
+    year: row.year,
+    budgetAmount: row.budget_amount,
+    spentAmount,
+    remainingAmount: row.budget_amount - spentAmount
   };
 }
 
@@ -3860,6 +4374,25 @@ type TexExpenseCategoryRow = {
   name: string;
   is_active: boolean;
   is_system: boolean;
+  sort_order: number;
+};
+
+type TexSpendPolicyRow = {
+  id: string;
+  category: string;
+  daily_limit: number | null;
+  monthly_limit: number | null;
+  requires_notes_above: number | null;
+  is_blocked: boolean;
+};
+
+type TexBudgetRow = {
+  id: string;
+  department: string;
+  month: number;
+  year: number;
+  budget_amount: number;
+  spent_amount: number | null;
 };
 
 type TexEmployeeProfileRow = {

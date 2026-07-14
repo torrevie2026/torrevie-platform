@@ -70,7 +70,8 @@ class RecordingTexClient implements TenantQueryClient {
             id: "00000000-0000-4000-8000-000000003001",
             name: "Meals",
             is_active: true,
-            is_system: true
+            is_system: true,
+            sort_order: 10
           }
         ] as Row[]
       };

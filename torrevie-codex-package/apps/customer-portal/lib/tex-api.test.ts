@@ -32,8 +32,134 @@ class RecordingTexApiClient implements TenantQueryClient {
   async query<Row>(sql: string, values: readonly QueryValue[] = []): Promise<QueryResult<Row>> {
     this.calls.push({ sql, values });
 
+    if (sql.includes("insert into public.tex_expense_categories")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000003002",
+            name: values[0],
+            is_active: values[1],
+            is_system: false,
+            sort_order: values[2]
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("update public.tex_expense_categories")) {
+      return {
+        rows: [
+          {
+            id: values[4],
+            name: values[0],
+            is_active: values[1],
+            is_system: false,
+            sort_order: values[2]
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("delete from public.tex_expense_categories")) {
+      return {
+        rows: [
+          {
+            id: values[0],
+            name: "Meals"
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("from public.tex_expense_categories")) {
-      return { rows: [] };
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000003001",
+            name: "Meals",
+            is_active: true,
+            is_system: true,
+            sort_order: 10
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("from public.tex_spend_policies")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000013001",
+            category: "Meals",
+            daily_limit: 100,
+            monthly_limit: 1000,
+            requires_notes_above: 75,
+            is_blocked: false
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_spend_policies")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000013001",
+            category: values[0],
+            daily_limit: values[1],
+            monthly_limit: values[2],
+            requires_notes_above: values[3],
+            is_blocked: values[4]
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("from public.tex_budgets b")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000014001",
+            department: "Logistics",
+            month: values[0],
+            year: values[1],
+            budget_amount: 5000,
+            spent_amount: 1200
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_budgets")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000014001",
+            department: values[0],
+            month: values[1],
+            year: values[2],
+            budget_amount: values[3],
+            spent_amount: 0
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("delete from public.tex_budgets")) {
+      return {
+        rows: [
+          {
+            id: values[0],
+            department: "Logistics"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("select distinct department")) {
+      return {
+        rows: [{ department: "Logistics" }] as Row[]
+      };
     }
 
     if (sql.includes("from public.tex_employee_profiles")) {
@@ -1002,6 +1128,78 @@ async function main() {
     assert.equal(response.status, 200);
     assert.match(JSON.stringify(response.body), /updated/);
     assert.equal(client.valuesContain("tex.notification.read_all"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "GET",
+      path: "/settings",
+      query: { month: "7", year: "2026" }
+    });
+    assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /Logistics/);
+    assert.equal(client.hasSql("from public.tex_spend_policies"), true);
+    assert.equal(client.hasSql("from public.tex_budgets b"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "POST",
+      path: "/settings/categories",
+      body: { name: "Parking", sortOrder: 30 }
+    });
+    assert.equal(response.status, 201);
+    assert.equal(client.hasSql("insert into public.tex_expense_categories"), true);
+    assert.equal(client.valuesContain("tex.category.created"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "PATCH",
+      path: "/settings/categories/00000000-0000-4000-8000-000000003002",
+      body: { name: "Parking", isActive: false, sortOrder: 30 }
+    });
+    assert.equal(response.status, 200);
+    assert.equal(client.hasSql("update public.tex_expense_categories"), true);
+    assert.equal(client.valuesContain("tex.category.updated"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "PUT",
+      path: "/settings/policies",
+      body: {
+        category: "Meals",
+        dailyLimit: 120,
+        monthlyLimit: 1000,
+        requiresNotesAbove: 80,
+        isBlocked: false
+      }
+    });
+    assert.equal(response.status, 200);
+    assert.equal(client.hasSql("insert into public.tex_spend_policies"), true);
+    assert.equal(client.valuesContain("tex.policy.updated"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "PUT",
+      path: "/settings/budgets",
+      body: {
+        department: "Logistics",
+        month: 7,
+        year: 2026,
+        budgetAmount: 5000
+      }
+    });
+    assert.equal(response.status, 200);
+    assert.equal(client.hasSql("insert into public.tex_budgets"), true);
+    assert.equal(client.valuesContain("tex.budget.updated"), true);
   }
 
   {

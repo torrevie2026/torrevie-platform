@@ -1047,10 +1047,9 @@ form.member-row {
 }
 
 .tex-people-row {
-  grid-template-columns: minmax(180px, 1.35fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(
-      118px,
-      0.7fr
-    ) minmax(180px, auto);
+  grid-template-columns:
+    minmax(180px, 1.35fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(118px, 0.7fr)
+    minmax(180px, auto);
 }
 
 .tex-people-row input:not([type="checkbox"]) {
@@ -2822,6 +2821,91 @@ form.member-row {
   inline-size: 100%;
 }
 
+.tex-settings-workspace {
+  display: grid;
+  gap: 16px;
+}
+
+.tex-settings-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 0.95fr) minmax(360px, 1.05fr);
+}
+
+.tex-settings-wide {
+  grid-column: 1 / -1;
+}
+
+.tex-inline-form {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(140px, 1fr) minmax(92px, 0.4fr) auto auto;
+}
+
+.tex-period-form {
+  grid-template-columns: 110px 92px auto;
+}
+
+.tex-settings-list,
+.tex-settings-table,
+.tex-budget-admin-list {
+  display: grid;
+  gap: 10px;
+}
+
+.tex-settings-list article,
+.tex-policy-row,
+.tex-budget-admin-row {
+  align-items: center;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.tex-settings-list article {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.tex-settings-list span,
+.tex-budget-admin-row span {
+  display: grid;
+  gap: 3px;
+  min-inline-size: 0;
+}
+
+.tex-settings-list small,
+.tex-budget-admin-row small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tex-policy-row {
+  grid-template-columns: minmax(110px, 0.8fr) repeat(3, minmax(100px, 1fr)) auto auto;
+}
+
+.tex-toggle-label {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 800;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.tex-budget-admin-row {
+  grid-template-columns: minmax(160px, 0.8fr) minmax(180px, 1fr) minmax(92px, auto) auto;
+}
+
+.tex-muted-row {
+  opacity: 0.62;
+}
+
 .customer-account-grid {
   align-items: start;
   display: grid;
@@ -2967,6 +3051,7 @@ form.member-row {
   .tex-expense-workspace,
   .tex-trip-workspace,
   .tex-finance-workspace,
+  .tex-settings-grid,
   .fsm-widget-grid,
   .fsm-workspace-grid,
   .fsm-form-grid,
@@ -2995,7 +3080,10 @@ form.member-row {
   .tex-dashboard-grid,
   .tex-expense-card,
   .tex-finance-row,
-  .tex-whatsapp-card {
+  .tex-whatsapp-card,
+  .tex-policy-row,
+  .tex-budget-admin-row,
+  .tex-inline-form {
     grid-template-columns: 1fr;
   }
 
@@ -3077,6 +3165,10 @@ form.member-row {
 
   .tex-finance-row b {
     text-align: start;
+  }
+
+  .tex-settings-wide {
+    grid-column: auto;
   }
 
   .customer-sidebar {

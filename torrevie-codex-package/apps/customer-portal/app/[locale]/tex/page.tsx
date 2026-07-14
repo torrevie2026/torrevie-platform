@@ -10,12 +10,14 @@ import {
   listTexBootstrap,
   listTexExpenses,
   listTexFinanceReview,
+  listTexSettingsWorkspace,
   listTexTrips,
   listTexUnregisteredWhatsappSubmissions,
   resolveTexActorContext
 } from "../../../lib/tex";
 import { TexExpensesClient } from "./TexExpensesClient";
 import { TexFinanceClient } from "./TexFinanceClient";
+import { TexSettingsClient } from "./TexSettingsClient";
 import { TexTripsClient } from "./TexTripsClient";
 import { TexWhatsappReviewClient } from "./TexWhatsappReviewClient";
 
@@ -51,9 +53,18 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
       actor,
       "open"
     ).catch(() => []);
+    const settingsWorkspace = await listTexSettingsWorkspace(
+      client,
+      actor,
+      now.getUTCMonth() + 1,
+      now.getUTCFullYear()
+    ).catch(() => null);
     const pendingCount = expenses.filter((expense) => expense.status === "pending").length;
     const approvedCount = expenses.filter((expense) => expense.status === "approved").length;
     const openTripCount = trips.filter((trip) => trip.status === "open").length;
+    const canManagePolicies = actor.roles.some((role) =>
+      ["customer_admin", "customer_module_admin", "torrevie_platform_admin"].includes(role)
+    );
 
     return (
       <main className="customer-shell tex-shell" data-visual-check="tex-platform">
@@ -151,6 +162,7 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
             employees={bootstrap.employeeProfiles}
             initialSubmissions={whatsappSubmissions}
           />
+          <TexSettingsClient initialSettings={settingsWorkspace} canManage={canManagePolicies} />
         </section>
       </main>
     );
