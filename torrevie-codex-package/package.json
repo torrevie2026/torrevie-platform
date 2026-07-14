@@ -34,6 +34,7 @@
     "test:isolation": "node scripts/run-sql-tests.mjs",
     "tex:migrate-data:dry-run": "node scripts/migrate-tex-data.mjs",
     "tex:migrate-data:apply": "node scripts/migrate-tex-data.mjs --apply",
+    "verify:tex:staging": "node scripts/verify-tex-staging.mjs",
     "build": "pnpm -r --if-present build",
     "dev": "pnpm --filter @torrevie/customer-portal dev",
     "supabase:start": "supabase start",

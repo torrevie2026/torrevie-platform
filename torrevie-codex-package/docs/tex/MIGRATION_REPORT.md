@@ -67,12 +67,13 @@ Completed platform migration checkpoints so far:
 - Added platform-native role-specific dashboard cards for admin, finance, manager, and employee users using shared role/entitlement context and already tenant-scoped TEX data.
 - Deferred source TEX-specific email retry, suppression, and unsubscribe tables to the shared platform notification-delivery model required by the HLD; TEX now dispatches email through `@torrevie/notifications` without creating product-owned queue tables.
 - Added a local-only TEX browser smoke harness that seeds a deterministic Supabase tenant/user/workspace, starts the customer portal locally, authenticates through Supabase Auth, and verifies `/en/tex` plus `/ar/tex` render inside the shared platform.
+- Added a staging verification runbook and `pnpm verify:tex:staging` guardrail script for deployed SaaS cron and Supabase Storage RLS checks, explicitly refusing `tex1.torrevie.com`.
 - Kept `tex1.torrevie.com` untouched; no DNS, Vercel, live environment, or shutdown action is part of this migration branch.
 
 ## Remaining Gaps
 
 - Daily FX scheduling still needs production Vercel Cron execution verification after deployment; code-level scheduling, authorization, and tenant enumeration coverage are in place.
-- Storage bucket policies still need live Supabase verification before production promotion; code-level Storage RLS and receipt path coverage now assert the platform tenant-prefix convention.
+- Storage bucket policies still need deployed Supabase execution before production promotion; `pnpm verify:tex:staging` now covers the live policy behavior through a rolled-back staging transaction.
 - End-to-end browser verification is now covered locally; it still needs staging execution after deployment with staging Supabase/Vercel environment values.
 
 ## Verification Plan
@@ -83,3 +84,4 @@ Completed platform migration checkpoints so far:
 - `pnpm typecheck`
 - `pnpm build`
 - `pnpm test:tex:browser`
+- `pnpm verify:tex:staging` after deployment to the new SaaS staging or production-candidate environment
