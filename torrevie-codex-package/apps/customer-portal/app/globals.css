@@ -1047,7 +1047,10 @@ form.member-row {
 }
 
 .tex-people-row {
-  grid-template-columns: minmax(180px, 1.35fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(118px, 0.7fr) minmax(180px, auto);
+  grid-template-columns: minmax(180px, 1.35fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(
+      118px,
+      0.7fr
+    ) minmax(180px, auto);
 }
 
 .tex-people-row input:not([type="checkbox"]) {
@@ -2018,7 +2021,11 @@ form.member-row {
 
 .tex-section-panel {
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 4%, transparent), transparent 180px),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-accent) 4%, transparent),
+      transparent 180px
+    ),
     var(--color-bg-primary);
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -2042,7 +2049,11 @@ form.member-row {
 
 .tex-section-intro-icon {
   align-items: center;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 16%, white), var(--color-bg-primary));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-accent) 16%, white),
+    var(--color-bg-primary)
+  );
   border: 1px solid color-mix(in srgb, var(--color-accent) 22%, var(--color-border));
   border-radius: 8px;
   color: var(--color-accent);
@@ -2721,6 +2732,96 @@ form.member-row {
   text-align: end;
 }
 
+.tex-whatsapp-review {
+  grid-column: 1 / -1;
+}
+
+.tex-whatsapp-review .section-heading-row p {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  margin: 4px 0 0;
+}
+
+.tex-empty-state {
+  background: var(--color-bg-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 22px;
+}
+
+.tex-whatsapp-list {
+  display: grid;
+  gap: 12px;
+}
+
+.tex-whatsapp-card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(220px, 1fr) minmax(280px, 1fr);
+  padding: 16px;
+}
+
+.tex-whatsapp-card header,
+.tex-whatsapp-body,
+.tex-whatsapp-actions {
+  display: grid;
+  gap: 10px;
+  min-inline-size: 0;
+}
+
+.tex-whatsapp-card header strong,
+.tex-whatsapp-card header small,
+.tex-whatsapp-body p,
+.tex-whatsapp-body dd {
+  overflow-wrap: anywhere;
+}
+
+.tex-whatsapp-card header small,
+.tex-whatsapp-body dt {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.tex-whatsapp-body p,
+.tex-whatsapp-body dl {
+  margin: 0;
+}
+
+.tex-whatsapp-body dl {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tex-whatsapp-body div {
+  display: grid;
+  gap: 3px;
+}
+
+.tex-whatsapp-body dd {
+  font-size: 13px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.tex-whatsapp-actions .tex-wide-label {
+  gap: 6px;
+}
+
+.tex-whatsapp-actions .tex-primary-button,
+.tex-whatsapp-actions .tex-secondary-button,
+.tex-whatsapp-actions .tex-inline-button {
+  inline-size: 100%;
+}
+
 .customer-account-grid {
   align-items: start;
   display: grid;
@@ -2893,7 +2994,8 @@ form.member-row {
   .tex-analytics-grid,
   .tex-dashboard-grid,
   .tex-expense-card,
-  .tex-finance-row {
+  .tex-finance-row,
+  .tex-whatsapp-card {
     grid-template-columns: 1fr;
   }
 

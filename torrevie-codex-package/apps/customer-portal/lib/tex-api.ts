@@ -7,18 +7,21 @@ import {
   createTexTrip,
   deleteTexDriverAdvance,
   deleteTexTripLeg,
+  ignoreTexUnregisteredWhatsappSubmission,
   listTexBootstrap,
   listTexExpenses,
   listTexFinanceReview,
   listTexNotifications,
   listTexTripLegs,
   listTexTrips,
+  listTexUnregisteredWhatsappSubmissions,
   markAllTexNotificationsRead,
   markTexNotificationRead,
   payTexFinanceItems,
   parseTexReceiptUpload,
   processTexWhatsappSubmission,
   recordTexWebhookSubmission,
+  resolveTexUnregisteredWhatsappSubmission,
   replaceTexTripLegs,
   updateTexTrip,
   updateTexExpenseStatus,
@@ -32,6 +35,7 @@ import {
   type TexReceiptUploadInput,
   type TexTripLegInput,
   type TexTripInput,
+  type TexUnregisteredWhatsappResolveInput,
   type TexWebhookSubmissionInput
 } from "./tex";
 
@@ -222,6 +226,41 @@ export async function handleTexApiRequest(
     });
   }
 
+  if (path === "/unregistered-whatsapp" && method === "GET") {
+    return json(200, {
+      submissions: await listTexUnregisteredWhatsappSubmissions(
+        client,
+        actor,
+        readSubmissionStatusFilter(request.query?.status)
+      )
+    });
+  }
+
+  const unregisteredResolveMatch = path.match(/^\/unregistered-whatsapp\/([0-9a-f-]+)\/resolve$/i);
+  if (unregisteredResolveMatch && method === "PATCH") {
+    return json(200, {
+      result: await resolveTexUnregisteredWhatsappSubmission(
+        client,
+        actor,
+        unregisteredResolveMatch[1] ?? "",
+        readUnregisteredResolveInput(request.body)
+      )
+    });
+  }
+
+  const unregisteredIgnoreMatch = path.match(/^\/unregistered-whatsapp\/([0-9a-f-]+)\/ignore$/i);
+  if (unregisteredIgnoreMatch && method === "PATCH") {
+    const body = readRecord(request.body);
+    return json(200, {
+      submission: await ignoreTexUnregisteredWhatsappSubmission(
+        client,
+        actor,
+        unregisteredIgnoreMatch[1] ?? "",
+        readOptionalString(body.reason)
+      )
+    });
+  }
+
   const tripMatch = path.match(/^\/trips\/([0-9a-f-]+)$/i);
   if (tripMatch && method === "PATCH") {
     return json(200, {
@@ -336,6 +375,35 @@ function readNotificationInput(value: unknown): TexNotificationInput {
     relatedTripId:
       readOptionalString(body.relatedTripId) ?? readOptionalString(body.related_trip_id)
   };
+}
+
+function readUnregisteredResolveInput(value: unknown): TexUnregisteredWhatsappResolveInput {
+  const body = readRecord(value);
+  const mode = readOptionalString(body.mode);
+
+  if (mode !== "existing_employee" && mode !== "new_employee") {
+    throw new Error("WhatsApp submission resolve mode must be existing_employee or new_employee.");
+  }
+
+  return {
+    mode,
+    employeeProfileId:
+      readOptionalString(body.employeeProfileId) ??
+      readOptionalString(body.employee_profile_id) ??
+      readOptionalString(body.employeeId) ??
+      readOptionalString(body.employee_id),
+    employeeName: readOptionalString(body.employeeName) ?? readOptionalString(body.employee_name),
+    phoneNumber: readOptionalString(body.phoneNumber) ?? readOptionalString(body.phone_number),
+    department: readOptionalString(body.department)
+  };
+}
+
+function readSubmissionStatusFilter(value: unknown): "open" | "resolved" | "ignored" | "all" {
+  if (value === "resolved" || value === "ignored" || value === "all") {
+    return value;
+  }
+
+  return "open";
 }
 
 function readExpenseStatus(value: unknown): Exclude<TexExpenseStatus, "pending"> {

@@ -11,11 +11,13 @@ import {
   listTexExpenses,
   listTexFinanceReview,
   listTexTrips,
+  listTexUnregisteredWhatsappSubmissions,
   resolveTexActorContext
 } from "../../../lib/tex";
 import { TexExpensesClient } from "./TexExpensesClient";
 import { TexFinanceClient } from "./TexFinanceClient";
 import { TexTripsClient } from "./TexTripsClient";
+import { TexWhatsappReviewClient } from "./TexWhatsappReviewClient";
 
 export const runtime = "nodejs";
 
@@ -38,7 +40,17 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
     const bootstrap = await listTexBootstrap(client, actor);
     const expenses = await listTexExpenses(client, actor);
     const trips = await listTexTrips(client, actor);
-    const financeReview = await listTexFinanceReview(client, actor, now.getUTCMonth() + 1, now.getUTCFullYear());
+    const financeReview = await listTexFinanceReview(
+      client,
+      actor,
+      now.getUTCMonth() + 1,
+      now.getUTCFullYear()
+    );
+    const whatsappSubmissions = await listTexUnregisteredWhatsappSubmissions(
+      client,
+      actor,
+      "open"
+    ).catch(() => []);
     const pendingCount = expenses.filter((expense) => expense.status === "pending").length;
     const approvedCount = expenses.filter((expense) => expense.status === "approved").length;
     const openTripCount = trips.filter((trip) => trip.status === "open").length;
@@ -135,6 +147,10 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
           </section>
 
           <TexFinanceClient initialReview={financeReview} />
+          <TexWhatsappReviewClient
+            employees={bootstrap.employeeProfiles}
+            initialSubmissions={whatsappSubmissions}
+          />
         </section>
       </main>
     );

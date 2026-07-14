@@ -350,6 +350,41 @@ export type TexWebhookSubmissionRecord = {
   status: "open" | "resolved" | "ignored";
 };
 
+export type TexUnregisteredWhatsappSubmission = TexWebhookSubmissionRecord & {
+  senderRaw: string | null;
+  senderPhone: string | null;
+  whatsappChatJid: string | null;
+  messageId: string | null;
+  sessionId: string | null;
+  messageText: string | null;
+  receiptFileId: string | null;
+  mediaUrl: string | null;
+  mediaMimeType: string | null;
+  messageType: "receipt" | "status" | "text";
+  ocrStatus: TexWhatsappReceiptResult["ocrStatus"];
+  ocrResult: TexReceiptExtraction | null;
+  ocrError: string | null;
+  whatsappReplyText: string | null;
+  resolvedExpenseId: string | null;
+  resolvedEmployeeProfileId: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+};
+
+export type TexUnregisteredWhatsappResolveInput = {
+  mode: "existing_employee" | "new_employee";
+  employeeProfileId?: string | null;
+  employeeName?: string | null;
+  phoneNumber?: string | null;
+  department?: string | null;
+};
+
+export type TexUnregisteredWhatsappResolveResult = {
+  submission: TexWebhookSubmissionRecord;
+  employee: TexEmployeeProfile;
+  expense: TexExpenseRecord;
+};
+
 export type TexWhatsappReceiptResult = {
   submission: TexWebhookSubmissionRecord;
   replyText: string;
@@ -2027,6 +2062,206 @@ export async function processTexWhatsappSubmission(
   });
 }
 
+export async function listTexUnregisteredWhatsappSubmissions(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  status: "open" | "resolved" | "ignored" | "all" = "open"
+): Promise<TexUnregisteredWhatsappSubmission[]> {
+  assertTexPermission(actor, "tex.receipt.review");
+  const normalizedStatus = sanitizeSubmissionStatusFilter(status);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexUnregisteredWhatsappSubmissionRow>(
+      `
+        select
+          id,
+          sender_raw,
+          sender_phone,
+          whatsapp_chat_jid,
+          message_id,
+          session_id,
+          message_text,
+          receipt_file_id,
+          media_url,
+          media_mime_type,
+          message_type,
+          ocr_status,
+          ocr_result,
+          ocr_error,
+          whatsapp_reply_text,
+          status,
+          resolved_expense_id,
+          resolved_employee_profile_id,
+          resolved_at::text as resolved_at,
+          created_at::text as created_at
+        from public.tex_unregistered_whatsapp_submissions
+        where tenant_id = public.current_tenant_id()
+          and ($1::text is null or status = $1)
+        order by created_at desc
+        limit 100
+      `,
+      [normalizedStatus === "all" ? null : normalizedStatus]
+    );
+
+    return result.rows.map(mapUnregisteredWhatsappSubmission);
+  });
+}
+
+export async function ignoreTexUnregisteredWhatsappSubmission(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  submissionId: string,
+  reason?: string | null
+): Promise<TexWebhookSubmissionRecord> {
+  assertTexPermission(actor, "tex.receipt.review");
+  assertUuid(submissionId, "WhatsApp submission id");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexWebhookSubmissionRow>(
+      `
+        update public.tex_unregistered_whatsapp_submissions
+           set status = 'ignored',
+               resolved_by = $1,
+               resolved_at = now(),
+               updated_by = $1
+         where tenant_id = public.current_tenant_id()
+           and id = $2
+           and status = 'open'
+        returning id, status
+      `,
+      [actor.userId, submissionId]
+    );
+    const row = requireSingleRow(result.rows, "WhatsApp submission");
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.whatsapp_submission.ignored",
+      "tex_unregistered_whatsapp_submission",
+      row.id,
+      {
+        reason: cleanOptional(reason) ?? ""
+      }
+    );
+
+    return {
+      id: row.id,
+      status: row.status
+    };
+  });
+}
+
+export async function resolveTexUnregisteredWhatsappSubmission(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  submissionId: string,
+  input: TexUnregisteredWhatsappResolveInput
+): Promise<TexUnregisteredWhatsappResolveResult> {
+  assertTexPermission(actor, "tex.receipt.review");
+  assertUuid(submissionId, "WhatsApp submission id");
+
+  return withTenantContext(client, actor, async () => {
+    const submission = requireSingleRow(
+      (
+        await client.query<TexUnregisteredWhatsappSubmissionRow>(
+          `
+            select
+              id,
+              sender_raw,
+              sender_phone,
+              whatsapp_chat_jid,
+              message_id,
+              session_id,
+              message_text,
+              receipt_file_id,
+              media_url,
+              media_mime_type,
+              message_type,
+              ocr_status,
+              ocr_result,
+              ocr_error,
+              whatsapp_reply_text,
+              status,
+              resolved_expense_id,
+              resolved_employee_profile_id,
+              resolved_at::text as resolved_at,
+              created_at::text as created_at
+            from public.tex_unregistered_whatsapp_submissions
+            where tenant_id = public.current_tenant_id()
+              and id = $1
+            limit 1
+          `,
+          [submissionId]
+        )
+      ).rows,
+      "WhatsApp submission"
+    );
+
+    if (submission.status !== "open") {
+      throw new Error("This WhatsApp submission has already been resolved.");
+    }
+
+    const employee =
+      input.mode === "existing_employee"
+        ? await getTexEmployeeProfile(
+            client,
+            cleanRequired(input.employeeProfileId, "Employee profile")
+          )
+        : await createTexEmployeeProfileFromWhatsapp(client, actor, {
+            name: cleanRequired(input.employeeName, "Employee name"),
+            phoneNumber:
+              input.phoneNumber ?? submission.sender_phone ?? submission.sender_raw ?? "",
+            department: input.department
+          });
+    const extraction = parseSubmissionExtraction(submission.ocr_result);
+    const resolved = resolveWhatsappExpenseFields(submission, extraction);
+    const expense = await insertResolvedWhatsappExpense(client, actor, {
+      submission,
+      employee,
+      extraction,
+      ...resolved
+    });
+    const updated = requireSingleRow(
+      (
+        await client.query<TexWebhookSubmissionRow>(
+          `
+            update public.tex_unregistered_whatsapp_submissions
+               set status = 'resolved',
+                   resolved_expense_id = $1,
+                   resolved_employee_profile_id = $2,
+                   resolved_by = $3,
+                   resolved_at = now(),
+                   updated_by = $3
+             where tenant_id = public.current_tenant_id()
+               and id = $4
+            returning id, status
+          `,
+          [expense.id, employee.id, actor.userId, submission.id]
+        )
+      ).rows,
+      "WhatsApp submission"
+    );
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.whatsapp_submission.resolved",
+      "tex_unregistered_whatsapp_submission",
+      submission.id,
+      {
+        expense_id: expense.id,
+        employee_profile_id: employee.id
+      }
+    );
+
+    return {
+      submission: updated,
+      employee,
+      expense
+    };
+  });
+}
+
 function assertTexPermission(actor: TexActorContext, permission: PermissionKey) {
   if (actor.roleScope !== "customer") {
     throw new Error("TEX access requires a customer tenant context.");
@@ -2963,6 +3198,243 @@ function canReadBroadcastTexNotifications(actor: TexActorContext) {
   );
 }
 
+function sanitizeSubmissionStatusFilter(value: "open" | "resolved" | "ignored" | "all") {
+  if (value === "open" || value === "resolved" || value === "ignored" || value === "all") {
+    return value;
+  }
+
+  throw new Error(`Unsupported WhatsApp submission status: ${String(value)}`);
+}
+
+async function getTexEmployeeProfile(
+  client: TenantQueryClient,
+  employeeProfileId: string
+): Promise<TexEmployeeProfile> {
+  assertUuid(employeeProfileId, "employee profile id");
+  const result = await client.query<TexEmployeeProfileRow>(
+    `
+      select id, user_id, name, phone_number, department, is_active
+      from public.tex_employee_profiles
+      where tenant_id = public.current_tenant_id()
+        and id = $1
+        and is_active = true
+      limit 1
+    `,
+    [employeeProfileId]
+  );
+
+  return mapEmployeeProfile(requireSingleRow(result.rows, "employee profile"));
+}
+
+async function createTexEmployeeProfileFromWhatsapp(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: Pick<TexEmployeeProfileInput, "name" | "phoneNumber" | "department">
+): Promise<TexEmployeeProfile> {
+  const name = cleanRequired(input.name, "Employee name");
+  const phoneNumber = normalizePhoneDigits(input.phoneNumber);
+  const department = cleanOptional(input.department);
+
+  if (!phoneNumber) {
+    throw new Error("Employee WhatsApp phone is required.");
+  }
+
+  const result = await client.query<TexEmployeeProfileRow>(
+    `
+      insert into public.tex_employee_profiles (
+        tenant_id,
+        name,
+        phone_number,
+        department,
+        is_active,
+        created_by,
+        updated_by
+      )
+      values (
+        public.current_tenant_id(),
+        $1,
+        $2,
+        $3,
+        true,
+        $4,
+        $4
+      )
+      on conflict (tenant_id, phone_number)
+      do update set
+        name = excluded.name,
+        department = coalesce(excluded.department, public.tex_employee_profiles.department),
+        is_active = true,
+        updated_by = excluded.updated_by,
+        updated_at = now()
+      returning id, user_id, name, phone_number, department, is_active
+    `,
+    [name, phoneNumber, department, actor.userId]
+  );
+  const employee = mapEmployeeProfile(requireSingleRow(result.rows, "employee profile"));
+
+  await writeTexAuditEvent(
+    client,
+    actor,
+    "tex.people.employee_created_from_whatsapp",
+    "tex_employee_profile",
+    employee.id,
+    {
+      phone_number: employee.phoneNumber
+    }
+  );
+
+  return employee;
+}
+
+function parseSubmissionExtraction(value: unknown): TexReceiptExtraction | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Partial<TexReceiptExtraction>;
+  if (!record.expenseDate && !record.amount && !record.vendor) {
+    return null;
+  }
+
+  return {
+    vendor: typeof record.vendor === "string" ? record.vendor : null,
+    expenseDate: typeof record.expenseDate === "string" ? record.expenseDate : null,
+    amount: typeof record.amount === "number" ? record.amount : null,
+    currency: typeof record.currency === "string" ? record.currency : null,
+    category: typeof record.category === "string" ? record.category : null,
+    taxAmount: typeof record.taxAmount === "number" ? record.taxAmount : null,
+    taxIdNumber: typeof record.taxIdNumber === "string" ? record.taxIdNumber : null,
+    confidence: typeof record.confidence === "number" ? record.confidence : 0,
+    notes: typeof record.notes === "string" ? record.notes : null
+  };
+}
+
+function resolveWhatsappExpenseFields(
+  submission: TexUnregisteredWhatsappSubmissionRow,
+  extraction: TexReceiptExtraction | null
+) {
+  const amount = extraction?.amount && extraction.amount > 0 ? extraction.amount : 0.01;
+  const currency = extraction?.currency?.trim().toUpperCase() || "AED";
+  const expenseDate = extraction?.expenseDate ?? new Date().toISOString().slice(0, 10);
+  const notes = [
+    extraction?.notes,
+    submission.message_text,
+    `Originally received from unregistered WhatsApp sender ${submission.sender_phone ?? submission.sender_raw ?? "unknown"}.`,
+    amount === 0.01 ? "Receipt requires manual amount review." : null
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    vendor: extraction?.vendor ?? null,
+    expenseDate,
+    amount,
+    currency,
+    notes
+  };
+}
+
+async function insertResolvedWhatsappExpense(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: {
+    submission: TexUnregisteredWhatsappSubmissionRow;
+    employee: TexEmployeeProfile;
+    extraction: TexReceiptExtraction | null;
+    vendor: string | null;
+    expenseDate: string;
+    amount: number;
+    currency: string;
+    notes: string;
+  }
+): Promise<TexExpenseRecord> {
+  const result = await client.query<TexExpenseRow>(
+    `
+      insert into public.tex_expenses (
+        tenant_id,
+        submitter_user_id,
+        employee_profile_id,
+        employee_name,
+        employee_phone,
+        whatsapp_chat_jid,
+        vendor,
+        expense_date,
+        amount,
+        currency,
+        base_amount,
+        category,
+        payment_method,
+        notes,
+        tax_id_number,
+        tax_amount,
+        receipt_file_id,
+        status,
+        source,
+        extraction_source,
+        extraction_confidence,
+        extraction_payload,
+        policy_flag,
+        policy_flag_reason,
+        manager_review_required,
+        created_by,
+        updated_by
+      )
+      values (
+        public.current_tenant_id(),
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $8,
+        $10,
+        $11,
+        $12,
+        $13,
+        $14,
+        $15,
+        'pending',
+        'whatsapp',
+        'whatsapp_ai',
+        $16,
+        $17::jsonb,
+        true,
+        $18,
+        true,
+        $1,
+        $1
+      )
+      returning id, status, amount::float as amount, currency
+    `,
+    [
+      actor.userId,
+      input.employee.id,
+      input.employee.name,
+      input.employee.phoneNumber,
+      input.submission.whatsapp_chat_jid,
+      input.vendor,
+      parseIsoDate(input.expenseDate, "expense date"),
+      input.amount,
+      input.currency,
+      input.extraction?.category ?? "Receipt",
+      null,
+      input.notes,
+      input.extraction?.taxIdNumber ?? null,
+      input.extraction?.taxAmount ?? null,
+      input.submission.receipt_file_id,
+      input.extraction?.confidence ?? null,
+      JSON.stringify(input.extraction ?? {}),
+      "Receipt came from an unregistered WhatsApp number and was assigned by a reviewer."
+    ]
+  );
+
+  return mapExpense(requireSingleRow(result.rows, "expense"));
+}
+
 function uniqueUuids(values: string[], label: string) {
   const unique = Array.from(new Set(values));
 
@@ -3246,6 +3718,33 @@ function mapNotification(row: TexNotificationRow): TexNotification {
   };
 }
 
+function mapUnregisteredWhatsappSubmission(
+  row: TexUnregisteredWhatsappSubmissionRow
+): TexUnregisteredWhatsappSubmission {
+  return {
+    id: row.id,
+    status: row.status,
+    senderRaw: row.sender_raw,
+    senderPhone: row.sender_phone,
+    whatsappChatJid: row.whatsapp_chat_jid,
+    messageId: row.message_id,
+    sessionId: row.session_id,
+    messageText: row.message_text,
+    receiptFileId: row.receipt_file_id,
+    mediaUrl: row.media_url,
+    mediaMimeType: row.media_mime_type,
+    messageType: row.message_type,
+    ocrStatus: row.ocr_status,
+    ocrResult: parseSubmissionExtraction(row.ocr_result),
+    ocrError: row.ocr_error,
+    whatsappReplyText: row.whatsapp_reply_text,
+    resolvedExpenseId: row.resolved_expense_id,
+    resolvedEmployeeProfileId: row.resolved_employee_profile_id,
+    resolvedAt: row.resolved_at,
+    createdAt: row.created_at
+  };
+}
+
 type TexExpenseCategoryRow = {
   id: string;
   name: string;
@@ -3416,6 +3915,29 @@ type TexNotificationRow = {
 type TexWebhookSubmissionRow = {
   id: string;
   status: "open" | "resolved" | "ignored";
+};
+
+type TexUnregisteredWhatsappSubmissionRow = {
+  id: string;
+  sender_raw: string | null;
+  sender_phone: string | null;
+  whatsapp_chat_jid: string | null;
+  message_id: string | null;
+  session_id: string | null;
+  message_text: string | null;
+  receipt_file_id: string | null;
+  media_url: string | null;
+  media_mime_type: string | null;
+  message_type: "receipt" | "status" | "text";
+  ocr_status: TexWhatsappReceiptResult["ocrStatus"];
+  ocr_result: unknown;
+  ocr_error: string | null;
+  whatsapp_reply_text: string | null;
+  status: "open" | "resolved" | "ignored";
+  resolved_expense_id: string | null;
+  resolved_employee_profile_id: string | null;
+  resolved_at: string | null;
+  created_at: string;
 };
 
 type TexProcessingSettingsRow = {

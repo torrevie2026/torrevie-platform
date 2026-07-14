@@ -66,6 +66,95 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
+    if (
+      sql.includes("from public.tex_unregistered_whatsapp_submissions") &&
+      sql.includes("order by created_at desc")
+    ) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000012001",
+            sender_raw: "971500000001@s.whatsapp.net",
+            sender_phone: "+971500000001",
+            whatsapp_chat_jid: "971500000001@s.whatsapp.net",
+            message_id: "wamid.review",
+            session_id: "session-a",
+            message_text: "Receipt",
+            receipt_file_id: null,
+            media_url: null,
+            media_mime_type: null,
+            message_type: "receipt",
+            ocr_status: "manual_review",
+            ocr_result: {},
+            ocr_error: null,
+            whatsapp_reply_text: "Receipt received.",
+            status: "open",
+            resolved_expense_id: null,
+            resolved_employee_profile_id: null,
+            resolved_at: null,
+            created_at: "2026-07-12T10:00:00.000Z"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (
+      sql.includes("from public.tex_unregistered_whatsapp_submissions") &&
+      sql.includes("limit 1")
+    ) {
+      return {
+        rows: [
+          {
+            id: values[0],
+            sender_raw: "971500000001@s.whatsapp.net",
+            sender_phone: "+971500000001",
+            whatsapp_chat_jid: "971500000001@s.whatsapp.net",
+            message_id: "wamid.review",
+            session_id: "session-a",
+            message_text: "Receipt",
+            receipt_file_id: null,
+            media_url: null,
+            media_mime_type: null,
+            message_type: "receipt",
+            ocr_status: "extracted",
+            ocr_result: {
+              vendor: "Airport Cafe",
+              expenseDate: "2026-07-12",
+              amount: 120,
+              currency: "AED",
+              category: "Meals",
+              taxAmount: null,
+              taxIdNumber: null,
+              confidence: 0.9,
+              notes: null
+            },
+            ocr_error: null,
+            whatsapp_reply_text: "Receipt received.",
+            status: "open",
+            resolved_expense_id: null,
+            resolved_employee_profile_id: null,
+            resolved_at: null,
+            created_at: "2026-07-12T10:00:00.000Z"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_employee_profiles")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000004002",
+            user_id: null,
+            name: values[0],
+            phone_number: values[1],
+            department: values[2],
+            is_active: true
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("insert into public.tex_notifications")) {
       return {
         rows: [
@@ -102,6 +191,19 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("insert into public.tex_expenses") && sql.includes("'whatsapp'")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000006002",
+            status: "pending",
+            amount: values[7],
+            currency: values[8]
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("insert into public.tex_expenses")) {
       return {
         rows: [
@@ -110,6 +212,19 @@ class RecordingTexApiClient implements TenantQueryClient {
             status: "pending",
             amount: values[4],
             currency: values[5]
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("update public.tex_unregistered_whatsapp_submissions")) {
+      return {
+        rows: [
+          {
+            id: values.includes("00000000-0000-4000-8000-000000012001")
+              ? "00000000-0000-4000-8000-000000012001"
+              : values[1],
+            status: sql.includes("status = 'ignored'") ? "ignored" : "resolved"
           }
         ] as Row[]
       };
@@ -860,6 +975,47 @@ async function main() {
     assert.equal(response.status, 200);
     assert.match(JSON.stringify(response.body), /updated/);
     assert.equal(client.valuesContain("tex.notification.read_all"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "GET",
+      path: "/unregistered-whatsapp",
+      query: { status: "open" }
+    });
+    assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /wamid\.review/);
+    assert.equal(client.hasSql("from public.tex_unregistered_whatsapp_submissions"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "PATCH",
+      path: "/unregistered-whatsapp/00000000-0000-4000-8000-000000012001/ignore",
+      body: { reason: "Not a receipt" }
+    });
+    assert.equal(response.status, 200);
+    assert.equal(client.valuesContain("tex.whatsapp_submission.ignored"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "PATCH",
+      path: "/unregistered-whatsapp/00000000-0000-4000-8000-000000012001/resolve",
+      body: {
+        mode: "new_employee",
+        employee_name: "New Driver",
+        phone_number: "+971500000001",
+        department: "Logistics"
+      }
+    });
+    assert.equal(response.status, 200);
+    assert.equal(client.hasSql("insert into public.tex_employee_profiles"), true);
+    assert.equal(client.hasSql("insert into public.tex_expenses"), true);
+    assert.equal(client.valuesContain("tex.whatsapp_submission.resolved"), true);
   }
 
   {
