@@ -113,7 +113,20 @@ export async function extractReceiptWithGemini(mediaUrl: string): Promise<TexRec
   }
 
   const media = await receiptMediaForGemini(mediaUrl);
-  const model = process.env.GEMINI_RECEIPT_MODEL?.trim() || "gemini-3.5-flash";
+  const errors: string[] = [];
+
+  for (const model of geminiReceiptModels()) {
+    try {
+      return await extractReceiptWithGeminiModel(apiKey, model, media);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : `Gemini receipt extraction failed for ${model}.`);
+    }
+  }
+
+  throw new Error(errors.join(" "));
+}
+
+async function extractReceiptWithGeminiModel(apiKey: string, model: string, media: { mimeType: string; dataBase64: string }) {
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: {
@@ -144,7 +157,7 @@ export async function extractReceiptWithGemini(mediaUrl: string): Promise<TexRec
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Gemini receipt extraction failed: ${response.status} ${text.slice(0, 400)}`);
+    throw new Error(`Gemini receipt extraction failed with ${model}: ${response.status} ${text.slice(0, 400)}`);
   }
 
   const data = (await response.json()) as {
@@ -153,7 +166,7 @@ export async function extractReceiptWithGemini(mediaUrl: string): Promise<TexRec
   const outputText = data.candidates?.[0]?.content?.parts?.find((part) => typeof part.text === "string")?.text;
 
   if (!outputText) {
-    throw new Error("Gemini receipt extraction returned no structured text.");
+    throw new Error(`Gemini receipt extraction returned no structured text with ${model}.`);
   }
 
   return sanitizeExtraction(parseJsonObject(outputText));
@@ -201,6 +214,27 @@ function geminiApiKey() {
     (fallbackName.includes("gemini") || fallbackName.includes("google") ? process.env.AI_PROVIDER_FALLBACK_API_KEY?.trim() : "") ||
     ""
   );
+}
+
+function geminiReceiptModels() {
+  return uniqueStrings([
+    ...splitModelList(process.env.GEMINI_RECEIPT_MODELS),
+    ...splitModelList(process.env.GEMINI_RECEIPT_MODEL),
+    "gemini-3.5-flash",
+    "gemini-2.5-flash",
+    "gemini-3.1-flash-lite"
+  ]);
+}
+
+function splitModelList(value: string | undefined) {
+  return (value ?? "")
+    .split(",")
+    .map((model) => model.trim())
+    .filter(Boolean);
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values)];
 }
 
 async function receiptMediaForGemini(mediaUrl: string) {
