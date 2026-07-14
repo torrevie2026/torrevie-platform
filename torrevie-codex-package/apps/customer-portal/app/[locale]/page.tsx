@@ -66,8 +66,8 @@ const appCatalog: Record<ProductKey, Omit<LauncherApp, "metricValue">> = {
     key: "tex",
     label: "TEX",
     description: "Travel, expenses, receipts, trips, approvals, and finance review.",
-    href: null,
-    status: "coming_soon",
+    href: "/tex",
+    status: "online",
     metricLabel: "Open expenses",
     accent: "teal"
   },
@@ -271,10 +271,7 @@ async function listLauncherData(
       `
     );
     const dashboardRow = dashboard.rows[0];
-    const subscribedKeys = subscriptions.rows
-      .map((row) => row.key)
-      .filter(isProductKey)
-      .filter((key) => key !== "tex");
+    const subscribedKeys = subscriptions.rows.map((row) => row.key).filter(isProductKey);
 
     return {
       tenantName: dashboardRow?.tenant_name ?? "Current tenant",
