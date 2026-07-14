@@ -66,13 +66,14 @@ Completed platform migration checkpoints so far:
 - Added root Supabase Storage object policies and isolation coverage for tenant-prefixed platform buckets, including TEX receipt objects in the `receipts` bucket.
 - Added platform-native role-specific dashboard cards for admin, finance, manager, and employee users using shared role/entitlement context and already tenant-scoped TEX data.
 - Deferred source TEX-specific email retry, suppression, and unsubscribe tables to the shared platform notification-delivery model required by the HLD; TEX now dispatches email through `@torrevie/notifications` without creating product-owned queue tables.
+- Added a local-only TEX browser smoke harness that seeds a deterministic Supabase tenant/user/workspace, starts the customer portal locally, authenticates through Supabase Auth, and verifies `/en/tex` plus `/ar/tex` render inside the shared platform.
 - Kept `tex1.torrevie.com` untouched; no DNS, Vercel, live environment, or shutdown action is part of this migration branch.
 
 ## Remaining Gaps
 
 - Daily FX scheduling still needs production Vercel Cron execution verification after deployment; code-level scheduling, authorization, and tenant enumeration coverage are in place.
 - Storage bucket policies still need live Supabase verification before production promotion; code-level Storage RLS and receipt path coverage now assert the platform tenant-prefix convention.
-- End-to-end browser verification against seeded TEX data remains required.
+- End-to-end browser verification is now covered locally; it still needs staging execution after deployment with staging Supabase/Vercel environment values.
 
 ## Verification Plan
 
@@ -81,4 +82,4 @@ Completed platform migration checkpoints so far:
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm build`
-- Browser check for `/en/tex` and `/ar/tex` after local data is available.
+- `pnpm test:tex:browser`
