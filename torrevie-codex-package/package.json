@@ -35,6 +35,7 @@
     "tex:migrate-data:dry-run": "node scripts/migrate-tex-data.mjs",
     "tex:migrate-data:apply": "node scripts/migrate-tex-data.mjs --apply",
     "verify:tex:staging": "node scripts/verify-tex-staging.mjs",
+    "tex:create-staging-demo-access": "node scripts/create-tex-staging-demo-access.mjs",
     "build": "pnpm -r --if-present build",
     "dev": "pnpm --filter @torrevie/customer-portal dev",
     "supabase:start": "supabase start",
