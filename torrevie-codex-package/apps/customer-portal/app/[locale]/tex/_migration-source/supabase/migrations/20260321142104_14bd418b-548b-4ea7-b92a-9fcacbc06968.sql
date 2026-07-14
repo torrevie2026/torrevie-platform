@@ -1,0 +1,1 @@
+ALTER TABLE public.companies ADD COLUMN trip_linking_mode text NOT NULL DEFAULT 'auto';

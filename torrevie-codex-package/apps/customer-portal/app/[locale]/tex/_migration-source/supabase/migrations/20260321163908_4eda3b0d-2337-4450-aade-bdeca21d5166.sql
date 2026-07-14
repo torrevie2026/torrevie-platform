@@ -1,0 +1,1 @@
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS submission_frequency text NOT NULL DEFAULT 'realtime';

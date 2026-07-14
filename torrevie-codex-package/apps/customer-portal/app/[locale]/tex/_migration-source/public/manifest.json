@@ -1,0 +1,22 @@
+{
+  "name": "Torrevie TEX",
+  "short_name": "Torrevie TEX",
+  "description": "Torrevie TEX for expense control, travel operations, approvals, finance review, and reporting.",
+  "theme_color": "#0f9f94",
+  "background_color": "#f5f8fa",
+  "display": "standalone",
+  "start_url": "/",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
