@@ -15,13 +15,16 @@ export default async function TexPage() {
   try {
     const { actor, client, session } = await requireTexRequestContext();
     const now = new Date();
-    const [bootstrap, expenses, trips, financeReview, reportWorkspace] = await Promise.all([
-      listTexBootstrap(client, actor),
-      listTexExpenses(client, actor),
-      listTexTrips(client, actor),
-      listTexFinanceReview(client, actor, now.getUTCMonth() + 1, now.getUTCFullYear()),
-      listTexReportWorkspace(client, actor).catch(() => null)
-    ]);
+    const bootstrap = await listTexBootstrap(client, actor);
+    const expenses = await listTexExpenses(client, actor);
+    const trips = await listTexTrips(client, actor);
+    const financeReview = await listTexFinanceReview(
+      client,
+      actor,
+      now.getUTCMonth() + 1,
+      now.getUTCFullYear()
+    );
+    const reportWorkspace = await listTexReportWorkspace(client, actor).catch(() => null);
     const pendingCount = expenses.filter((expense) => expense.status === "pending").length;
     const approvedCount = expenses.filter((expense) => expense.status === "approved").length;
     const openTripCount = trips.filter((trip) => trip.status === "open").length;
