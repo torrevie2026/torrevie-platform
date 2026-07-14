@@ -154,8 +154,8 @@ async function ensureAuthUserViaDatabase() {
         )
         values (
           gen_random_uuid(),
-          $1,
-          $1,
+          $1::text,
+          $1::uuid,
           jsonb_build_object(
             'sub', $1::text,
             'email', $2::text,
