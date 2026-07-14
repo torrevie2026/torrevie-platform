@@ -62,6 +62,7 @@ Completed platform migration checkpoints so far:
 - Resolved source single-provider routing through shared tenant WhatsApp provider profiles: customer administrators may save multiple profiles, and the selected default syncs into active TEX inbound/outbound settings.
 - Rejected the source `company-logos` bucket and `companies.logo_url` path as TEX-owned storage; tenant branding must use shared `tenant_settings.branding` plus tenant-prefixed `files` storage when a platform branding editor is added.
 - Verified migrated receipt uploads persist under `tenant/{tenant_id}/tex/receipts/{file_id}.{extension}` and remain backed by the root `files.storage_path` tenant-prefix constraint.
+- Added root Supabase Storage object policies and isolation coverage for tenant-prefixed platform buckets, including TEX receipt objects in the `receipts` bucket.
 - Added platform-native role-specific dashboard cards for admin, finance, manager, and employee users using shared role/entitlement context and already tenant-scoped TEX data.
 - Deferred source TEX-specific email retry, suppression, and unsubscribe tables to the shared platform notification-delivery model required by the HLD; TEX now dispatches email through `@torrevie/notifications` without creating product-owned queue tables.
 - Kept `tex1.torrevie.com` untouched; no DNS, Vercel, live environment, or shutdown action is part of this migration branch.
@@ -69,7 +70,7 @@ Completed platform migration checkpoints so far:
 ## Remaining Gaps
 
 - Automated FX scheduling remains deferred to the shared platform cron/workflow convention; the migrated refresh endpoint is synchronous and permission-guarded.
-- Storage bucket policies need live Supabase verification before production promotion; code-level receipt path coverage now asserts the platform `tenant/{tenant_id}/tex/receipts/...` convention.
+- Storage bucket policies still need live Supabase verification before production promotion; code-level Storage RLS and receipt path coverage now assert the platform tenant-prefix convention.
 - End-to-end browser verification against seeded TEX data remains required.
 
 ## Verification Plan
