@@ -239,8 +239,8 @@ function errorMessage(error: unknown) {
 }
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
+  return new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "short",
     timeStyle: "short"
   }).format(new Date(value));
 }

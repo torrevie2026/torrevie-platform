@@ -291,6 +291,7 @@ export type TexTripInput = {
   origin?: string | null;
   destination?: string | null;
   budgetAmount?: number | null;
+  advanceDepositFileId?: string | null;
   startDate?: string | null;
   endDate?: string | null;
   enforceCurrency?: boolean | null;
@@ -1308,6 +1309,7 @@ export async function createTexTrip(
           origin,
           destination,
           budget_amount,
+          advance_deposit_file_id,
           start_date,
           end_date,
           enforce_currency,
@@ -1341,8 +1343,8 @@ export async function createTexTrip(
           $15,
           $16,
           $17,
-          $18,
-          $18
+          $19,
+          $19
         )
         returning
           id,
@@ -1402,20 +1404,21 @@ export async function updateTexTrip(
                origin = $4,
                destination = $5,
                budget_amount = $6,
-               start_date = $7,
-               end_date = $8,
-               enforce_currency = $9,
-               enforced_currency = $10,
-               team_id = $11,
-               container_number = $12,
-               driver_employee_profile_id = $13,
-               driver_trip_amount = $14,
-               subcontractor_driver_name = $15,
-               subcontractor_amount = $16,
-               subcontractor_notes = $17,
-               updated_by = $18
+               advance_deposit_file_id = $7,
+               start_date = $8,
+               end_date = $9,
+               enforce_currency = $10,
+               enforced_currency = $11,
+               team_id = $12,
+               container_number = $13,
+               driver_employee_profile_id = $14,
+               driver_trip_amount = $15,
+               subcontractor_driver_name = $16,
+               subcontractor_amount = $17,
+               subcontractor_notes = $18,
+               updated_by = $19
          where tenant_id = public.current_tenant_id()
-           and id = $19
+           and id = $20
         returning
           id,
           name,
@@ -4364,6 +4367,7 @@ function sanitizeTrip(input: TexTripInput): Required<TexTripInput> {
     origin: cleanOptional(input.origin),
     destination: cleanOptional(input.destination),
     budgetAmount,
+    advanceDepositFileId: cleanOptional(input.advanceDepositFileId),
     startDate: input.startDate ? parseIsoDate(input.startDate, "start date") : null,
     endDate: input.endDate ? parseIsoDate(input.endDate, "end date") : null,
     enforceCurrency,
@@ -4564,6 +4568,7 @@ function tripValues(trip: Required<TexTripInput>, userId: string) {
     trip.origin,
     trip.destination,
     trip.budgetAmount,
+    trip.advanceDepositFileId,
     trip.startDate,
     trip.endDate,
     trip.enforceCurrency,

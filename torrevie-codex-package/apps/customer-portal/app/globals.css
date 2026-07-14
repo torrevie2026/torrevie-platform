@@ -223,12 +223,17 @@ a {
 .tex-sidebar-user {
   align-items: center;
   border-block-start: 1px solid var(--color-border);
-  display: flex;
+  display: grid;
   gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr);
   margin-block-start: auto;
   min-inline-size: 0;
   padding-block: 16px;
   padding-inline: 16px;
+}
+
+.tex-sidebar-user .tex-install-button {
+  grid-column: 1 / -1;
 }
 
 .tex-sidebar-user span:last-child {
@@ -2423,10 +2428,17 @@ form.member-row {
 .tex-primary-button,
 .tex-secondary-button,
 .tex-card-actions button,
-.tex-segmented-control button {
+.tex-segmented-control button,
+.tex-trip-card footer button,
+.tex-install-button {
+  align-items: center;
   border-radius: 6px;
   cursor: pointer;
+  display: inline-flex;
   font-weight: 700;
+  gap: 6px;
+  justify-content: center;
+  line-height: 1.2;
 }
 
 .tex-primary-button {
@@ -2452,9 +2464,16 @@ form.member-row {
 }
 
 .tex-primary-button:disabled,
-.tex-card-actions button:disabled {
+.tex-secondary-button:disabled,
+.tex-card-actions button:disabled,
+.tex-trip-card footer button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.tex-leg-card {
+  align-items: stretch;
+  grid-template-columns: 1fr;
 }
 
 .tex-notice,
@@ -2593,16 +2612,18 @@ form.member-row {
 
 .tex-trip-list {
   display: grid;
-  gap: 12px;
+  gap: 7px;
 }
 
 .tex-trip-card {
+  align-items: center;
   background: var(--color-bg-primary);
   border: 1px solid color-mix(in srgb, var(--color-accent) 10%, var(--color-border));
   border-radius: 8px;
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  grid-template-columns: minmax(240px, 1.25fr) minmax(110px, auto) minmax(260px, 1fr) minmax(190px, auto);
+  padding: 10px 12px;
 }
 
 .tex-trip-card header,
@@ -2615,8 +2636,8 @@ form.member-row {
 }
 
 .tex-trip-card h4 {
-  font-size: 17px;
-  margin: 6px 0 4px;
+  font-size: 15px;
+  margin: 4px 0 2px;
 }
 
 .tex-trip-card p,
@@ -2627,7 +2648,7 @@ form.member-row {
 }
 
 .tex-trip-card strong {
-  font-size: 18px;
+  font-size: 16px;
   text-align: end;
 }
 
@@ -2638,10 +2659,7 @@ form.member-row {
 .tex-trip-card footer button {
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
   color: var(--color-text-primary);
-  cursor: pointer;
-  font-weight: 700;
   min-block-size: 34px;
   padding-inline: 11px;
 }
@@ -2655,6 +2673,7 @@ form.member-row {
   background: var(--color-bg-surface);
   border-radius: 999px;
   block-size: 8px;
+  grid-column: 1 / -1;
   overflow: hidden;
 }
 
@@ -2662,6 +2681,28 @@ form.member-row {
   background: var(--color-accent);
   block-size: 100%;
   display: block;
+}
+
+.tex-action-bar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.tex-install-button {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-accent);
+  inline-size: 100%;
+  min-block-size: 38px;
+  padding-inline: 10px;
+}
+
+.tex-install-button svg {
+  block-size: 16px;
+  inline-size: 16px;
 }
 
 .tex-finance-summary {

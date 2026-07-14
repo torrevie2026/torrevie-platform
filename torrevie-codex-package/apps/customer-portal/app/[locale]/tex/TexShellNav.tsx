@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { TexInstallPrompt } from "./TexInstallPrompt";
 
 type TexShellNavProps = {
   email: string | null;
@@ -74,6 +75,7 @@ export function TexShellNav({ email, locale, roles, tenantId }: TexShellNavProps
       </nav>
 
       <div className="tex-sidebar-user">
+        <TexInstallPrompt />
         <span className="tex-avatar">{email?.slice(0, 1).toUpperCase() ?? "T"}</span>
         <span>
           <strong>{email ?? "Customer user"}</strong>
