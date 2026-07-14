@@ -20,11 +20,12 @@ export function isTexStagingDemoCredential(email: string, password: string) {
 export function assertTexStagingDemoAccessAllowed(hostname: string | null) {
   const normalizedHostname = hostname?.split(":")[0]?.toLowerCase() ?? "";
   if (
+    process.env.TEX_STAGING_DEMO_ACCESS_ENABLED !== "true" ||
     process.env.VERCEL_ENV !== "preview" ||
     normalizedHostname === "tex1.torrevie.com" ||
     normalizedHostname === "app.torrevie.com"
   ) {
-    throw new Error("TEX staging demo access is only enabled on Vercel preview deployments.");
+    throw new Error("TEX staging demo access is not enabled for this deployment.");
   }
 }
 
