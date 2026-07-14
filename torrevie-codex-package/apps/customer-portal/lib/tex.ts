@@ -1,6 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { assertPermission, roleKeys, type PermissionKey, type ProductKey, type RoleKey } from "@torrevie/permissions";
-import { withTenantContext, type ResolvedTenantContext, type TenantQueryClient } from "@torrevie/tenant-context";
+import {
+  assertPermission,
+  roleKeys,
+  type PermissionKey,
+  type ProductKey,
+  type RoleKey
+} from "@torrevie/permissions";
+import {
+  withTenantContext,
+  type ResolvedTenantContext,
+  type TenantQueryClient
+} from "@torrevie/tenant-context";
 import { extractReceiptWithAI, type TexReceiptExtraction } from "./tex-ai";
 
 export type TexActorContext = ResolvedTenantContext & {
@@ -277,6 +287,50 @@ export type TexFinancePaymentInput = {
   tripIds?: string[];
 };
 
+export type TexDriverAdvanceInput = {
+  employeeProfileId?: string | null;
+  amount: number;
+  currency?: string | null;
+  baseAmount?: number | null;
+  advanceDate?: string | null;
+  month?: number | null;
+  year?: number | null;
+  notes?: string | null;
+};
+
+export type TexDriverAdvance = {
+  id: string;
+  employeeProfileId: string;
+  amount: number;
+  currency: string;
+  baseAmount: number;
+  advanceDate: string;
+  month: number;
+  year: number;
+  notes: string | null;
+};
+
+export type TexNotificationInput = {
+  userId?: string | null;
+  title: string;
+  body?: string | null;
+  type?: string | null;
+  relatedExpenseId?: string | null;
+  relatedTripId?: string | null;
+};
+
+export type TexNotification = {
+  id: string;
+  userId: string | null;
+  title: string;
+  body: string | null;
+  type: string | null;
+  relatedExpenseId: string | null;
+  relatedTripId: string | null;
+  isRead: boolean;
+  createdAt: string;
+};
+
 export type TexWebhookSubmissionInput = {
   senderRaw?: string | null;
   senderPhone?: string | null;
@@ -367,7 +421,10 @@ export async function resolveTexActorContext(
   });
 }
 
-export async function listTexBootstrap(client: TenantQueryClient, actor: TexActorContext): Promise<TexBootstrap> {
+export async function listTexBootstrap(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<TexBootstrap> {
   assertTexPermission(actor, "tex.expense.read");
 
   return withTenantContext(client, actor, async () => {
@@ -419,12 +476,17 @@ export async function listTexBootstrap(client: TenantQueryClient, actor: TexActo
       categories: categories.rows.map(mapCategory),
       employeeProfiles: employeeProfiles.rows.map(mapEmployeeProfile),
       teams: teams.rows.map(mapTeam),
-      integrationSettings: integrationSettings.rows[0] ? mapIntegrationSettings(integrationSettings.rows[0]) : null
+      integrationSettings: integrationSettings.rows[0]
+        ? mapIntegrationSettings(integrationSettings.rows[0])
+        : null
     };
   });
 }
 
-export async function listTexExpenses(client: TenantQueryClient, actor: TexActorContext): Promise<TexExpenseListItem[]> {
+export async function listTexExpenses(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<TexExpenseListItem[]> {
   assertTexPermission(actor, "tex.expense.read");
 
   return withTenantContext(client, actor, async () => {
@@ -496,9 +558,16 @@ export async function updateTexEmployeeProfile(
     );
     const employee = requireSingleRow(result.rows, "employee profile");
 
-    await writeTexAuditEvent(client, actor, "tex.employee.updated", "tex_employee_profile", employee.id, {
-      employee_name: employee.name
-    });
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.employee.updated",
+      "tex_employee_profile",
+      employee.id,
+      {
+        employee_name: employee.name
+      }
+    );
 
     return mapEmployeeProfile(employee);
   });
@@ -524,13 +593,23 @@ export async function deleteTexEmployeeProfile(
     );
     const employee = requireSingleRow(result.rows, "employee profile");
 
-    await writeTexAuditEvent(client, actor, "tex.employee.deleted", "tex_employee_profile", employee.id, {
-      employee_name: employee.name
-    });
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.employee.deleted",
+      "tex_employee_profile",
+      employee.id,
+      {
+        employee_name: employee.name
+      }
+    );
   });
 }
 
-export async function listTexTrips(client: TenantQueryClient, actor: TexActorContext): Promise<TexTripListItem[]> {
+export async function listTexTrips(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<TexTripListItem[]> {
   assertTexPermission(actor, "tex.expense.read");
 
   return withTenantContext(client, actor, async () => {
@@ -1198,13 +1277,308 @@ export async function payTexFinanceItems(
       paidTrips = result.rows.length;
 
       for (const row of result.rows) {
-        await writeTexAuditEvent(client, actor, "tex.finance.trip_payout_paid", "tex_trip", row.id, {
-          status: "paid"
-        });
+        await writeTexAuditEvent(
+          client,
+          actor,
+          "tex.finance.trip_payout_paid",
+          "tex_trip",
+          row.id,
+          {
+            status: "paid"
+          }
+        );
       }
     }
 
     return { paidExpenses, paidTrips };
+  });
+}
+
+export async function createTexDriverAdvance(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexDriverAdvanceInput
+): Promise<TexDriverAdvance> {
+  assertTexPermission(actor, "tex.finance.review");
+  const advance = sanitizeDriverAdvance(input);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexDriverAdvanceRow>(
+      `
+        insert into public.tex_driver_advances (
+          tenant_id,
+          employee_profile_id,
+          amount,
+          currency,
+          base_amount,
+          advance_date,
+          month,
+          year,
+          notes,
+          created_by,
+          updated_by
+        )
+        values (
+          public.current_tenant_id(),
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          $9
+        )
+        returning
+          id,
+          employee_profile_id,
+          amount::float as amount,
+          currency,
+          base_amount::float as base_amount,
+          advance_date::text as advance_date,
+          month,
+          year,
+          notes
+      `,
+      [
+        advance.employeeProfileId,
+        advance.amount,
+        advance.currency,
+        advance.baseAmount,
+        advance.advanceDate,
+        advance.month,
+        advance.year,
+        advance.notes,
+        actor.userId
+      ]
+    );
+    const row = requireSingleRow(result.rows, "driver advance");
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.finance.driver_advance_created",
+      "tex_driver_advance",
+      row.id,
+      {
+        employee_profile_id: row.employee_profile_id
+      }
+    );
+
+    return mapDriverAdvance(row);
+  });
+}
+
+export async function deleteTexDriverAdvance(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  advanceId: string
+): Promise<void> {
+  assertTexPermission(actor, "tex.finance.review");
+  assertUuid(advanceId, "driver advance id");
+
+  await withTenantContext(client, actor, async () => {
+    const result = await client.query<{ id: string; employee_profile_id: string }>(
+      `
+        delete from public.tex_driver_advances
+        where tenant_id = public.current_tenant_id()
+          and id = $1
+        returning id, employee_profile_id
+      `,
+      [advanceId]
+    );
+    const row = requireSingleRow(result.rows, "driver advance");
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.finance.driver_advance_deleted",
+      "tex_driver_advance",
+      row.id,
+      {
+        employee_profile_id: row.employee_profile_id
+      }
+    );
+  });
+}
+
+export async function listTexNotifications(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<TexNotification[]> {
+  assertTexPermission(actor, "tex.expense.read");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexNotificationRow>(
+      `
+        select
+          id,
+          user_id,
+          title,
+          body,
+          type,
+          related_expense_id,
+          related_trip_id,
+          is_read,
+          created_at::text as created_at
+        from public.tex_notifications
+        where tenant_id = public.current_tenant_id()
+          and (user_id = $1 or ($2::boolean and user_id is null))
+        order by created_at desc
+        limit 100
+      `,
+      [actor.userId, canReadBroadcastTexNotifications(actor)]
+    );
+
+    return result.rows.map(mapNotification);
+  });
+}
+
+export async function createTexNotification(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexNotificationInput
+): Promise<TexNotification> {
+  assertTexPermission(actor, "tex.expense.manage");
+  const notification = sanitizeNotification(input);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexNotificationRow>(
+      `
+        insert into public.tex_notifications (
+          tenant_id,
+          user_id,
+          title,
+          body,
+          type,
+          related_expense_id,
+          related_trip_id,
+          created_by,
+          updated_by
+        )
+        values (
+          public.current_tenant_id(),
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $7
+        )
+        returning
+          id,
+          user_id,
+          title,
+          body,
+          type,
+          related_expense_id,
+          related_trip_id,
+          is_read,
+          created_at::text as created_at
+      `,
+      [
+        notification.userId,
+        notification.title,
+        notification.body,
+        notification.type,
+        notification.relatedExpenseId,
+        notification.relatedTripId,
+        actor.userId
+      ]
+    );
+    const row = requireSingleRow(result.rows, "notification");
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.notification.created",
+      "tex_notification",
+      row.id,
+      {
+        target_user_id: row.user_id ?? "broadcast"
+      }
+    );
+
+    return mapNotification(row);
+  });
+}
+
+export async function markTexNotificationRead(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  notificationId: string
+): Promise<TexNotification> {
+  assertTexPermission(actor, "tex.expense.read");
+  assertUuid(notificationId, "notification id");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexNotificationRow>(
+      `
+        update public.tex_notifications
+           set is_read = true,
+               updated_by = $1
+         where tenant_id = public.current_tenant_id()
+           and id = $2
+           and (user_id = $1 or ($3::boolean and user_id is null))
+        returning
+          id,
+          user_id,
+          title,
+          body,
+          type,
+          related_expense_id,
+          related_trip_id,
+          is_read,
+          created_at::text as created_at
+      `,
+      [actor.userId, notificationId, canReadBroadcastTexNotifications(actor)]
+    );
+    const row = requireSingleRow(result.rows, "notification");
+
+    await writeTexAuditEvent(client, actor, "tex.notification.read", "tex_notification", row.id, {
+      target_user_id: row.user_id ?? "broadcast"
+    });
+
+    return mapNotification(row);
+  });
+}
+
+export async function markAllTexNotificationsRead(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<{ updated: number }> {
+  assertTexPermission(actor, "tex.expense.read");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<{ id: string }>(
+      `
+        update public.tex_notifications
+           set is_read = true,
+               updated_by = $1
+         where tenant_id = public.current_tenant_id()
+           and is_read = false
+           and (user_id = $1 or ($2::boolean and user_id is null))
+        returning id
+      `,
+      [actor.userId, canReadBroadcastTexNotifications(actor)]
+    );
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.notification.read_all",
+      "tex_notification",
+      actor.userId,
+      {
+        updated: String(result.rows.length)
+      }
+    );
+
+    return { updated: result.rows.length };
   });
 }
 
@@ -1254,7 +1628,14 @@ export async function uploadTexReceiptFile(
         )
         returning id, storage_path, filename, content_type, size_bytes::int as size_bytes
       `,
-      [fileId, storagePath, receipt.fileName, receipt.contentType, receipt.buffer.length, actor.userId]
+      [
+        fileId,
+        storagePath,
+        receipt.fileName,
+        receipt.contentType,
+        receipt.buffer.length,
+        actor.userId
+      ]
     );
     const row = requireSingleRow(result.rows, "receipt file");
 
@@ -1274,7 +1655,9 @@ export async function uploadTexReceiptFile(
   });
 }
 
-export async function parseTexReceiptUpload(input: Pick<TexReceiptUploadInput, "contentType" | "dataBase64">): Promise<TexReceiptExtraction> {
+export async function parseTexReceiptUpload(
+  input: Pick<TexReceiptUploadInput, "contentType" | "dataBase64">
+): Promise<TexReceiptExtraction> {
   const contentType = cleanContentType(input.contentType);
   if (!contentType.startsWith("image/")) {
     throw new Error("OCR currently supports image receipts only.");
@@ -1500,10 +1883,17 @@ export async function recordTexWebhookSubmission(
       ]
     );
     const row = requireSingleRow(result.rows, "webhook submission");
-    await writeTexAuditEvent(client, actor, "tex.webhook.submission_recorded", "tex_unregistered_whatsapp_submission", row.id, {
-      provider: "whatsapp",
-      message_id: submission.messageId ?? ""
-    });
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.webhook.submission_recorded",
+      "tex_unregistered_whatsapp_submission",
+      row.id,
+      {
+        provider: "whatsapp",
+        message_id: submission.messageId ?? ""
+      }
+    );
 
     return {
       id: row.id,
@@ -1565,7 +1955,8 @@ export async function processTexWhatsappSubmission(
     }
 
     if (!settings.ai_receipt_extraction_enabled) {
-      const replyText = "Receipt received. AI extraction is disabled for your company, so the finance team will review it manually.";
+      const replyText =
+        "Receipt received. AI extraction is disabled for your company, so the finance team will review it manually.";
       const row = await insertWhatsappSubmission(client, actor, submission, {
         messageType,
         ocrStatus: "manual_review",
@@ -1578,7 +1969,8 @@ export async function processTexWhatsappSubmission(
     }
 
     if (!extraction || !extraction.expenseDate || !extraction.amount || !extraction.currency) {
-      const replyText = "Receipt received, but TEX could not read the key fields. It has been sent for manual review.";
+      const replyText =
+        "Receipt received, but TEX could not read the key fields. It has been sent for manual review.";
       const row = await insertWhatsappSubmission(client, actor, submission, {
         messageType,
         ocrStatus: extractionError ? "failed" : "manual_review",
@@ -1587,7 +1979,12 @@ export async function processTexWhatsappSubmission(
         replyText
       });
 
-      return { submission: row, replyText, expense: null, ocrStatus: extractionError ? "failed" : "manual_review" };
+      return {
+        submission: row,
+        replyText,
+        expense: null,
+        ocrStatus: extractionError ? "failed" : "manual_review"
+      };
     }
 
     const duplicate = settings.duplicate_detection_enabled
@@ -1615,9 +2012,16 @@ export async function processTexWhatsappSubmission(
       resolvedEmployeeProfileId: employee.id
     });
 
-    await writeTexAuditEvent(client, actor, "tex.whatsapp.receipt_processed", "tex_expense", expense.id, {
-      duplicate_status: duplicate ? (shouldAutoReject ? "duplicate" : "suspected") : "clear"
-    });
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.whatsapp.receipt_processed",
+      "tex_expense",
+      expense.id,
+      {
+        duplicate_status: duplicate ? (shouldAutoReject ? "duplicate" : "suspected") : "clear"
+      }
+    );
 
     return { submission: row, replyText, expense, ocrStatus: "extracted" };
   });
@@ -1764,10 +2168,17 @@ async function insertWhatsappSubmission(
   );
   const row = requireSingleRow(result.rows, "webhook submission");
 
-  await writeTexAuditEvent(client, actor, "tex.webhook.submission_recorded", "tex_unregistered_whatsapp_submission", row.id, {
-    provider: "whatsapp",
-    message_id: submission.messageId ?? ""
-  });
+  await writeTexAuditEvent(
+    client,
+    actor,
+    "tex.webhook.submission_recorded",
+    "tex_unregistered_whatsapp_submission",
+    row.id,
+    {
+      provider: "whatsapp",
+      message_id: submission.messageId ?? ""
+    }
+  );
 
   return {
     id: row.id,
@@ -1775,7 +2186,9 @@ async function insertWhatsappSubmission(
   };
 }
 
-async function getTexIntegrationSettingsForProcessing(client: TenantQueryClient): Promise<TexProcessingSettingsRow> {
+async function getTexIntegrationSettingsForProcessing(
+  client: TenantQueryClient
+): Promise<TexProcessingSettingsRow> {
   const result = await client.query<TexProcessingSettingsRow>(
     `
       select
@@ -1892,7 +2305,11 @@ async function createExpenseFromWhatsappReceipt(
     shouldAutoReject: boolean;
   }
 ): Promise<TexExpenseRecord> {
-  const duplicateStatus = input.duplicate ? (input.shouldAutoReject ? "duplicate" : "suspected") : "clear";
+  const duplicateStatus = input.duplicate
+    ? input.shouldAutoReject
+      ? "duplicate"
+      : "suspected"
+    : "clear";
   const duplicateReason = input.duplicate
     ? `Matched ${input.duplicate.vendor ?? "existing receipt"} on employee, date, amount, and currency.`
     : null;
@@ -2038,7 +2455,12 @@ function sanitizeExpense(input: TexExpenseInput): Required<TexExpenseInput> {
     receiptFileId: cleanOptional(input.receiptFileId),
     extractionSource: sanitizeExtractionSource(input.extractionSource),
     extractionConfidence: sanitizeExtractionConfidence(input.extractionConfidence),
-    extractionPayload: input.extractionPayload && typeof input.extractionPayload === "object" && !Array.isArray(input.extractionPayload) ? input.extractionPayload : {},
+    extractionPayload:
+      input.extractionPayload &&
+      typeof input.extractionPayload === "object" &&
+      !Array.isArray(input.extractionPayload)
+        ? input.extractionPayload
+        : {},
     source: cleanOptional(input.source) ?? "web"
   };
 }
@@ -2062,12 +2484,23 @@ function cleanContentType(value: string) {
 }
 
 function sanitizeFileName(value: string) {
-  const name = value.trim().replace(/[^\w.\- ()]/g, "_").slice(0, 160);
+  const name = value
+    .trim()
+    .replace(/[^\w.\- ()]/g, "_")
+    .slice(0, 160);
   return name || "receipt";
 }
 
 function isAllowedReceiptType(contentType: string) {
-  return ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"].includes(contentType);
+  return [
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+    "application/pdf"
+  ].includes(contentType);
 }
 
 function receiptBufferFromBase64(value: string) {
@@ -2090,7 +2523,7 @@ function receiptBufferFromBase64(value: string) {
 
 function stripDataUrl(value: string) {
   const trimmed = value.trim();
-  return trimmed.includes(",") ? trimmed.split(",").pop()?.trim() ?? "" : trimmed;
+  return trimmed.includes(",") ? (trimmed.split(",").pop()?.trim() ?? "") : trimmed;
 }
 
 function extensionForContentType(contentType: string) {
@@ -2118,7 +2551,9 @@ function supabaseProjectUrl() {
 function supabaseServiceRoleKey() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!key) {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured on the customer portal Vercel project.");
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY is not configured on the customer portal Vercel project."
+    );
   }
 
   return key;
@@ -2128,15 +2563,18 @@ async function uploadReceiptObject(storagePath: string, contentType: string, buf
   const bucket = receiptBucketName();
   const encodedPath = storagePath.split("/").map(encodeURIComponent).join("/");
   const serviceKey = supabaseServiceRoleKey();
-  const response = await fetch(`${supabaseProjectUrl()}/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`, {
-    method: "POST",
-    headers: {
-      ...supabaseServiceHeaders(serviceKey),
-      "Content-Type": contentType,
-      "x-upsert": "false"
-    },
-    body: buffer
-  });
+  const response = await fetch(
+    `${supabaseProjectUrl()}/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`,
+    {
+      method: "POST",
+      headers: {
+        ...supabaseServiceHeaders(serviceKey),
+        "Content-Type": contentType,
+        "x-upsert": "false"
+      },
+      body: buffer
+    }
+  );
 
   if (!response.ok) {
     const text = await response.text();
@@ -2156,7 +2594,9 @@ function supabaseServiceHeaders(key: string) {
   return headers;
 }
 
-function sanitizeExtractionSource(value: TexExpenseInput["extractionSource"]): "manual" | "web_ai" | "whatsapp_ai" {
+function sanitizeExtractionSource(
+  value: TexExpenseInput["extractionSource"]
+): "manual" | "web_ai" | "whatsapp_ai" {
   if (value === "web_ai" || value === "whatsapp_ai") {
     return value;
   }
@@ -2177,7 +2617,9 @@ function sanitizeExtractionConfidence(value: unknown) {
   return Math.min(Math.max(parsed, 0), 1);
 }
 
-function sanitizeWebhookSubmission(input: TexWebhookSubmissionInput): Required<TexWebhookSubmissionInput> {
+function sanitizeWebhookSubmission(
+  input: TexWebhookSubmissionInput
+): Required<TexWebhookSubmissionInput> {
   return {
     senderRaw: cleanOptional(input.senderRaw),
     senderPhone: cleanOptional(input.senderPhone),
@@ -2203,7 +2645,8 @@ function sanitizeTrip(input: TexTripInput): Required<TexTripInput> {
   const tripType = input.tripType === "logistics" ? "logistics" : "general";
   const budgetAmount = optionalNonNegative(input.budgetAmount, "budget amount");
   const driverTripAmount = optionalNonNegative(input.driverTripAmount, "driver trip amount") ?? 0;
-  const subcontractorAmount = optionalNonNegative(input.subcontractorAmount, "subcontractor amount") ?? 0;
+  const subcontractorAmount =
+    optionalNonNegative(input.subcontractorAmount, "subcontractor amount") ?? 0;
   const enforceCurrency = Boolean(input.enforceCurrency);
   const enforcedCurrency = cleanOptional(input.enforcedCurrency)?.toUpperCase() ?? null;
 
@@ -2236,7 +2679,10 @@ function sanitizeTripLegs(input: TexTripLegInput[]): Required<TexTripLegInput>[]
   return input.map((leg, index) => sanitizeTripLeg(leg, index + 1));
 }
 
-function sanitizeTripLeg(input: TexTripLegInput, fallbackSequence: number): Required<TexTripLegInput> {
+function sanitizeTripLeg(
+  input: TexTripLegInput,
+  fallbackSequence: number
+): Required<TexTripLegInput> {
   const origin = input.origin.trim();
   const destination = input.destination.trim();
 
@@ -2256,7 +2702,11 @@ function sanitizeTripLeg(input: TexTripLegInput, fallbackSequence: number): Requ
   const returnDistanceKm = optionalNonNegative(input.returnDistanceKm, "leg return distance");
   const totalDistanceKm =
     optionalNonNegative(input.totalDistanceKm, "leg total distance") ??
-    (distanceKm === null ? null : input.isReturnTrip ? distanceKm + (returnDistanceKm ?? distanceKm) : distanceKm);
+    (distanceKm === null
+      ? null
+      : input.isReturnTrip
+        ? distanceKm + (returnDistanceKm ?? distanceKm)
+        : distanceKm);
 
   return {
     id: cleanOptional(input.id),
@@ -2273,14 +2723,22 @@ function sanitizeTripLeg(input: TexTripLegInput, fallbackSequence: number): Requ
     destinationCountry: cleanOptional(input.destinationCountry),
     mode,
     status,
-    plannedStart: input.plannedStart ? parseIsoDate(input.plannedStart.slice(0, 10), "planned start") : null,
-    plannedEnd: input.plannedEnd ? parseIsoDate(input.plannedEnd.slice(0, 10), "planned end") : null,
-    actualStart: input.actualStart ? parseIsoDate(input.actualStart.slice(0, 10), "actual start") : null,
+    plannedStart: input.plannedStart
+      ? parseIsoDate(input.plannedStart.slice(0, 10), "planned start")
+      : null,
+    plannedEnd: input.plannedEnd
+      ? parseIsoDate(input.plannedEnd.slice(0, 10), "planned end")
+      : null,
+    actualStart: input.actualStart
+      ? parseIsoDate(input.actualStart.slice(0, 10), "actual start")
+      : null,
     actualEnd: input.actualEnd ? parseIsoDate(input.actualEnd.slice(0, 10), "actual end") : null,
     distanceKm,
     isReturnTrip: Boolean(input.isReturnTrip),
     returnDistanceKm: input.isReturnTrip ? returnDistanceKm : null,
-    returnDurationSeconds: input.isReturnTrip ? optionalInteger(input.returnDurationSeconds, "return duration") : null,
+    returnDurationSeconds: input.isReturnTrip
+      ? optionalInteger(input.returnDurationSeconds, "return duration")
+      : null,
     totalDistanceKm,
     durationSeconds: optionalInteger(input.durationSeconds, "duration"),
     distanceSource: cleanOptional(input.distanceSource),
@@ -2341,7 +2799,12 @@ function sanitizeTripLegStatus(value: string | null | undefined): TexTripLegStat
     return "planned";
   }
 
-  if (value === "planned" || value === "in_transit" || value === "completed" || value === "cancelled") {
+  if (
+    value === "planned" ||
+    value === "in_transit" ||
+    value === "completed" ||
+    value === "cancelled"
+  ) {
     return value;
   }
 
@@ -2428,6 +2891,78 @@ function sanitizeFinancePeriod(month: number, year: number) {
   return { month: parsedMonth, year: parsedYear };
 }
 
+function sanitizeDriverAdvance(input: TexDriverAdvanceInput): Required<TexDriverAdvanceInput> {
+  const employeeProfileId = cleanRequired(input.employeeProfileId, "Driver employee profile");
+  assertUuid(employeeProfileId, "driver employee profile id");
+
+  const amount = Number(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Driver advance amount must be greater than zero.");
+  }
+
+  const currency = cleanOptional(input.currency)?.toUpperCase() ?? "AED";
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new Error("Driver advance currency must be a three-letter ISO code.");
+  }
+
+  const now = new Date();
+  const advanceDate = input.advanceDate
+    ? parseIsoDate(input.advanceDate, "driver advance date")
+    : now.toISOString().slice(0, 10);
+  const month = input.month ?? Number(advanceDate.slice(5, 7));
+  const year = input.year ?? Number(advanceDate.slice(0, 4));
+  const period = sanitizeFinancePeriod(month, year);
+
+  return {
+    employeeProfileId,
+    amount,
+    currency,
+    baseAmount: optionalNonNegative(input.baseAmount, "driver advance base amount") ?? amount,
+    advanceDate,
+    month: period.month,
+    year: period.year,
+    notes: cleanOptional(input.notes)
+  };
+}
+
+function sanitizeNotification(input: TexNotificationInput): Required<TexNotificationInput> {
+  const userId = cleanOptional(input.userId);
+  const relatedExpenseId = cleanOptional(input.relatedExpenseId);
+  const relatedTripId = cleanOptional(input.relatedTripId);
+
+  if (userId) {
+    assertUuid(userId, "notification user id");
+  }
+
+  if (relatedExpenseId) {
+    assertUuid(relatedExpenseId, "related expense id");
+  }
+
+  if (relatedTripId) {
+    assertUuid(relatedTripId, "related trip id");
+  }
+
+  return {
+    userId,
+    title: cleanRequired(input.title, "Notification title"),
+    body: cleanOptional(input.body),
+    type: cleanOptional(input.type),
+    relatedExpenseId,
+    relatedTripId
+  };
+}
+
+function canReadBroadcastTexNotifications(actor: TexActorContext) {
+  return actor.roles.some((role) =>
+    [
+      "customer_admin",
+      "customer_module_admin",
+      "customer_manager",
+      "torrevie_platform_admin"
+    ].includes(role)
+  );
+}
+
 function uniqueUuids(values: string[], label: string) {
   const unique = Array.from(new Set(values));
 
@@ -2458,7 +2993,9 @@ function parseIsoDate(value: string, label: string) {
   return trimmed;
 }
 
-function assertExpenseStatus(status: string): asserts status is Exclude<TexExpenseStatus, "pending"> {
+function assertExpenseStatus(
+  status: string
+): asserts status is Exclude<TexExpenseStatus, "pending"> {
   if (status !== "approved" && status !== "rejected" && status !== "paid") {
     throw new Error(`Unsupported TEX expense status: ${status}`);
   }
@@ -2485,7 +3022,9 @@ function cleanRequired(value: string | null | undefined, label: string) {
   return clean;
 }
 
-function classifyWhatsappMessage(submission: Required<TexWebhookSubmissionInput>): "receipt" | "status" | "text" {
+function classifyWhatsappMessage(
+  submission: Required<TexWebhookSubmissionInput>
+): "receipt" | "status" | "text" {
   if (submission.messageText?.trim().toUpperCase() === "STATUS") {
     return "status";
   }
@@ -2679,6 +3218,34 @@ function mapFinanceTripPayout(row: TexFinanceTripPayoutRow): TexFinanceTripPayou
   };
 }
 
+function mapDriverAdvance(row: TexDriverAdvanceRow): TexDriverAdvance {
+  return {
+    id: row.id,
+    employeeProfileId: row.employee_profile_id,
+    amount: row.amount,
+    currency: row.currency,
+    baseAmount: row.base_amount,
+    advanceDate: row.advance_date,
+    month: row.month,
+    year: row.year,
+    notes: row.notes
+  };
+}
+
+function mapNotification(row: TexNotificationRow): TexNotification {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    title: row.title,
+    body: row.body,
+    type: row.type,
+    relatedExpenseId: row.related_expense_id,
+    relatedTripId: row.related_trip_id,
+    isRead: row.is_read,
+    createdAt: row.created_at
+  };
+}
+
 type TexExpenseCategoryRow = {
   id: string;
   name: string;
@@ -2822,6 +3389,30 @@ type TexFinanceTripPayoutRow = {
   total_amount: number;
 };
 
+type TexDriverAdvanceRow = {
+  id: string;
+  employee_profile_id: string;
+  amount: number;
+  currency: string;
+  base_amount: number;
+  advance_date: string;
+  month: number;
+  year: number;
+  notes: string | null;
+};
+
+type TexNotificationRow = {
+  id: string;
+  user_id: string | null;
+  title: string;
+  body: string | null;
+  type: string | null;
+  related_expense_id: string | null;
+  related_trip_id: string | null;
+  is_read: boolean;
+  created_at: string;
+};
+
 type TexWebhookSubmissionRow = {
   id: string;
   status: "open" | "resolved" | "ignored";
@@ -2860,5 +3451,7 @@ function isRoleKey(value: string): value is RoleKey {
 }
 
 function isProductKey(value: string): value is ProductKey {
-  return value === "crm" || value === "fsm" || value === "tex" || value === "cme" || value === "lqs";
+  return (
+    value === "crm" || value === "fsm" || value === "tex" || value === "cme" || value === "lqs"
+  );
 }

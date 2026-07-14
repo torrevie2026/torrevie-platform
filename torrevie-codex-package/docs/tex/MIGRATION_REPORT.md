@@ -36,15 +36,17 @@ Already present in the Torrevie Platform:
 
 ## This Pass
 
-This pass activates the existing platform TEX route and API boundary:
+Completed platform migration checkpoints so far:
 
 - Replaced the disabled App Router TEX API shim with a shared-auth, shared-tenant-context dispatcher into `handleTexApiRequest`.
 - Replaced the localized TEX placeholder page with a server-rendered tenant-scoped workspace using the migrated TEX clients.
-- Kept `_migration-source` untouched.
+- Preserved the copied TEX source bundle under `_migration-source` as reference material, with runtime/build artifacts and local environment files excluded.
+- Added platform-native compatibility handlers for source notification routes, driver advance create/delete, and the legacy maps autocomplete path.
+- Kept `tex1.torrevie.com` untouched; no DNS, Vercel, live environment, or shutdown action is part of this migration branch.
 
 ## Remaining Gaps
 
-- Source reports, full settings/policy/budget administration, unregistered WhatsApp review UI, employee invitation UX, onboarding flow, email queue behavior, and several admin-only source screens still need platform-specific migration or explicit rejection.
+- Source reports, full settings/policy/budget administration, unregistered WhatsApp review UI, employee invitation UX, onboarding flow, dashboard metrics, email queue behavior, and several admin-only source screens still need platform-specific migration or explicit rejection.
 - Source Edge Functions need a dedicated pass to decide whether each becomes an App Router route, a shared notification integration, or remains deferred.
 - Storage bucket policies need verification against the platform `tenant/{tenant_id}/tex/...` convention for all receipt and company-logo behavior.
 - End-to-end browser verification against seeded TEX data remains required.

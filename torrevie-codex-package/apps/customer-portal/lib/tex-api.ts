@@ -1,14 +1,20 @@
 import type { TenantQueryClient } from "@torrevie/tenant-context";
 import {
   closeTexTrip,
+  createTexDriverAdvance,
   createTexExpense,
+  createTexNotification,
   createTexTrip,
+  deleteTexDriverAdvance,
   deleteTexTripLeg,
   listTexBootstrap,
   listTexExpenses,
   listTexFinanceReview,
+  listTexNotifications,
   listTexTripLegs,
   listTexTrips,
+  markAllTexNotificationsRead,
+  markTexNotificationRead,
   payTexFinanceItems,
   parseTexReceiptUpload,
   processTexWhatsappSubmission,
@@ -18,9 +24,11 @@ import {
   updateTexExpenseStatus,
   uploadTexReceiptFile,
   type TexActorContext,
+  type TexDriverAdvanceInput,
   type TexExpenseInput,
   type TexExpenseStatus,
   type TexFinancePaymentInput,
+  type TexNotificationInput,
   type TexReceiptUploadInput,
   type TexTripLegInput,
   type TexTripInput,
@@ -78,7 +86,8 @@ export async function handleTexApiRequest(
 
   if (path === "/admin" || path.startsWith("/admin/")) {
     return json(410, {
-      error: "TEX administration has moved to admin.torrevie.com. Customer TEX work remains under app.torrevie.com/tex."
+      error:
+        "TEX administration has moved to admin.torrevie.com. Customer TEX work remains under app.torrevie.com/tex."
     });
   }
 
@@ -91,19 +100,31 @@ export async function handleTexApiRequest(
   }
 
   if (path === "/expenses" && method === "POST") {
-    return json(201, { expense: await createTexExpense(client, actor, request.body as TexExpenseInput) });
+    return json(201, {
+      expense: await createTexExpense(client, actor, request.body as TexExpenseInput)
+    });
   }
 
   if (path === "/receipts" && method === "POST") {
-    return json(201, { receipt: await uploadTexReceiptFile(client, actor, request.body as TexReceiptUploadInput) });
+    return json(201, {
+      receipt: await uploadTexReceiptFile(client, actor, request.body as TexReceiptUploadInput)
+    });
   }
 
   if (path === "/receipts/parse" && method === "POST") {
     const body = readRecord(request.body);
-    return json(200, await parseTexReceiptUpload({
-      contentType: readOptionalString(body.contentType) ?? readOptionalString(body.content_type) ?? "",
-      dataBase64: readOptionalString(body.dataBase64) ?? readOptionalString(body.data_base64) ?? readOptionalString(body.image_base64) ?? ""
-    }));
+    return json(
+      200,
+      await parseTexReceiptUpload({
+        contentType:
+          readOptionalString(body.contentType) ?? readOptionalString(body.content_type) ?? "",
+        dataBase64:
+          readOptionalString(body.dataBase64) ??
+          readOptionalString(body.data_base64) ??
+          readOptionalString(body.image_base64) ??
+          ""
+      })
+    );
   }
 
   if (path === "/trips" && method === "GET") {
@@ -116,6 +137,20 @@ export async function handleTexApiRequest(
 
   if (path === "/places" && method === "GET") {
     return json(200, await googlePlaceSuggestions(request.query?.input ?? ""));
+  }
+
+  if (path === "/maps/places/autocomplete" && method === "POST") {
+    const body = readRecord(request.body);
+    const suggestions = await googlePlaceSuggestions(readOptionalString(body.input) ?? "");
+    return json(200, {
+      configured: suggestions.configured,
+      suggestions: suggestions.places.map((place) => ({
+        placeId: place.placeId,
+        place_id: place.placeId,
+        text: place.text,
+        description: place.text
+      }))
+    });
   }
 
   const tripLegsMatch = path.match(/^\/trips\/([0-9a-f-]+)\/legs$/i);
@@ -141,16 +176,57 @@ export async function handleTexApiRequest(
 
   if (path === "/finance-review" && method === "GET") {
     const query = request.query ?? {};
-    return json(200, await listTexFinanceReview(client, actor, readInteger(query.month), readInteger(query.year)));
+    return json(
+      200,
+      await listTexFinanceReview(client, actor, readInteger(query.month), readInteger(query.year))
+    );
   }
 
   if (path === "/finance-review/pay" && method === "POST") {
-    return json(200, await payTexFinanceItems(client, actor, request.body as TexFinancePaymentInput));
+    return json(
+      200,
+      await payTexFinanceItems(client, actor, request.body as TexFinancePaymentInput)
+    );
+  }
+
+  if (path === "/driver-advances" && method === "POST") {
+    return json(201, {
+      advance: await createTexDriverAdvance(client, actor, readDriverAdvanceInput(request.body))
+    });
+  }
+
+  const driverAdvanceMatch = path.match(/^\/driver-advances\/([0-9a-f-]+)$/i);
+  if (driverAdvanceMatch && method === "DELETE") {
+    await deleteTexDriverAdvance(client, actor, driverAdvanceMatch[1] ?? "");
+    return json(200, { ok: true });
+  }
+
+  if (path === "/notifications" && method === "GET") {
+    return json(200, { notifications: await listTexNotifications(client, actor) });
+  }
+
+  if (path === "/notifications" && method === "POST") {
+    return json(201, {
+      notification: await createTexNotification(client, actor, readNotificationInput(request.body))
+    });
+  }
+
+  if (path === "/notifications/read-all" && method === "PATCH") {
+    return json(200, await markAllTexNotificationsRead(client, actor));
+  }
+
+  const notificationReadMatch = path.match(/^\/notifications\/([0-9a-f-]+)\/read$/i);
+  if (notificationReadMatch && method === "PATCH") {
+    return json(200, {
+      notification: await markTexNotificationRead(client, actor, notificationReadMatch[1] ?? "")
+    });
   }
 
   const tripMatch = path.match(/^\/trips\/([0-9a-f-]+)$/i);
   if (tripMatch && method === "PATCH") {
-    return json(200, { trip: await updateTexTrip(client, actor, tripMatch[1] ?? "", request.body as TexTripInput) });
+    return json(200, {
+      trip: await updateTexTrip(client, actor, tripMatch[1] ?? "", request.body as TexTripInput)
+    });
   }
 
   const closeTripMatch = path.match(/^\/trips\/([0-9a-f-]+)\/close$/i);
@@ -180,12 +256,19 @@ export async function handleTexApiRequest(
 
   if (path === "/webhook-submissions" && method === "POST") {
     return json(201, {
-      submission: await recordTexWebhookSubmission(client, actor, request.body as TexWebhookSubmissionInput)
+      submission: await recordTexWebhookSubmission(
+        client,
+        actor,
+        request.body as TexWebhookSubmissionInput
+      )
     });
   }
 
   if (path === "/webhook-submissions/process" && method === "POST") {
-    return json(201, await processTexWhatsappSubmission(client, actor, request.body as TexWebhookSubmissionInput));
+    return json(
+      201,
+      await processTexWhatsappSubmission(client, actor, request.body as TexWebhookSubmissionInput)
+    );
   }
 
   return json(404, { error: "TEX API route was not found." });
@@ -202,7 +285,9 @@ function normalizePath(path: string) {
 }
 
 function readRecord(value: unknown) {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function readGoogleEstimateInput(value: unknown): ResolvedGoogleRouteEstimateInput {
@@ -210,10 +295,46 @@ function readGoogleEstimateInput(value: unknown): ResolvedGoogleRouteEstimateInp
 
   return {
     origin: readOptionalString(body.origin) ?? "",
-    originPlaceId: readOptionalString(body.originPlaceId) ?? readOptionalString(body.origin_place_id),
+    originPlaceId:
+      readOptionalString(body.originPlaceId) ?? readOptionalString(body.origin_place_id),
     destination: readOptionalString(body.destination) ?? "",
-    destinationPlaceId: readOptionalString(body.destinationPlaceId) ?? readOptionalString(body.destination_place_id),
+    destinationPlaceId:
+      readOptionalString(body.destinationPlaceId) ?? readOptionalString(body.destination_place_id),
     returnToOrigin: body.returnToOrigin === true || body.return_to_origin === true
+  };
+}
+
+function readDriverAdvanceInput(value: unknown): TexDriverAdvanceInput {
+  const body = readRecord(value);
+
+  return {
+    employeeProfileId:
+      readOptionalString(body.employeeProfileId) ??
+      readOptionalString(body.employee_profile_id) ??
+      readOptionalString(body.employeeId) ??
+      readOptionalString(body.employee_id),
+    amount: readNumber(body.amount, "driver advance amount"),
+    currency: readOptionalString(body.currency),
+    baseAmount: readOptionalNumber(body.baseAmount) ?? readOptionalNumber(body.base_amount),
+    advanceDate: readOptionalString(body.advanceDate) ?? readOptionalString(body.advance_date),
+    month: readOptionalInteger(body.month),
+    year: readOptionalInteger(body.year),
+    notes: readOptionalString(body.notes)
+  };
+}
+
+function readNotificationInput(value: unknown): TexNotificationInput {
+  const body = readRecord(value);
+
+  return {
+    userId: readOptionalString(body.userId) ?? readOptionalString(body.user_id),
+    title: readOptionalString(body.title) ?? "",
+    body: readOptionalString(body.body),
+    type: readOptionalString(body.type),
+    relatedExpenseId:
+      readOptionalString(body.relatedExpenseId) ?? readOptionalString(body.related_expense_id),
+    relatedTripId:
+      readOptionalString(body.relatedTripId) ?? readOptionalString(body.related_trip_id)
   };
 }
 
@@ -237,6 +358,32 @@ function readInteger(value: unknown) {
   }
 
   return parsed;
+}
+
+function readOptionalInteger(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  return readInteger(value);
+}
+
+function readNumber(value: unknown, label: string) {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Invalid ${label}.`);
+  }
+
+  return parsed;
+}
+
+function readOptionalNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  return readNumber(value, "number");
 }
 
 function googleMapsApiKey() {
@@ -270,7 +417,8 @@ async function googlePlaceSuggestions(input: string): Promise<GooglePlaceSuggest
     headers: {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": key,
-      "X-Goog-FieldMask": "suggestions.placePrediction.placeId,suggestions.placePrediction.text.text"
+      "X-Goog-FieldMask":
+        "suggestions.placePrediction.placeId,suggestions.placePrediction.text.text"
     },
     body: JSON.stringify({ input: trimmed })
   });
@@ -280,8 +428,11 @@ async function googlePlaceSuggestions(input: string): Promise<GooglePlaceSuggest
   };
 
   if (!response.ok) {
-    const error = new Error(result.error?.message || `Google Places rejected the request (${response.status}).`);
-    (error as Error & { statusCode?: number }).statusCode = response.status === 401 || response.status === 403 ? 502 : response.status;
+    const error = new Error(
+      result.error?.message || `Google Places rejected the request (${response.status}).`
+    );
+    (error as Error & { statusCode?: number }).statusCode =
+      response.status === 401 || response.status === 403 ? 502 : response.status;
     throw error;
   }
 
@@ -305,7 +456,14 @@ function googleWaypoint(input: { placeId?: string | null; address: string }) {
   return { address: input.address };
 }
 
-async function googleRouteEstimate(input: ResolvedGoogleRouteEstimateInput): Promise<Omit<GoogleRouteEstimate, "isReturnTrip" | "returnDistanceKm" | "returnDurationSeconds" | "totalDistanceKm">> {
+async function googleRouteEstimate(
+  input: ResolvedGoogleRouteEstimateInput
+): Promise<
+  Omit<
+    GoogleRouteEstimate,
+    "isReturnTrip" | "returnDistanceKm" | "returnDurationSeconds" | "totalDistanceKm"
+  >
+> {
   const key = googleMapsApiKey();
 
   if (!input.origin.trim() || !input.destination.trim()) {
@@ -327,7 +485,10 @@ async function googleRouteEstimate(input: ResolvedGoogleRouteEstimateInput): Pro
     },
     body: JSON.stringify({
       origin: googleWaypoint({ placeId: input.originPlaceId, address: input.origin }),
-      destination: googleWaypoint({ placeId: input.destinationPlaceId, address: input.destination }),
+      destination: googleWaypoint({
+        placeId: input.destinationPlaceId,
+        address: input.destination
+      }),
       travelMode: "DRIVE",
       routingPreference: "TRAFFIC_UNAWARE",
       units: "METRIC"
@@ -335,12 +496,19 @@ async function googleRouteEstimate(input: ResolvedGoogleRouteEstimateInput): Pro
   });
   const result = (await response.json().catch(() => ({}))) as {
     error?: { message?: string };
-    routes?: Array<{ distanceMeters?: number; duration?: string; polyline?: { encodedPolyline?: string } }>;
+    routes?: Array<{
+      distanceMeters?: number;
+      duration?: string;
+      polyline?: { encodedPolyline?: string };
+    }>;
   };
 
   if (!response.ok) {
-    const error = new Error(result.error?.message || `Google Routes rejected the request (${response.status}).`);
-    (error as Error & { statusCode?: number }).statusCode = response.status === 401 || response.status === 403 ? 502 : response.status;
+    const error = new Error(
+      result.error?.message || `Google Routes rejected the request (${response.status}).`
+    );
+    (error as Error & { statusCode?: number }).statusCode =
+      response.status === 401 || response.status === 403 ? 502 : response.status;
     throw error;
   }
 
@@ -362,7 +530,9 @@ async function googleRouteEstimate(input: ResolvedGoogleRouteEstimateInput): Pro
   };
 }
 
-async function googleReturnRouteEstimate(input: ResolvedGoogleRouteEstimateInput): Promise<GoogleRouteEstimate> {
+async function googleReturnRouteEstimate(
+  input: ResolvedGoogleRouteEstimateInput
+): Promise<GoogleRouteEstimate> {
   const outbound = await googleRouteEstimate(input);
 
   if (!input.returnToOrigin) {

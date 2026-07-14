@@ -48,6 +48,60 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("from public.tex_notifications")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000010001",
+            user_id: actor.userId,
+            title: "Expense approved",
+            body: "Airport Cafe was approved.",
+            type: "expense",
+            related_expense_id: "00000000-0000-4000-8000-000000006001",
+            related_trip_id: null,
+            is_read: false,
+            created_at: "2026-07-12T10:00:00.000Z"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_notifications")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000010002",
+            user_id: values[0],
+            title: values[1],
+            body: values[2],
+            type: values[3],
+            related_expense_id: values[4],
+            related_trip_id: values[5],
+            is_read: false,
+            created_at: "2026-07-12T10:00:00.000Z"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("update public.tex_notifications")) {
+      return {
+        rows: [
+          {
+            id: sql.includes("and id = $2") ? values[1] : "00000000-0000-4000-8000-000000010001",
+            user_id: actor.userId,
+            title: "Expense approved",
+            body: "Airport Cafe was approved.",
+            type: "expense",
+            related_expense_id: "00000000-0000-4000-8000-000000006001",
+            related_trip_id: null,
+            is_read: true,
+            created_at: "2026-07-12T10:00:00.000Z"
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("insert into public.tex_expenses")) {
       return {
         rows: [
@@ -105,7 +159,10 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
-    if (sql.includes("from public.tex_trips t") && sql.includes("driver_payout_status = 'unpaid'")) {
+    if (
+      sql.includes("from public.tex_trips t") &&
+      sql.includes("driver_payout_status = 'unpaid'")
+    ) {
       return {
         rows: [
           {
@@ -197,7 +254,9 @@ class RecordingTexApiClient implements TenantQueryClient {
       return {
         rows: [
           {
-            id: sql.includes("insert into public.tex_trips") ? "00000000-0000-4000-8000-000000008001" : values[18],
+            id: sql.includes("insert into public.tex_trips")
+              ? "00000000-0000-4000-8000-000000008001"
+              : values[18],
             name: values[0] ?? "Dubai run",
             description: values[1] ?? null,
             trip_type: values[2] ?? "general",
@@ -222,6 +281,35 @@ class RecordingTexApiClient implements TenantQueryClient {
             total_distance_km: 0,
             expense_count: 0,
             spend_amount: 0
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_driver_advances")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000011001",
+            employee_profile_id: values[0],
+            amount: values[1],
+            currency: values[2],
+            base_amount: values[3],
+            advance_date: values[4],
+            month: values[5],
+            year: values[6],
+            notes: values[7]
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("delete from public.tex_driver_advances")) {
+      return {
+        rows: [
+          {
+            id: values[0],
+            employee_profile_id: "00000000-0000-4000-8000-000000004001"
           }
         ] as Row[]
       };
@@ -313,7 +401,10 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
-    if (sql.includes("insert into public.tex_trip_legs") || sql.includes("update public.tex_trip_legs")) {
+    if (
+      sql.includes("insert into public.tex_trip_legs") ||
+      sql.includes("update public.tex_trip_legs")
+    ) {
       return {
         rows: [
           {
@@ -522,6 +613,41 @@ async function main() {
 
   {
     const client = new RecordingTexApiClient();
+    const previousKey = process.env.GOOGLE_MAPS_API_KEY;
+    const previousFetch = globalThis.fetch;
+    process.env.GOOGLE_MAPS_API_KEY = "test-google-key";
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          suggestions: [
+            {
+              placePrediction: {
+                placeId: "places/airport",
+                text: { text: "Dubai International Airport" }
+              }
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    const response = await handleTexApiRequest(client, actor, {
+      method: "POST",
+      path: "/maps/places/autocomplete",
+      body: { input: "Dubai airport" }
+    });
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) {
+      delete process.env.GOOGLE_MAPS_API_KEY;
+    } else {
+      process.env.GOOGLE_MAPS_API_KEY = previousKey;
+    }
+    assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /Dubai International Airport/);
+    assert.match(JSON.stringify(response.body), /place_id/);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
     const previousKeys = {
       GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
       GOOGLE_MAPS_PLATFORM_KEY: process.env.GOOGLE_MAPS_PLATFORM_KEY,
@@ -656,6 +782,84 @@ async function main() {
     assert.equal(response.status, 200);
     assert.equal(client.valuesContain("tex.finance.expense_paid"), true);
     assert.equal(client.valuesContain("tex.finance.trip_payout_paid"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "POST",
+      path: "/driver-advances",
+      body: {
+        employee_id: "00000000-0000-4000-8000-000000004001",
+        amount: 100,
+        currency: "AED",
+        advance_date: "2026-07-12"
+      }
+    });
+    assert.equal(response.status, 201);
+    assert.equal(client.hasSql("insert into public.tex_driver_advances"), true);
+    assert.equal(client.valuesContain("tex.finance.driver_advance_created"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "DELETE",
+      path: "/driver-advances/00000000-0000-4000-8000-000000011001"
+    });
+    assert.equal(response.status, 200);
+    assert.equal(client.hasSql("delete from public.tex_driver_advances"), true);
+    assert.equal(client.valuesContain("tex.finance.driver_advance_deleted"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "GET",
+      path: "/notifications"
+    });
+    assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /Expense approved/);
+    assert.equal(client.hasSql("from public.tex_notifications"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "POST",
+      path: "/notifications",
+      body: {
+        user_id: actor.userId,
+        title: "Expense approved",
+        body: "Airport Cafe was approved.",
+        related_expense_id: "00000000-0000-4000-8000-000000006001"
+      }
+    });
+    assert.equal(response.status, 201);
+    assert.equal(client.hasSql("insert into public.tex_notifications"), true);
+    assert.equal(client.valuesContain("tex.notification.created"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "PATCH",
+      path: "/notifications/00000000-0000-4000-8000-000000010001/read"
+    });
+    assert.equal(response.status, 200);
+    assert.equal(client.hasSql("update public.tex_notifications"), true);
+    assert.equal(client.valuesContain("tex.notification.read"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "PATCH",
+      path: "/notifications/read-all"
+    });
+    assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /updated/);
+    assert.equal(client.valuesContain("tex.notification.read_all"), true);
   }
 
   {
