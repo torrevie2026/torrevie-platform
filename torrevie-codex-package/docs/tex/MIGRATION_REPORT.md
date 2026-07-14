@@ -49,6 +49,7 @@ Completed platform migration checkpoints so far:
 - Added platform-native TEX People controls for tenant-scoped WhatsApp employee profile create/update/delete, plus compatibility routes for `/api/tex/people` and `/api/tex/people/employees`.
 - Kept TEX web user invitations, role assignment, and account status management in the shared customer administration module instead of porting source standalone auth/user-reset flows.
 - Rejected the source standalone company onboarding flow as a TEX-specific tenancy mechanism; platform tenant provisioning remains the canonical onboarding path.
+- Rejected source standalone auth/admin surfaces (`Login`, `Signup`, `SetPassword`, `Onboarding`, `AdminPanel`, demo login, list-user-emails, delete-user, invite-user, and provision-tenant-admin) as TEX-owned flows; they are covered by shared Supabase auth, Admin Portal tenant lifecycle, and customer administration.
 - Added platform-native TEX reports for tenant-scoped spend analysis, previous-period comparison, category/status/employee breakdowns, and CSV export through `/api/tex/reports`.
 - Replaced the source reports screen's `xlsx` and Recharts dependency path with lightweight platform UI and browser CSV export to avoid new top-level dependencies.
 - Added shared Postmark email dispatch in `@torrevie/notifications` and a tenant-scoped `/api/tex/reports/email` endpoint that honors TEX integration email settings, audits sent/skipped/failed outcomes, and keeps outbound email inside the platform app.
@@ -62,7 +63,6 @@ Completed platform migration checkpoints so far:
 
 ## Remaining Gaps
 
-- Several admin-only source screens still need platform-specific migration or explicit rejection.
 - Source employee fields that are present in the platform schema but not yet exposed in the migrated UI, such as salary, submission frequency, and manager assignment, need a dedicated product decision before they are surfaced.
 - Outbound WhatsApp profile routing is currently limited to the default TEX WhatsApp integration settings; tenant provider-profile selection still needs a dedicated pass if multiple sending numbers are required per tenant.
 - Remaining source Edge Functions need a dedicated pass to decide whether each becomes an App Router route, a shared notification integration, or remains deferred.
