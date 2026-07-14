@@ -54,6 +54,7 @@ Completed platform migration checkpoints so far:
 - Added platform-native TEX reports for tenant-scoped spend analysis, previous-period comparison, category/status/employee breakdowns, and CSV export through `/api/tex/reports`.
 - Replaced the source reports screen's `xlsx` and Recharts dependency path with lightweight platform UI and browser CSV export to avoid new top-level dependencies.
 - Added shared Postmark email dispatch in `@torrevie/notifications` and a tenant-scoped `/api/tex/reports/email` endpoint that honors TEX integration email settings, audits sent/skipped/failed outcomes, and keeps outbound email inside the platform app.
+- Ported the source FX refresh Edge Function behavior into platform API routes `/api/tex/fx-rates` and `/api/tex/fx-rates/refresh`, preserving primary/fallback rate fetching, peg insertion, manual-override protection, platform-service-role writes, and audit logging.
 - Added a read-only TEX integration status panel and `/api/tex/integrations` workspace for active WhatsApp routing, provider-profile summaries, and receipt storage boundary visibility.
 - Kept WhatsApp provider profile writes in the shared customer administration module so TEX does not own a parallel integration-admin surface.
 - Resolved source single-provider routing through shared tenant WhatsApp provider profiles: customer administrators may save multiple profiles, and the selected default syncs into active TEX inbound/outbound settings.
@@ -66,7 +67,7 @@ Completed platform migration checkpoints so far:
 ## Remaining Gaps
 
 - Source manager assignment needs a dedicated shared-user decision before it is surfaced, because the platform schema relates employee records to shared `users` rather than standalone TEX profiles.
-- Remaining source Edge Functions need a dedicated pass to decide whether each becomes an App Router route, a shared notification integration, or remains deferred.
+- Automated FX scheduling remains deferred to the shared platform cron/workflow convention; the migrated refresh endpoint is synchronous and permission-guarded.
 - Storage bucket policies need live Supabase verification before production promotion; code-level receipt path coverage now asserts the platform `tenant/{tenant_id}/tex/receipts/...` convention.
 - End-to-end browser verification against seeded TEX data remains required.
 

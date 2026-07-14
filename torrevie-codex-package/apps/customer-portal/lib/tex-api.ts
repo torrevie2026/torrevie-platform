@@ -16,6 +16,7 @@ import {
   listTexBootstrap,
   listTexExpenses,
   listTexFinanceReview,
+  listTexFxWorkspace,
   listTexIntegrationWorkspace,
   listTexNotifications,
   listTexReportWorkspace,
@@ -29,6 +30,7 @@ import {
   parseTexReceiptUpload,
   processTexWhatsappSubmission,
   recordTexWebhookSubmission,
+  refreshTexFxRates,
   resolveTexUnregisteredWhatsappSubmission,
   replaceTexTripLegs,
   sendTexEmailReport,
@@ -226,6 +228,19 @@ export async function handleTexApiRequest(
 
   if ((path === "/reports/email" || path === "/email-reports/send") && method === "POST") {
     return json(200, await sendTexEmailReport(client, actor, readEmailReportInput(request.body)));
+  }
+
+  if ((path === "/fx-rates" || path === "/settings/fx-rates") && method === "GET") {
+    return json(200, await listTexFxWorkspace(client, actor));
+  }
+
+  if (
+    (path === "/fx-rates/refresh" ||
+      path === "/settings/fx-rates/refresh" ||
+      path === "/settings/currency-rates/refresh") &&
+    method === "POST"
+  ) {
+    return json(200, await refreshTexFxRates(client, actor));
   }
 
   if (path === "/integrations" && method === "GET") {

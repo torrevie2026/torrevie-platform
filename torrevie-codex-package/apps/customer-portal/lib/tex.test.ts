@@ -10,6 +10,7 @@ import {
   listTexTripLegs,
   listTexExpenses,
   listTexFinanceReview,
+  listTexFxWorkspace,
   listTexIntegrationWorkspace,
   listTexReportWorkspace,
   listTexTrips,
@@ -17,6 +18,7 @@ import {
   payTexFinanceItems,
   processTexWhatsappSubmission,
   recordTexWebhookSubmission,
+  refreshTexFxRates,
   replaceTexTripLegs,
   resolveTexActorContext,
   sendTexEmailReport,
@@ -162,6 +164,42 @@ class RecordingTexClient implements TenantQueryClient {
             description: "Operations"
           }
         ] as Row[]
+      };
+    }
+
+    if (sql.includes("from public.tex_fx_rates")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000017001",
+            rate_date: "2026-07-14",
+            from_currency: "EUR",
+            to_currency: "USD",
+            rate: 0.91,
+            source: "live",
+            is_manual_override: false
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("from public.tex_currency_pegs")) {
+      return {
+        rows: [
+          {
+            from_currency: "AED",
+            to_currency: "USD",
+            rate: 0.272294,
+            effective_from: "1997-11-01",
+            notes: "UAE dirham fixed peg"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_fx_rates")) {
+      return {
+        rows: [{ id: "00000000-0000-4000-8000-000000017002" }] as Row[]
       };
     }
 
@@ -745,6 +783,39 @@ async function main() {
     assert.equal(client.hasSql("email_report_recipients"), true);
     assert.equal(client.hasSql("e.expense_date >= $1::date"), true);
     assert.equal(client.valuesContain("tex.email_report.skipped"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const workspace = await listTexFxWorkspace(client, actor);
+    assert.equal(workspace.baseCurrency, "AED");
+    assert.equal(workspace.rates[0]?.fromCurrency, "EUR");
+    assert.equal(workspace.pegs[0]?.fromCurrency, "AED");
+    assert.equal(client.hasSql("from public.tex_fx_rates"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const previousKey = process.env.FX_API_KEY;
+    try {
+      process.env.FX_API_KEY = "fx-test";
+      const result = await refreshTexFxRates(client, actor, async () =>
+        Response.json({ result: "success", conversion_rates: { EUR: 0.91, GBP: 0.78 } })
+      );
+
+      assert.equal(result.success, true);
+      assert.equal(result.source, "live");
+      assert.equal(result.updated >= 2, true);
+      assert.equal(client.hasSql("app.platform_service_role"), true);
+      assert.equal(client.hasSql("insert into public.tex_fx_rates"), true);
+      assert.equal(client.valuesContain("tex.fx_rates.refreshed"), true);
+    } finally {
+      if (previousKey === undefined) {
+        delete process.env.FX_API_KEY;
+      } else {
+        process.env.FX_API_KEY = previousKey;
+      }
+    }
   }
 
   {

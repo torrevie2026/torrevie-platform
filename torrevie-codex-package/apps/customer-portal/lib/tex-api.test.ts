@@ -212,6 +212,42 @@ class RecordingTexApiClient implements TenantQueryClient {
       return { rows: [] };
     }
 
+    if (sql.includes("from public.tex_fx_rates")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000017001",
+            rate_date: "2026-07-14",
+            from_currency: "EUR",
+            to_currency: "USD",
+            rate: 0.91,
+            source: "live",
+            is_manual_override: false
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("from public.tex_currency_pegs")) {
+      return {
+        rows: [
+          {
+            from_currency: "AED",
+            to_currency: "USD",
+            rate: 0.272294,
+            effective_from: "1997-11-01",
+            notes: "UAE dirham fixed peg"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_fx_rates")) {
+      return {
+        rows: [{ id: "00000000-0000-4000-8000-000000017002" }] as Row[]
+      };
+    }
+
     if (sql.includes("api_secret.secret_value as api_key")) {
       return {
         rows: [
@@ -1381,6 +1417,44 @@ async function main() {
     assert.match(JSON.stringify(response.body), /finance@example\.test/);
     assert.equal(client.hasSql("email_report_recipients"), true);
     assert.equal(client.valuesContain("tex.email_report.skipped"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "GET",
+      path: "/fx-rates"
+    });
+    assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /EUR/);
+    assert.equal(client.hasSql("from public.tex_fx_rates"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const previousKey = process.env.FX_API_KEY;
+    const previousFetch = globalThis.fetch;
+    try {
+      process.env.FX_API_KEY = "fx-test";
+      globalThis.fetch = async () =>
+        Response.json({ result: "success", conversion_rates: { EUR: 0.91, GBP: 0.78 } });
+      const response = await handleTexApiRequest(client, actor, {
+        method: "POST",
+        path: "/fx-rates/refresh"
+      });
+
+      assert.equal(response.status, 200);
+      assert.match(JSON.stringify(response.body), /live/);
+      assert.equal(client.hasSql("app.platform_service_role"), true);
+      assert.equal(client.valuesContain("tex.fx_rates.refreshed"), true);
+    } finally {
+      globalThis.fetch = previousFetch;
+      if (previousKey === undefined) {
+        delete process.env.FX_API_KEY;
+      } else {
+        process.env.FX_API_KEY = previousKey;
+      }
+    }
   }
 
   {

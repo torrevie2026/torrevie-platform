@@ -341,6 +341,41 @@ export type TexEmailReportResult = {
   error: string | null;
 };
 
+export type TexFxRate = {
+  id: string;
+  rateDate: string;
+  fromCurrency: string;
+  toCurrency: string;
+  rate: number;
+  source: string | null;
+  isManualOverride: boolean;
+};
+
+export type TexCurrencyPeg = {
+  fromCurrency: string;
+  toCurrency: string;
+  rate: number;
+  effectiveFrom: string;
+  notes: string | null;
+};
+
+export type TexFxWorkspace = {
+  rateDate: string;
+  baseCurrency: string;
+  rates: TexFxRate[];
+  pegs: TexCurrencyPeg[];
+};
+
+export type TexFxRefreshResult = {
+  success: boolean;
+  source: "live" | "fallback" | "none";
+  updated: number;
+  skipped: number;
+  pegged: number;
+  errors: string[];
+  rateDate: string;
+};
+
 export type TexReportInput = {
   dateFrom?: string | null;
   dateTo?: string | null;
@@ -531,6 +566,30 @@ export type TexWhatsappReceiptResult = {
 
 let texWhatsappNotificationDispatcher = dispatchWhatsAppNotification;
 let texEmailNotificationDispatcher = dispatchEmailNotification;
+
+const TEX_FX_TARGET_CURRENCIES = [
+  "EUR",
+  "GBP",
+  "EGP",
+  "KES",
+  "NGN",
+  "ZAR",
+  "MAD",
+  "CHF",
+  "SEK",
+  "NOK",
+  "DKK",
+  "PLN",
+  "CZK",
+  "HUF",
+  "TRY",
+  "INR",
+  "PKR",
+  "CAD",
+  "AUD",
+  "JPY",
+  "CNY"
+] as const;
 
 export async function resolveTexActorContext(
   client: TenantQueryClient,
@@ -1672,6 +1731,173 @@ export async function sendTexEmailReport(
       messageId: dispatch.messageId,
       error: dispatch.error
     };
+  });
+}
+
+export async function listTexFxWorkspace(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<TexFxWorkspace> {
+  assertTexPermission(actor, "tex.finance.review");
+  const rateDate = toIsoDate(new Date());
+
+  return withTenantContext(client, actor, async () => {
+    const [rates, pegs] = await Promise.all([
+      client.query<TexFxRateRow>(
+        `
+          select
+            id,
+            rate_date::text as rate_date,
+            from_currency,
+            to_currency,
+            rate::float as rate,
+            source,
+            is_manual_override
+          from public.tex_fx_rates
+          where rate_date = $1::date
+          order by from_currency asc
+        `,
+        [rateDate]
+      ),
+      client.query<TexCurrencyPegRow>(
+        `
+          select
+            from_currency,
+            to_currency,
+            rate::float as rate,
+            effective_from::text as effective_from,
+            notes
+          from public.tex_currency_pegs
+          order by from_currency asc, effective_from desc
+        `
+      )
+    ]);
+
+    return {
+      rateDate,
+      baseCurrency: "AED",
+      rates: rates.rows.map(mapFxRate),
+      pegs: pegs.rows.map(mapCurrencyPeg)
+    };
+  });
+}
+
+export async function refreshTexFxRates(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  fetcher: typeof fetch = globalThis.fetch.bind(globalThis)
+): Promise<TexFxRefreshResult> {
+  assertTexPermission(actor, "tex.integration.manage");
+  const rateDate = toIsoDate(new Date());
+
+  return withTenantContext(client, actor, async () => {
+    const pegs = await client.query<TexCurrencyPegRow>(
+      `
+        select
+          from_currency,
+          to_currency,
+          rate::float as rate,
+          effective_from::text as effective_from,
+          notes
+        from public.tex_currency_pegs
+        order by from_currency asc, effective_from desc
+      `
+    );
+    const peggedCurrencies = new Set(pegs.rows.map((peg) => peg.from_currency));
+    const targetCurrencies = TEX_FX_TARGET_CURRENCIES.filter(
+      (currency) => !peggedCurrencies.has(currency)
+    );
+    const errors: string[] = [];
+    let source: TexFxRefreshResult["source"] = "none";
+    let updated = 0;
+    let skipped = 0;
+    let pegged = 0;
+    const rates = await fetchTexFxRates(targetCurrencies, fetcher, errors);
+
+    source = rates.source;
+
+    await client.query("select set_config('app.platform_service_role', 'true', true)");
+    try {
+      for (const [currency, rate] of Object.entries(rates.values)) {
+        const result = await client.query<{ id: string }>(
+          `
+            insert into public.tex_fx_rates (
+              rate_date,
+              from_currency,
+              to_currency,
+              rate,
+              source,
+              is_manual_override
+            )
+            values ($1::date, $2, 'USD', $3, $4, false)
+            on conflict (rate_date, from_currency, to_currency)
+            do update set
+              rate = excluded.rate,
+              source = excluded.source,
+              is_manual_override = false,
+              updated_at = now()
+            where public.tex_fx_rates.is_manual_override = false
+            returning id
+          `,
+          [rateDate, currency, rate, source]
+        );
+
+        if (result.rows.length) {
+          updated += 1;
+        } else {
+          skipped += 1;
+        }
+      }
+
+      for (const peg of pegs.rows) {
+        const result = await client.query<{ id: string }>(
+          `
+            insert into public.tex_fx_rates (
+              rate_date,
+              from_currency,
+              to_currency,
+              rate,
+              source,
+              is_manual_override
+            )
+            values ($1::date, $2, $3, $4, 'peg', false)
+            on conflict (rate_date, from_currency, to_currency) do nothing
+            returning id
+          `,
+          [rateDate, peg.from_currency, peg.to_currency, peg.rate]
+        );
+        pegged += result.rows.length;
+      }
+    } finally {
+      await client.query("select set_config('app.platform_service_role', 'false', true)");
+    }
+
+    const result: TexFxRefreshResult = {
+      success: errors.length === 0,
+      source,
+      updated,
+      skipped,
+      pegged,
+      errors,
+      rateDate
+    };
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.fx_rates.refreshed",
+      "tex_fx_rates",
+      actor.tenantId,
+      {
+        source,
+        updated: String(updated),
+        skipped: String(skipped),
+        pegged: String(pegged),
+        errors: errors.join("; ")
+      }
+    );
+
+    return result;
   });
 }
 
@@ -3334,6 +3560,76 @@ async function getTexEmailNotificationSettings(
   return result.rows[0] ?? null;
 }
 
+async function fetchTexFxRates(
+  currencies: readonly string[],
+  fetcher: typeof fetch,
+  errors: string[]
+): Promise<{ source: TexFxRefreshResult["source"]; values: Record<string, number> }> {
+  const primaryKey = process.env.FX_API_KEY?.trim();
+
+  if (primaryKey) {
+    try {
+      const response = await fetcher(
+        `https://v6.exchangerate-api.com/v6/${encodeURIComponent(primaryKey)}/latest/USD`
+      );
+      const body = (await response.json().catch(() => ({}))) as {
+        result?: string;
+        conversion_rates?: Record<string, number>;
+      };
+
+      if (!response.ok || body.result !== "success" || !body.conversion_rates) {
+        throw new Error(`Primary FX API returned ${response.status}`);
+      }
+
+      return {
+        source: "live",
+        values: pickFxRates(currencies, body.conversion_rates)
+      };
+    } catch (error) {
+      errors.push(`Primary FX API failed: ${errorMessage(error)}`);
+    }
+  } else {
+    errors.push("FX_API_KEY is not configured.");
+  }
+
+  try {
+    const response = await fetcher(
+      "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json"
+    );
+    const body = (await response.json().catch(() => ({}))) as { usd?: Record<string, number> };
+
+    if (!response.ok || !body.usd) {
+      throw new Error(`Fallback FX API returned ${response.status}`);
+    }
+
+    return {
+      source: "fallback",
+      values: pickFxRates(
+        currencies,
+        Object.fromEntries(
+          Object.entries(body.usd).map(([key, value]) => [key.toUpperCase(), value])
+        )
+      )
+    };
+  } catch (error) {
+    errors.push(`Fallback FX API failed: ${errorMessage(error)}`);
+  }
+
+  return { source: "none", values: {} };
+}
+
+function pickFxRates(currencies: readonly string[], rates: Record<string, number>) {
+  return Object.fromEntries(
+    currencies
+      .map((currency) => [currency, rates[currency]] as const)
+      .filter((entry): entry is readonly [string, number] => Number.isFinite(entry[1]))
+  );
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function findEmployeeByPhone(client: TenantQueryClient, phone: string | null) {
   const digits = normalizePhoneDigits(phone);
 
@@ -4900,6 +5196,28 @@ function mapDriverAdvance(row: TexDriverAdvanceRow): TexDriverAdvance {
   };
 }
 
+function mapFxRate(row: TexFxRateRow): TexFxRate {
+  return {
+    id: row.id,
+    rateDate: row.rate_date,
+    fromCurrency: row.from_currency,
+    toCurrency: row.to_currency,
+    rate: row.rate,
+    source: row.source,
+    isManualOverride: row.is_manual_override
+  };
+}
+
+function mapCurrencyPeg(row: TexCurrencyPegRow): TexCurrencyPeg {
+  return {
+    fromCurrency: row.from_currency,
+    toCurrency: row.to_currency,
+    rate: row.rate,
+    effectiveFrom: row.effective_from,
+    notes: row.notes
+  };
+}
+
 function mapNotification(row: TexNotificationRow): TexNotification {
   return {
     id: row.id,
@@ -5143,6 +5461,24 @@ type TexReportExpenseRow = {
   approved_at: string | null;
   paid_at: string | null;
   created_at: string;
+};
+
+type TexFxRateRow = {
+  id: string;
+  rate_date: string;
+  from_currency: string;
+  to_currency: string;
+  rate: number;
+  source: string | null;
+  is_manual_override: boolean;
+};
+
+type TexCurrencyPegRow = {
+  from_currency: string;
+  to_currency: string;
+  rate: number;
+  effective_from: string;
+  notes: string | null;
 };
 
 type TexDriverAdvanceRow = {
