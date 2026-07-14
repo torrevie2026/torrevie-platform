@@ -35,12 +35,10 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
     const tenantContext = await resolveCustomerTenantContext(client, session);
     const actor = await resolveTexActorContext(client, tenantContext);
     const now = new Date();
-    const [bootstrap, expenses, trips, financeReview] = await Promise.all([
-      listTexBootstrap(client, actor),
-      listTexExpenses(client, actor),
-      listTexTrips(client, actor),
-      listTexFinanceReview(client, actor, now.getUTCMonth() + 1, now.getUTCFullYear())
-    ]);
+    const bootstrap = await listTexBootstrap(client, actor);
+    const expenses = await listTexExpenses(client, actor);
+    const trips = await listTexTrips(client, actor);
+    const financeReview = await listTexFinanceReview(client, actor, now.getUTCMonth() + 1, now.getUTCFullYear());
     const pendingCount = expenses.filter((expense) => expense.status === "pending").length;
     const approvedCount = expenses.filter((expense) => expense.status === "approved").length;
     const openTripCount = trips.filter((trip) => trip.status === "open").length;
