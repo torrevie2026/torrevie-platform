@@ -57,6 +57,7 @@ Completed platform migration checkpoints so far:
 - Replaced the source reports screen's `xlsx` and Recharts dependency path with lightweight platform UI and browser CSV export to avoid new top-level dependencies.
 - Added shared Postmark email dispatch in `@torrevie/notifications` and a tenant-scoped `/api/tex/reports/email` endpoint that honors TEX integration email settings, audits sent/skipped/failed outcomes, and keeps outbound email inside the platform app.
 - Ported the source FX refresh Edge Function behavior into platform API routes `/api/tex/fx-rates` and `/api/tex/fx-rates/refresh`, preserving primary/fallback rate fetching, peg insertion, manual-override protection, platform-service-role writes, and audit logging.
+- Added a guarded customer-portal cron endpoint and Vercel Cron schedule for daily TEX FX refresh across active TEX tenants, using the existing platform API/domain logic and `CRON_SECRET` authorization.
 - Added a read-only TEX integration status panel and `/api/tex/integrations` workspace for active WhatsApp routing, provider-profile summaries, and receipt storage boundary visibility.
 - Kept WhatsApp provider profile writes in the shared customer administration module so TEX does not own a parallel integration-admin surface.
 - Resolved source single-provider routing through shared tenant WhatsApp provider profiles: customer administrators may save multiple profiles, and the selected default syncs into active TEX inbound/outbound settings.
@@ -69,7 +70,7 @@ Completed platform migration checkpoints so far:
 
 ## Remaining Gaps
 
-- Automated FX scheduling remains deferred to the shared platform cron/workflow convention; the migrated refresh endpoint is synchronous and permission-guarded.
+- Daily FX scheduling still needs production Vercel Cron execution verification after deployment; code-level scheduling, authorization, and tenant enumeration coverage are in place.
 - Storage bucket policies still need live Supabase verification before production promotion; code-level Storage RLS and receipt path coverage now assert the platform tenant-prefix convention.
 - End-to-end browser verification against seeded TEX data remains required.
 
