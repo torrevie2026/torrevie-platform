@@ -204,8 +204,24 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
-    if (sql.includes("from public.tex_employee_profiles") && sql.includes("order by name asc")) {
-      return { rows: [] };
+    if (sql.includes("from public.tex_employee_profiles") && sql.includes("order by ep.name asc")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000004001",
+            user_id: null,
+            name: "Maya Haddad",
+            phone_number: "+971500000001",
+            department: "Operations",
+            monthly_salary: 12000,
+            manager_user_id: "00000000-0000-4000-8000-000000002002",
+            manager_name: "Omar Faris",
+            manager_email: "omar@example.test",
+            submission_frequency: "weekly",
+            is_active: true
+          }
+        ] as Row[]
+      };
     }
 
     if (sql.includes("from public.tex_teams")) {
@@ -305,6 +321,34 @@ class RecordingTexApiClient implements TenantQueryClient {
             keys_configured: true
           }
         ] as Row[]
+      };
+    }
+
+    if (
+      sql.includes("from public.tenant_memberships tm") &&
+      sql.includes("join public.users u") &&
+      sql.includes("array_agg")
+    ) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000002002",
+            email: "omar@example.test",
+            display_name: "Omar Faris",
+            roles: ["customer_manager"]
+          }
+        ] as Row[]
+      };
+    }
+
+    if (
+      sql.includes("from public.tenant_memberships tm") &&
+      sql.includes("join public.users u") &&
+      sql.includes("select u.id") &&
+      sql.includes("tm.user_id = $1")
+    ) {
+      return {
+        rows: [{ id: values[0] }] as Row[]
       };
     }
 
@@ -410,8 +454,11 @@ class RecordingTexApiClient implements TenantQueryClient {
             phone_number: values[1],
             department: values[2],
             monthly_salary: values[3],
-            submission_frequency: values[4],
-            is_active: values[5]
+            manager_user_id: values[4],
+            manager_name: null,
+            manager_email: null,
+            submission_frequency: values[5],
+            is_active: values[6]
           }
         ] as Row[]
       };
@@ -427,8 +474,11 @@ class RecordingTexApiClient implements TenantQueryClient {
             phone_number: values[2],
             department: values[3],
             monthly_salary: values[4],
-            submission_frequency: values[5],
-            is_active: values[6]
+            manager_user_id: values[5],
+            manager_name: null,
+            manager_email: null,
+            submission_frequency: values[6],
+            is_active: values[7]
           }
         ] as Row[]
       };
@@ -1346,7 +1396,9 @@ async function main() {
       path: "/people"
     });
     assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /omar@example\.test/);
     assert.equal(client.hasSql("from public.tex_employee_profiles"), true);
+    assert.equal(client.hasSql("array_agg"), true);
   }
 
   {
@@ -1358,10 +1410,13 @@ async function main() {
         name: "New Driver",
         phone_number: "+971500000001",
         department: "Logistics",
+        manager_profile_id: "00000000-0000-4000-8000-000000002002",
         is_active: true
       }
     });
     assert.equal(response.status, 201);
+    assert.match(JSON.stringify(response.body), /00000000-0000-4000-8000-000000002002/);
+    assert.equal(client.hasSql("tm.user_id = $1"), true);
     assert.equal(client.hasSql("insert into public.tex_employee_profiles"), true);
     assert.equal(client.valuesContain("tex.employee.created"), true);
   }
@@ -1375,6 +1430,7 @@ async function main() {
         name: "New Driver Updated",
         phoneNumber: "+971 50 000 0001",
         department: "Ops",
+        managerUserId: "00000000-0000-4000-8000-000000002002",
         isActive: false
       }
     });

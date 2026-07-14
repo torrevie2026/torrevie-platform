@@ -103,6 +103,9 @@ class RecordingTexClient implements TenantQueryClient {
             phone_number: "+971500000001",
             department: "Operations",
             monthly_salary: 12000,
+            manager_user_id: "00000000-0000-4000-8000-000000002002",
+            manager_name: "Omar Faris",
+            manager_email: "omar@example.test",
             submission_frequency: "weekly",
             is_active: true
           }
@@ -120,8 +123,11 @@ class RecordingTexClient implements TenantQueryClient {
             phone_number: values[2],
             department: values[3],
             monthly_salary: values[4],
-            submission_frequency: values[5],
-            is_active: values[6]
+            manager_user_id: values[5],
+            manager_name: null,
+            manager_email: null,
+            submission_frequency: values[6],
+            is_active: values[7]
           }
         ] as Row[]
       };
@@ -137,8 +143,11 @@ class RecordingTexClient implements TenantQueryClient {
             phone_number: values[1],
             department: values[2],
             monthly_salary: values[3],
-            submission_frequency: values[4],
-            is_active: values[5]
+            manager_user_id: values[4],
+            manager_name: null,
+            manager_email: null,
+            submission_frequency: values[5],
+            is_active: values[6]
           }
         ] as Row[]
       };
@@ -261,6 +270,34 @@ class RecordingTexClient implements TenantQueryClient {
             keys_configured: true
           }
         ] as Row[]
+      };
+    }
+
+    if (
+      sql.includes("from public.tenant_memberships tm") &&
+      sql.includes("join public.users u") &&
+      sql.includes("array_agg")
+    ) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000002002",
+            email: "omar@example.test",
+            display_name: "Omar Faris",
+            roles: ["customer_manager"]
+          }
+        ] as Row[]
+      };
+    }
+
+    if (
+      sql.includes("from public.tenant_memberships tm") &&
+      sql.includes("join public.users u") &&
+      sql.includes("select u.id") &&
+      sql.includes("tm.user_id = $1")
+    ) {
+      return {
+        rows: [{ id: values[0] }] as Row[]
       };
     }
 
@@ -690,6 +727,8 @@ async function main() {
     const bootstrap = await listTexBootstrap(client, actor);
     assert.equal(bootstrap.categories[0]?.name, "Meals");
     assert.equal(bootstrap.employeeProfiles[0]?.name, "Maya Haddad");
+    assert.equal(bootstrap.employeeProfiles[0]?.managerName, "Omar Faris");
+    assert.equal(bootstrap.managerUsers[0]?.email, "omar@example.test");
     assert.equal(bootstrap.teams[0]?.name, "Ops");
     assert.equal(bootstrap.integrationSettings?.whatsappProvider, "wappfly");
     assert.equal(client.hasSql("public.tex_expense_categories"), true);
@@ -714,10 +753,13 @@ async function main() {
       name: "Omar Faris",
       phoneNumber: "+971 50 000 0002",
       department: "Logistics",
+      managerUserId: "00000000-0000-4000-8000-000000002002",
       isActive: true
     });
     assert.equal(employee.name, "Omar Faris");
     assert.equal(employee.phoneNumber, "971500000002");
+    assert.equal(employee.managerUserId, "00000000-0000-4000-8000-000000002002");
+    assert.equal(client.hasSql("tm.user_id = $1"), true);
     assert.equal(client.hasSql("insert into public.tex_employee_profiles"), true);
     assert.equal(client.valuesContain("tex.employee.created"), true);
   }
@@ -732,11 +774,13 @@ async function main() {
         name: "Maya Haddad Updated",
         phoneNumber: "+971 50 000 0001",
         department: "Finance",
+        managerUserId: "00000000-0000-4000-8000-000000002002",
         isActive: false
       }
     );
     assert.equal(employee.name, "Maya Haddad Updated");
     assert.equal(employee.phoneNumber, "971500000001");
+    assert.equal(employee.managerUserId, "00000000-0000-4000-8000-000000002002");
     assert.equal(employee.isActive, false);
     assert.equal(client.hasSql("update public.tex_employee_profiles"), true);
     assert.equal(client.valuesContain("tex.employee.updated"), true);

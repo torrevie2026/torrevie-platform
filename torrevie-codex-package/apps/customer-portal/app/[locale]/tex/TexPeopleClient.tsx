@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { TexEmployeeProfile } from "../../../lib/tex";
+import type { TexEmployeeProfile, TexManagerUser } from "../../../lib/tex";
 
 type TexPeopleClientProps = {
   adminUsersHref: string;
   canManage: boolean;
   initialEmployees: TexEmployeeProfile[];
+  initialManagerUsers: TexManagerUser[];
 };
 
 type EmployeeForm = {
@@ -14,6 +15,7 @@ type EmployeeForm = {
   phoneNumber: string;
   department: string;
   monthlySalary: string;
+  managerUserId: string;
   submissionFrequency: TexEmployeeProfile["submissionFrequency"];
   isActive: boolean;
 };
@@ -23,6 +25,7 @@ const emptyEmployeeForm: EmployeeForm = {
   phoneNumber: "",
   department: "",
   monthlySalary: "",
+  managerUserId: "",
   submissionFrequency: "realtime",
   isActive: true
 };
@@ -30,7 +33,8 @@ const emptyEmployeeForm: EmployeeForm = {
 export function TexPeopleClient({
   adminUsersHref,
   canManage,
-  initialEmployees
+  initialEmployees,
+  initialManagerUsers
 }: TexPeopleClientProps) {
   const [employees, setEmployees] = useState(initialEmployees);
   const [form, setForm] = useState<EmployeeForm>(emptyEmployeeForm);
@@ -60,6 +64,7 @@ export function TexPeopleClient({
       phoneNumber: employee.phoneNumber,
       department: employee.department ?? "",
       monthlySalary: employee.monthlySalary > 0 ? String(employee.monthlySalary) : "",
+      managerUserId: employee.managerUserId ?? "",
       submissionFrequency: employee.submissionFrequency,
       isActive: employee.isActive
     });
@@ -94,7 +99,8 @@ export function TexPeopleClient({
         method,
         body: JSON.stringify({
           ...form,
-          monthlySalary: form.monthlySalary ? Number(form.monthlySalary) : 0
+          monthlySalary: form.monthlySalary ? Number(form.monthlySalary) : 0,
+          managerUserId: form.managerUserId || null
         })
       });
 
@@ -191,6 +197,13 @@ export function TexPeopleClient({
                         : "not set"}{" "}
                       - {submissionFrequencyLabel(employee.submissionFrequency)}
                     </small>
+                    <small>
+                      Manager{" "}
+                      {employee.managerName ||
+                        employee.managerEmail ||
+                        managerUserLabel(initialManagerUsers, employee.managerUserId) ||
+                        "not assigned"}
+                    </small>
                     <small>{employee.userId ? "Linked to platform user" : "WhatsApp only"}</small>
                   </span>
                   <b>{employee.isActive ? "Active" : "Inactive"}</b>
@@ -262,6 +275,21 @@ export function TexPeopleClient({
               />
             </label>
             <label>
+              Approval manager
+              <select
+                value={form.managerUserId}
+                disabled={!canManage}
+                onChange={(event) => setForm({ ...form, managerUserId: event.target.value })}
+              >
+                <option value="">No assigned manager</option>
+                {initialManagerUsers.map((manager) => (
+                  <option key={manager.id} value={manager.id}>
+                    {managerLabel(manager)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
               Submission cadence
               <select
                 value={form.submissionFrequency}
@@ -323,6 +351,15 @@ function submissionFrequencyLabel(value: TexEmployeeProfile["submissionFrequency
     default:
       return "Realtime";
   }
+}
+
+function managerLabel(manager: TexManagerUser) {
+  return manager.displayName ? `${manager.displayName} (${manager.email})` : manager.email;
+}
+
+function managerUserLabel(managers: TexManagerUser[], managerUserId: string | null) {
+  const manager = managers.find((candidate) => candidate.id === managerUserId);
+  return manager ? managerLabel(manager) : null;
 }
 
 async function texFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {

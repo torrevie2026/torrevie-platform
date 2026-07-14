@@ -48,6 +48,7 @@ Completed platform migration checkpoints so far:
 - Added platform-native TEX controls for expense categories, spend policies, and department budgets, including tenant-scoped API routes and audit events for category, policy, and budget mutations.
 - Added platform-native TEX People controls for tenant-scoped WhatsApp employee profile create/update/delete, plus compatibility routes for `/api/tex/people` and `/api/tex/people/employees`.
 - Surfaced TEX employee monthly salary and submission cadence in the People API/UI, preserving source fields already present in the platform schema.
+- Restored source employee manager assignment through the platform `manager_user_id` relationship, with manager options resolved from active shared tenant users and source-compatible manager field names accepted by the People API.
 - Kept TEX web user invitations, role assignment, and account status management in the shared customer administration module instead of porting source standalone auth/user-reset flows.
 - Rejected the source standalone company onboarding flow as a TEX-specific tenancy mechanism; platform tenant provisioning remains the canonical onboarding path.
 - Rejected source standalone auth/admin surfaces (`Login`, `Signup`, `SetPassword`, `Onboarding`, `AdminPanel`, demo login, list-user-emails, delete-user, invite-user, and provision-tenant-admin) as TEX-owned flows; they are covered by shared Supabase auth, Admin Portal tenant lifecycle, and customer administration.
@@ -66,7 +67,6 @@ Completed platform migration checkpoints so far:
 
 ## Remaining Gaps
 
-- Source manager assignment needs a dedicated shared-user decision before it is surfaced, because the platform schema relates employee records to shared `users` rather than standalone TEX profiles.
 - Automated FX scheduling remains deferred to the shared platform cron/workflow convention; the migrated refresh endpoint is synchronous and permission-guarded.
 - Storage bucket policies need live Supabase verification before production promotion; code-level receipt path coverage now asserts the platform `tenant/{tenant_id}/tex/receipts/...` convention.
 - End-to-end browser verification against seeded TEX data remains required.

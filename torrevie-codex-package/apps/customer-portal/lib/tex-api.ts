@@ -125,6 +125,7 @@ export async function handleTexApiRequest(
     return json(200, {
       employees: bootstrap.employeeProfiles,
       employeeProfiles: bootstrap.employeeProfiles,
+      managerUsers: bootstrap.managerUsers,
       teams: bootstrap.teams
     });
   }
@@ -532,6 +533,12 @@ function readEmployeeInput(value: unknown): TexEmployeeProfileInput {
     department: readOptionalString(body.department),
     monthlySalary:
       readOptionalNumber(body.monthlySalary) ?? readOptionalNumber(body.monthly_salary),
+    managerUserId:
+      readOptionalString(body.managerUserId) ??
+      readOptionalString(body.manager_user_id) ??
+      readOptionalString(body.managerId) ??
+      readOptionalString(body.manager_id) ??
+      readOptionalString(body.manager_profile_id),
     submissionFrequency:
       readSubmissionFrequency(body.submissionFrequency) ??
       readSubmissionFrequency(body.submission_frequency),

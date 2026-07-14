@@ -32,6 +32,7 @@ export type TexExpenseStatus = "pending" | "approved" | "rejected" | "paid";
 export type TexBootstrap = {
   categories: TexExpenseCategory[];
   employeeProfiles: TexEmployeeProfile[];
+  managerUsers: TexManagerUser[];
   teams: TexTeam[];
   integrationSettings: TexIntegrationSettings | null;
 };
@@ -57,6 +58,9 @@ export type TexEmployeeProfile = {
   phoneNumber: string;
   department: string | null;
   monthlySalary: number;
+  managerUserId: string | null;
+  managerName: string | null;
+  managerEmail: string | null;
   submissionFrequency: "realtime" | "daily" | "weekly" | "monthly";
   isActive: boolean;
 };
@@ -66,8 +70,16 @@ export type TexEmployeeProfileInput = {
   phoneNumber: string;
   department?: string | null;
   monthlySalary?: number | null;
+  managerUserId?: string | null;
   submissionFrequency?: "realtime" | "daily" | "weekly" | "monthly" | null;
   isActive: boolean;
+};
+
+export type TexManagerUser = {
+  id: string;
+  email: string;
+  displayName: string | null;
+  roles: RoleKey[];
 };
 
 export type TexTeam = {
@@ -662,41 +674,73 @@ export async function listTexBootstrap(
   assertTexPermission(actor, "tex.expense.read");
 
   return withTenantContext(client, actor, async () => {
-    const [categories, employeeProfiles, teams, integrationSettings] = await Promise.all([
-      client.query<TexExpenseCategoryRow>(
-        `
+    const [categories, employeeProfiles, managerUsers, teams, integrationSettings] =
+      await Promise.all([
+        client.query<TexExpenseCategoryRow>(
+          `
           select id, name, is_active, is_system, sort_order
           from public.tex_expense_categories
           where tenant_id = public.current_tenant_id()
           order by sort_order asc, name asc
         `
-      ),
-      client.query<TexEmployeeProfileRow>(
-        `
+        ),
+        client.query<TexEmployeeProfileRow>(
+          `
           select
-            id,
-            user_id,
-            name,
-            phone_number,
-            department,
-            monthly_salary::float as monthly_salary,
-            submission_frequency,
-            is_active
-          from public.tex_employee_profiles
-          where tenant_id = public.current_tenant_id()
-          order by name asc
+            ep.id,
+            ep.user_id,
+            ep.name,
+            ep.phone_number,
+            ep.department,
+            ep.monthly_salary::float as monthly_salary,
+            ep.manager_user_id,
+            manager_profile.display_name as manager_name,
+            manager_user.email as manager_email,
+            ep.submission_frequency,
+            ep.is_active
+          from public.tex_employee_profiles ep
+          left join public.users manager_user
+            on manager_user.id = ep.manager_user_id
+          left join public.user_profiles manager_profile
+            on manager_profile.tenant_id = ep.tenant_id
+           and manager_profile.user_id = ep.manager_user_id
+          where ep.tenant_id = public.current_tenant_id()
+          order by ep.name asc
         `
-      ),
-      client.query<TexTeamRow>(
+        ),
+        client.query<TexManagerUserRow>(
+          `
+          select
+            u.id,
+            u.email,
+            up.display_name,
+            coalesce(array_agg(r.key order by r.key) filter (where r.key is not null), '{}') as roles
+          from public.tenant_memberships tm
+          join public.users u on u.id = tm.user_id
+          left join public.user_profiles up
+            on up.tenant_id = tm.tenant_id
+           and up.user_id = tm.user_id
+          left join public.user_role_assignments ura
+            on ura.tenant_id = tm.tenant_id
+           and ura.user_id = tm.user_id
+          left join public.roles r on r.id = ura.role_id
+          where tm.tenant_id = public.current_tenant_id()
+            and tm.status = 'active'
+            and u.status = 'active'
+          group by u.id, u.email, up.display_name
+          order by coalesce(up.display_name, u.email) asc
         `
+        ),
+        client.query<TexTeamRow>(
+          `
           select id, name, description
           from public.tex_teams
           where tenant_id = public.current_tenant_id()
           order by name asc
         `
-      ),
-      client.query<TexIntegrationSettingsRow>(
-        `
+        ),
+        client.query<TexIntegrationSettingsRow>(
+          `
           select
             whatsapp_provider,
             whatsapp_instance_id,
@@ -711,12 +755,13 @@ export async function listTexBootstrap(
           where tenant_id = public.current_tenant_id()
           limit 1
         `
-      )
-    ]);
+        )
+      ]);
 
     return {
       categories: categories.rows.map(mapCategory),
       employeeProfiles: employeeProfiles.rows.map(mapEmployeeProfile),
+      managerUsers: managerUsers.rows.map(mapManagerUser),
       teams: teams.rows.map(mapTeam),
       integrationSettings: integrationSettings.rows[0]
         ? mapIntegrationSettings(integrationSettings.rows[0])
@@ -834,6 +879,7 @@ export async function createTexEmployeeProfile(
   const phoneNumber = normalizePhoneDigits(input.phoneNumber);
   const department = cleanOptional(input.department);
   const monthlySalary = optionalNonNegative(input.monthlySalary, "monthly salary") ?? 0;
+  const managerUserId = sanitizeOptionalUuid(input.managerUserId, "manager user id");
   const submissionFrequency = sanitizeSubmissionFrequency(input.submissionFrequency);
 
   if (!phoneNumber) {
@@ -841,6 +887,10 @@ export async function createTexEmployeeProfile(
   }
 
   return withTenantContext(client, actor, async () => {
+    if (managerUserId) {
+      await assertTenantManagerUser(client, managerUserId);
+    }
+
     const result = await client.query<TexEmployeeProfileRow>(
       `
         insert into public.tex_employee_profiles (
@@ -849,12 +899,13 @@ export async function createTexEmployeeProfile(
           phone_number,
           department,
           monthly_salary,
+          manager_user_id,
           submission_frequency,
           is_active,
           created_by,
           updated_by
         )
-        values (public.current_tenant_id(), $1, $2, $3, $4, $5, $6, $6)
+        values (public.current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, $7)
         returning
           id,
           user_id,
@@ -862,6 +913,9 @@ export async function createTexEmployeeProfile(
           phone_number,
           department,
           monthly_salary::float as monthly_salary,
+          manager_user_id,
+          null::text as manager_name,
+          null::text as manager_email,
           submission_frequency,
           is_active
       `,
@@ -870,6 +924,7 @@ export async function createTexEmployeeProfile(
         phoneNumber,
         department,
         monthlySalary,
+        managerUserId,
         submissionFrequency,
         input.isActive,
         actor.userId
@@ -905,6 +960,7 @@ export async function updateTexEmployeeProfile(
   const phoneNumber = normalizePhoneDigits(input.phoneNumber);
   const department = cleanOptional(input.department);
   const monthlySalary = optionalNonNegative(input.monthlySalary, "monthly salary") ?? 0;
+  const managerUserId = sanitizeOptionalUuid(input.managerUserId, "manager user id");
   const submissionFrequency = sanitizeSubmissionFrequency(input.submissionFrequency);
 
   if (!phoneNumber) {
@@ -912,6 +968,10 @@ export async function updateTexEmployeeProfile(
   }
 
   return withTenantContext(client, actor, async () => {
+    if (managerUserId) {
+      await assertTenantManagerUser(client, managerUserId);
+    }
+
     const result = await client.query<TexEmployeeProfileRow>(
       `
         update public.tex_employee_profiles
@@ -919,9 +979,10 @@ export async function updateTexEmployeeProfile(
                phone_number = $3,
                department = $4,
                monthly_salary = $5,
-               submission_frequency = $6,
-               is_active = $7,
-               updated_by = $8
+               manager_user_id = $6,
+               submission_frequency = $7,
+               is_active = $8,
+               updated_by = $9
          where tenant_id = public.current_tenant_id()
            and id = $1
         returning
@@ -931,6 +992,9 @@ export async function updateTexEmployeeProfile(
           phone_number,
           department,
           monthly_salary::float as monthly_salary,
+          manager_user_id,
+          null::text as manager_name,
+          null::text as manager_email,
           submission_frequency,
           is_active
       `,
@@ -940,6 +1004,7 @@ export async function updateTexEmployeeProfile(
         phoneNumber,
         department,
         monthlySalary,
+        managerUserId,
         submissionFrequency,
         input.isActive,
         actor.userId
@@ -3639,11 +3704,22 @@ async function findEmployeeByPhone(client: TenantQueryClient, phone: string | nu
 
   const result = await client.query<TexEmployeeProfileRow>(
     `
-      select id, user_id, name, phone_number, department, is_active
-      from public.tex_employee_profiles
-      where tenant_id = public.current_tenant_id()
-        and is_active = true
-        and regexp_replace(phone_number, '[^0-9]', '', 'g') = $1
+      select
+        ep.id,
+        ep.user_id,
+        ep.name,
+        ep.phone_number,
+        ep.department,
+        ep.monthly_salary::float as monthly_salary,
+        ep.manager_user_id,
+        null::text as manager_name,
+        null::text as manager_email,
+        ep.submission_frequency,
+        ep.is_active
+      from public.tex_employee_profiles ep
+      where ep.tenant_id = public.current_tenant_id()
+        and ep.is_active = true
+        and regexp_replace(ep.phone_number, '[^0-9]', '', 'g') = $1
       limit 1
     `,
     [digits]
@@ -4539,11 +4615,27 @@ async function getTexEmployeeProfile(
   assertUuid(employeeProfileId, "employee profile id");
   const result = await client.query<TexEmployeeProfileRow>(
     `
-      select id, user_id, name, phone_number, department, is_active
-      from public.tex_employee_profiles
-      where tenant_id = public.current_tenant_id()
-        and id = $1
-        and is_active = true
+      select
+        ep.id,
+        ep.user_id,
+        ep.name,
+        ep.phone_number,
+        ep.department,
+        ep.monthly_salary::float as monthly_salary,
+        ep.manager_user_id,
+        manager_profile.display_name as manager_name,
+        manager_user.email as manager_email,
+        ep.submission_frequency,
+        ep.is_active
+      from public.tex_employee_profiles ep
+      left join public.users manager_user
+        on manager_user.id = ep.manager_user_id
+      left join public.user_profiles manager_profile
+        on manager_profile.tenant_id = ep.tenant_id
+       and manager_profile.user_id = ep.manager_user_id
+      where ep.tenant_id = public.current_tenant_id()
+        and ep.id = $1
+        and ep.is_active = true
       limit 1
     `,
     [employeeProfileId]
@@ -4592,7 +4684,18 @@ async function createTexEmployeeProfileFromWhatsapp(
         is_active = true,
         updated_by = excluded.updated_by,
         updated_at = now()
-      returning id, user_id, name, phone_number, department, is_active
+      returning
+        id,
+        user_id,
+        name,
+        phone_number,
+        department,
+        monthly_salary::float as monthly_salary,
+        manager_user_id,
+        null::text as manager_name,
+        null::text as manager_email,
+        submission_frequency,
+        is_active
     `,
     [name, phoneNumber, department, actor.userId]
   );
@@ -4610,6 +4713,24 @@ async function createTexEmployeeProfileFromWhatsapp(
   );
 
   return employee;
+}
+
+async function assertTenantManagerUser(client: TenantQueryClient, managerUserId: string) {
+  const result = await client.query<{ id: string }>(
+    `
+      select u.id
+      from public.tenant_memberships tm
+      join public.users u on u.id = tm.user_id
+      where tm.tenant_id = public.current_tenant_id()
+        and tm.user_id = $1
+        and tm.status = 'active'
+        and u.status = 'active'
+      limit 1
+    `,
+    [managerUserId]
+  );
+
+  requireSingleRow(result.rows, "manager user");
 }
 
 function parseSubmissionExtraction(value: unknown): TexReceiptExtraction | null {
@@ -4805,6 +4926,17 @@ function assertUuid(value: string, label: string) {
   }
 }
 
+function sanitizeOptionalUuid(value: string | null | undefined, label: string) {
+  const clean = cleanOptional(value);
+
+  if (!clean) {
+    return null;
+  }
+
+  assertUuid(clean, label);
+  return clean;
+}
+
 function cleanOptional(value: string | null | undefined) {
   const clean = value?.trim();
   return clean ? clean : null;
@@ -4992,8 +5124,20 @@ function mapEmployeeProfile(row: TexEmployeeProfileRow): TexEmployeeProfile {
     phoneNumber: row.phone_number,
     department: row.department,
     monthlySalary: row.monthly_salary,
+    managerUserId: row.manager_user_id,
+    managerName: row.manager_name,
+    managerEmail: row.manager_email,
     submissionFrequency: row.submission_frequency,
     isActive: row.is_active
+  };
+}
+
+function mapManagerUser(row: TexManagerUserRow): TexManagerUser {
+  return {
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    roles: row.roles.filter(isRoleKey)
   };
 }
 
@@ -5292,8 +5436,18 @@ type TexEmployeeProfileRow = {
   phone_number: string;
   department: string | null;
   monthly_salary: number;
+  manager_user_id: string | null;
+  manager_name: string | null;
+  manager_email: string | null;
   submission_frequency: "realtime" | "daily" | "weekly" | "monthly";
   is_active: boolean;
+};
+
+type TexManagerUserRow = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  roles: string[];
 };
 
 type TexTeamRow = {
