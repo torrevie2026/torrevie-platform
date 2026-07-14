@@ -42,12 +42,14 @@ Completed platform migration checkpoints so far:
 - Replaced the localized TEX placeholder page with a server-rendered tenant-scoped workspace using the migrated TEX clients.
 - Preserved the copied TEX source bundle under `_migration-source` as reference material, with runtime/build artifacts and local environment files excluded.
 - Added platform-native compatibility handlers for source notification routes, driver advance create/delete, and the legacy maps autocomplete path.
+- Added platform-native inbound webhook endpoints for Wappfly, UltraMsg, and Meta WhatsApp under `/api/tex/webhooks/[provider]`, including tenant resolution, token/signature verification, and reuse of migrated TEX WhatsApp processing.
 - Kept `tex1.torrevie.com` untouched; no DNS, Vercel, live environment, or shutdown action is part of this migration branch.
 
 ## Remaining Gaps
 
 - Source reports, full settings/policy/budget administration, unregistered WhatsApp review UI, employee invitation UX, onboarding flow, dashboard metrics, email queue behavior, and several admin-only source screens still need platform-specific migration or explicit rejection.
-- Source Edge Functions need a dedicated pass to decide whether each becomes an App Router route, a shared notification integration, or remains deferred.
+- Outbound WhatsApp replies from inbound webhooks still need the shared notification-service integration. This pass returns the generated reply text from processing but does not call Wappfly, UltraMsg, or Meta send APIs.
+- Remaining source Edge Functions need a dedicated pass to decide whether each becomes an App Router route, a shared notification integration, or remains deferred.
 - Storage bucket policies need verification against the platform `tenant/{tenant_id}/tex/...` convention for all receipt and company-logo behavior.
 - End-to-end browser verification against seeded TEX data remains required.
 
