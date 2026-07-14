@@ -67,9 +67,119 @@ async function ensureAuthUser() {
 
   if (!updateResponse.ok) {
     const detail = await updateResponse.text();
-    throw new Error(
-      `Unable to create or update Supabase Auth user: ${updateResponse.status} ${detail}`
+    if (createResponse.status === 401 || createResponse.status === 403 || updateResponse.status === 401 || updateResponse.status === 403) {
+      await ensureAuthUserViaDatabase();
+      return;
+    }
+
+    throw new Error(`Unable to create or update Supabase Auth user: ${updateResponse.status} ${detail}`);
+  }
+}
+
+async function ensureAuthUserViaDatabase() {
+  const client = new Client({
+    connectionString: requireEnv("DATABASE_URL", "POSTGRES_URL", "SUPABASE_DB_URL"),
+    ssl: process.env.TORREVIE_DATABASE_SSL === "true" ? { rejectUnauthorized: false } : undefined
+  });
+  await client.connect();
+
+  try {
+    await client.query("begin");
+    await client.query("create extension if not exists pgcrypto");
+    await client.query(
+      `
+        insert into auth.users (
+          instance_id,
+          id,
+          aud,
+          role,
+          email,
+          encrypted_password,
+          email_confirmed_at,
+          raw_app_meta_data,
+          raw_user_meta_data,
+          created_at,
+          updated_at,
+          confirmation_token,
+          recovery_token,
+          email_change_token_new,
+          email_change_token_current,
+          email_change_confirm_status,
+          is_sso_user,
+          is_anonymous
+        )
+        values (
+          '00000000-0000-0000-0000-000000000000',
+          $1,
+          'authenticated',
+          'authenticated',
+          $2,
+          crypt($3, gen_salt('bf')),
+          now(),
+          '{"provider":"email","providers":["email"]}'::jsonb,
+          '{"name":"TEX Staging Viewer"}'::jsonb,
+          now(),
+          now(),
+          '',
+          '',
+          '',
+          '',
+          0,
+          false,
+          false
+        )
+        on conflict (id) do update set
+          email = excluded.email,
+          encrypted_password = excluded.encrypted_password,
+          email_confirmed_at = now(),
+          raw_app_meta_data = excluded.raw_app_meta_data,
+          raw_user_meta_data = excluded.raw_user_meta_data,
+          updated_at = now(),
+          is_sso_user = false,
+          is_anonymous = false
+      `,
+      [texStagingDemoAccess.userId, texStagingDemoAccess.email, texStagingDemoAccess.password]
     );
+    await client.query(
+      `
+        insert into auth.identities (
+          id,
+          provider_id,
+          user_id,
+          identity_data,
+          provider,
+          last_sign_in_at,
+          created_at,
+          updated_at
+        )
+        values (
+          gen_random_uuid(),
+          $1,
+          $1,
+          jsonb_build_object(
+            'sub', $1::text,
+            'email', $2::text,
+            'email_verified', true,
+            'phone_verified', false
+          ),
+          'email',
+          now(),
+          now(),
+          now()
+        )
+        on conflict (provider_id, provider) do update set
+          user_id = excluded.user_id,
+          identity_data = excluded.identity_data,
+          updated_at = now()
+      `,
+      [texStagingDemoAccess.userId, texStagingDemoAccess.email]
+    );
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    await client.end();
   }
 }
 
