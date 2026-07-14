@@ -9,7 +9,9 @@ async function main() {
     GEMINI_RECEIPT_MODELS: process.env.GEMINI_RECEIPT_MODELS,
     GOOGLE_AI_API_KEY: process.env.GOOGLE_AI_API_KEY,
     GOOGLE_AI_KEY: process.env.GOOGLE_AI_KEY,
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    OPENAI_RECEIPT_FALLBACK_ENABLED: process.env.OPENAI_RECEIPT_FALLBACK_ENABLED,
+    TEX_OPENAI_RECEIPT_FALLBACK: process.env.TEX_OPENAI_RECEIPT_FALLBACK
   };
   const previousFetch = globalThis.fetch;
 
@@ -17,6 +19,8 @@ async function main() {
     process.env.TEX_RECEIPT_AI_PROVIDER = "gemini";
     process.env.GEMINI_API_KEY = "test-gemini-key";
     delete process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_RECEIPT_FALLBACK_ENABLED;
+    delete process.env.TEX_OPENAI_RECEIPT_FALLBACK;
 
     let requestedUrl = "";
     globalThis.fetch = async (input, init) => {
@@ -105,6 +109,20 @@ async function main() {
     const fallbackExtraction = await extractReceiptWithAI("data:image/jpeg;base64,dGVzdA==");
     assert.deepEqual(requestedModels, ["retired-model", "gemini-3.5-flash"]);
     assert.equal(fallbackExtraction.vendor, "Fallback Cafe");
+
+    process.env.GEMINI_RECEIPT_MODELS = "retired-model";
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    const noOpenAiRequests: string[] = [];
+    globalThis.fetch = async (input) => {
+      noOpenAiRequests.push(String(input));
+      return new Response(JSON.stringify({ error: { message: "temporary demand spike" } }), {
+        status: 503,
+        headers: { "content-type": "application/json" }
+      });
+    };
+
+    await assert.rejects(() => extractReceiptWithAI("data:image/jpeg;base64,dGVzdA=="), /retired-model/);
+    assert.equal(noOpenAiRequests.some((url) => url.includes("api.openai.com")), false);
   } finally {
     globalThis.fetch = previousFetch;
     for (const [key, value] of Object.entries(previousEnv)) {

@@ -19,6 +19,7 @@ import {
   updateTexTrip,
   updateTexEmployeeProfile,
   updateTexExpenseStatus,
+  uploadTexReceiptFile,
   type TexActorContext
 } from "./tex";
 
@@ -427,6 +428,20 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("insert into public.files")) {
+      return {
+        rows: [
+          {
+            id: values[0],
+            storage_path: values[1],
+            filename: values[2],
+            content_type: values[3],
+            size_bytes: values[4]
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("from public.tex_trips") && sql.includes("limit 1")) {
       return { rows: [{ id: "00000000-0000-4000-8000-000000008001" }] as Row[] };
     }
@@ -747,6 +762,46 @@ async function main() {
     assert.match(result.replyText, /possible duplicate/);
     assert.equal(client.valuesContain("suspected"), true);
     assert.equal(client.valuesContain(true), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const previousEnv = {
+      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      SUPABASE_URL: process.env.SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY
+    };
+    const previousFetch = globalThis.fetch;
+    let uploadHeaders: HeadersInit | undefined;
+    try {
+      process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
+      delete process.env.SUPABASE_URL;
+      process.env.SUPABASE_SERVICE_ROLE_KEY = "sb_secret_test";
+      globalThis.fetch = async (_input, init) => {
+        uploadHeaders = init?.headers;
+        return new Response("", { status: 200 });
+      };
+
+      const receipt = await uploadTexReceiptFile(client, actor, {
+        fileName: "receipt.png",
+        contentType: "image/png",
+        dataBase64: "iVBORw0KGgo="
+      });
+      const headers = uploadHeaders as Record<string, string>;
+      assert.equal(headers.apikey, "sb_secret_test");
+      assert.equal("Authorization" in headers, false);
+      assert.equal(receipt.filename, "receipt.png");
+      assert.equal(client.valuesContain("tex.receipt.uploaded"), true);
+    } finally {
+      globalThis.fetch = previousFetch;
+      for (const [key, value] of Object.entries(previousEnv)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    }
   }
 
   {

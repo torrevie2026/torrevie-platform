@@ -2127,11 +2127,11 @@ function supabaseServiceRoleKey() {
 async function uploadReceiptObject(storagePath: string, contentType: string, buffer: Buffer) {
   const bucket = receiptBucketName();
   const encodedPath = storagePath.split("/").map(encodeURIComponent).join("/");
+  const serviceKey = supabaseServiceRoleKey();
   const response = await fetch(`${supabaseProjectUrl()}/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${supabaseServiceRoleKey()}`,
-      apikey: supabaseServiceRoleKey(),
+      ...supabaseServiceHeaders(serviceKey),
       "Content-Type": contentType,
       "x-upsert": "false"
     },
@@ -2142,6 +2142,18 @@ async function uploadReceiptObject(storagePath: string, contentType: string, buf
     const text = await response.text();
     throw new Error(`Receipt storage upload failed: ${response.status} ${text.slice(0, 240)}`);
   }
+}
+
+function supabaseServiceHeaders(key: string) {
+  const headers: Record<string, string> = {
+    apikey: key
+  };
+
+  if (key.startsWith("eyJ")) {
+    headers.Authorization = `Bearer ${key}`;
+  }
+
+  return headers;
 }
 
 function sanitizeExtractionSource(value: TexExpenseInput["extractionSource"]): "manual" | "web_ai" | "whatsapp_ai" {

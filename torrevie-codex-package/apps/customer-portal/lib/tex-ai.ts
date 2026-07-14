@@ -199,7 +199,11 @@ function receiptProviderOrder(): ReceiptAiProvider[] {
     return ["openai", "gemini"];
   }
 
-  return ["gemini", "openai"];
+  if (configured.includes("gemini") || geminiApiKey()) {
+    return openAiReceiptFallbackEnabled() ? ["gemini", "openai"] : ["gemini"];
+  }
+
+  return ["openai"];
 }
 
 function geminiApiKey() {
@@ -214,6 +218,11 @@ function geminiApiKey() {
     (fallbackName.includes("gemini") || fallbackName.includes("google") ? process.env.AI_PROVIDER_FALLBACK_API_KEY?.trim() : "") ||
     ""
   );
+}
+
+function openAiReceiptFallbackEnabled() {
+  const value = process.env.OPENAI_RECEIPT_FALLBACK_ENABLED ?? process.env.TEX_OPENAI_RECEIPT_FALLBACK;
+  return value === "true" || value === "1";
 }
 
 function geminiReceiptModels() {
