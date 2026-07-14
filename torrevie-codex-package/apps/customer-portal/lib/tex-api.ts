@@ -515,6 +515,11 @@ function readEmployeeInput(value: unknown): TexEmployeeProfileInput {
       readOptionalString(body.whatsapp_phone) ??
       "",
     department: readOptionalString(body.department),
+    monthlySalary:
+      readOptionalNumber(body.monthlySalary) ?? readOptionalNumber(body.monthly_salary),
+    submissionFrequency:
+      readSubmissionFrequency(body.submissionFrequency) ??
+      readSubmissionFrequency(body.submission_frequency),
     isActive: readOptionalBoolean(body.isActive) ?? readOptionalBoolean(body.is_active) ?? true
   };
 }
@@ -613,6 +618,14 @@ function readExpenseStatus(value: unknown): Exclude<TexExpenseStatus, "pending">
   }
 
   throw new Error(`Unsupported TEX expense status: ${String(value)}`);
+}
+
+function readSubmissionFrequency(value: unknown) {
+  if (value === "realtime" || value === "daily" || value === "weekly" || value === "monthly") {
+    return value;
+  }
+
+  return null;
 }
 
 function readOptionalString(value: unknown) {

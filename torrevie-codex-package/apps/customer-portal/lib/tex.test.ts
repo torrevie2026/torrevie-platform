@@ -100,6 +100,8 @@ class RecordingTexClient implements TenantQueryClient {
             name: "Maya Haddad",
             phone_number: "+971500000001",
             department: "Operations",
+            monthly_salary: 12000,
+            submission_frequency: "weekly",
             is_active: true
           }
         ] as Row[]
@@ -115,7 +117,9 @@ class RecordingTexClient implements TenantQueryClient {
             name: values[1],
             phone_number: values[2],
             department: values[3],
-            is_active: values[4]
+            monthly_salary: values[4],
+            submission_frequency: values[5],
+            is_active: values[6]
           }
         ] as Row[]
       };
@@ -130,7 +134,9 @@ class RecordingTexClient implements TenantQueryClient {
             name: values[0],
             phone_number: values[1],
             department: values[2],
-            is_active: values[3]
+            monthly_salary: values[3],
+            submission_frequency: values[4],
+            is_active: values[5]
           }
         ] as Row[]
       };

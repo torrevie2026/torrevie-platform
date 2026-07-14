@@ -13,6 +13,8 @@ type EmployeeForm = {
   name: string;
   phoneNumber: string;
   department: string;
+  monthlySalary: string;
+  submissionFrequency: TexEmployeeProfile["submissionFrequency"];
   isActive: boolean;
 };
 
@@ -20,6 +22,8 @@ const emptyEmployeeForm: EmployeeForm = {
   name: "",
   phoneNumber: "",
   department: "",
+  monthlySalary: "",
+  submissionFrequency: "realtime",
   isActive: true
 };
 
@@ -55,6 +59,8 @@ export function TexPeopleClient({
       name: employee.name,
       phoneNumber: employee.phoneNumber,
       department: employee.department ?? "",
+      monthlySalary: employee.monthlySalary > 0 ? String(employee.monthlySalary) : "",
+      submissionFrequency: employee.submissionFrequency,
       isActive: employee.isActive
     });
     setNotice(null);
@@ -86,7 +92,10 @@ export function TexPeopleClient({
       const method = editingEmployeeId ? "PATCH" : "POST";
       const response = await texFetch<{ employee: TexEmployeeProfile }>(path, {
         method,
-        body: JSON.stringify(form)
+        body: JSON.stringify({
+          ...form,
+          monthlySalary: form.monthlySalary ? Number(form.monthlySalary) : 0
+        })
       });
 
       setEmployees((current) => {
@@ -175,6 +184,13 @@ export function TexPeopleClient({
                     <small>
                       {employee.department || "No department"} · {employee.phoneNumber}
                     </small>
+                    <small>
+                      Salary{" "}
+                      {employee.monthlySalary > 0
+                        ? `${employee.monthlySalary.toLocaleString()} AED`
+                        : "not set"}{" "}
+                      - {submissionFrequencyLabel(employee.submissionFrequency)}
+                    </small>
                     <small>{employee.userId ? "Linked to platform user" : "WhatsApp only"}</small>
                   </span>
                   <b>{employee.isActive ? "Active" : "Inactive"}</b>
@@ -234,6 +250,36 @@ export function TexPeopleClient({
                 onChange={(event) => setForm({ ...form, department: event.target.value })}
               />
             </label>
+            <label>
+              Monthly salary
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.monthlySalary}
+                disabled={!canManage}
+                onChange={(event) => setForm({ ...form, monthlySalary: event.target.value })}
+              />
+            </label>
+            <label>
+              Submission cadence
+              <select
+                value={form.submissionFrequency}
+                disabled={!canManage}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    submissionFrequency: event.target
+                      .value as TexEmployeeProfile["submissionFrequency"]
+                  })
+                }
+              >
+                <option value="realtime">Realtime</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </label>
             <label className="tex-toggle-label">
               <input
                 type="checkbox"
@@ -264,6 +310,19 @@ export function TexPeopleClient({
       </div>
     </section>
   );
+}
+
+function submissionFrequencyLabel(value: TexEmployeeProfile["submissionFrequency"]) {
+  switch (value) {
+    case "daily":
+      return "Daily";
+    case "weekly":
+      return "Weekly";
+    case "monthly":
+      return "Monthly";
+    default:
+      return "Realtime";
+  }
 }
 
 async function texFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {

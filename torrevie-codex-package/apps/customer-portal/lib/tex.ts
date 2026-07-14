@@ -56,6 +56,8 @@ export type TexEmployeeProfile = {
   name: string;
   phoneNumber: string;
   department: string | null;
+  monthlySalary: number;
+  submissionFrequency: "realtime" | "daily" | "weekly" | "monthly";
   isActive: boolean;
 };
 
@@ -63,6 +65,8 @@ export type TexEmployeeProfileInput = {
   name: string;
   phoneNumber: string;
   department?: string | null;
+  monthlySalary?: number | null;
+  submissionFrequency?: "realtime" | "daily" | "weekly" | "monthly" | null;
   isActive: boolean;
 };
 
@@ -610,7 +614,15 @@ export async function listTexBootstrap(
       ),
       client.query<TexEmployeeProfileRow>(
         `
-          select id, user_id, name, phone_number, department, is_active
+          select
+            id,
+            user_id,
+            name,
+            phone_number,
+            department,
+            monthly_salary::float as monthly_salary,
+            submission_frequency,
+            is_active
           from public.tex_employee_profiles
           where tenant_id = public.current_tenant_id()
           order by name asc
@@ -762,6 +774,8 @@ export async function createTexEmployeeProfile(
   const name = cleanRequired(input.name, "Employee name");
   const phoneNumber = normalizePhoneDigits(input.phoneNumber);
   const department = cleanOptional(input.department);
+  const monthlySalary = optionalNonNegative(input.monthlySalary, "monthly salary") ?? 0;
+  const submissionFrequency = sanitizeSubmissionFrequency(input.submissionFrequency);
 
   if (!phoneNumber) {
     throw new Error("Employee WhatsApp phone is required.");
@@ -775,14 +789,32 @@ export async function createTexEmployeeProfile(
           name,
           phone_number,
           department,
+          monthly_salary,
+          submission_frequency,
           is_active,
           created_by,
           updated_by
         )
-        values (public.current_tenant_id(), $1, $2, $3, $4, $5, $5)
-        returning id, user_id, name, phone_number, department, is_active
+        values (public.current_tenant_id(), $1, $2, $3, $4, $5, $6, $6)
+        returning
+          id,
+          user_id,
+          name,
+          phone_number,
+          department,
+          monthly_salary::float as monthly_salary,
+          submission_frequency,
+          is_active
       `,
-      [name, phoneNumber, department, input.isActive, actor.userId]
+      [
+        name,
+        phoneNumber,
+        department,
+        monthlySalary,
+        submissionFrequency,
+        input.isActive,
+        actor.userId
+      ]
     );
     const employee = requireSingleRow(result.rows, "employee profile");
 
@@ -813,6 +845,8 @@ export async function updateTexEmployeeProfile(
   const name = cleanRequired(input.name, "Employee name");
   const phoneNumber = normalizePhoneDigits(input.phoneNumber);
   const department = cleanOptional(input.department);
+  const monthlySalary = optionalNonNegative(input.monthlySalary, "monthly salary") ?? 0;
+  const submissionFrequency = sanitizeSubmissionFrequency(input.submissionFrequency);
 
   if (!phoneNumber) {
     throw new Error("Employee WhatsApp phone is required.");
@@ -825,13 +859,32 @@ export async function updateTexEmployeeProfile(
            set name = $2,
                phone_number = $3,
                department = $4,
-               is_active = $5,
-               updated_by = $6
+               monthly_salary = $5,
+               submission_frequency = $6,
+               is_active = $7,
+               updated_by = $8
          where tenant_id = public.current_tenant_id()
            and id = $1
-        returning id, user_id, name, phone_number, department, is_active
+        returning
+          id,
+          user_id,
+          name,
+          phone_number,
+          department,
+          monthly_salary::float as monthly_salary,
+          submission_frequency,
+          is_active
       `,
-      [employeeProfileId, name, phoneNumber, department, input.isActive, actor.userId]
+      [
+        employeeProfileId,
+        name,
+        phoneNumber,
+        department,
+        monthlySalary,
+        submissionFrequency,
+        input.isActive,
+        actor.userId
+      ]
     );
     const employee = requireSingleRow(result.rows, "employee profile");
 
@@ -4026,6 +4079,16 @@ function sanitizeReportPeriod(dateFrom?: string | null, dateTo?: string | null) 
   };
 }
 
+function sanitizeSubmissionFrequency(
+  value: TexEmployeeProfileInput["submissionFrequency"]
+): TexEmployeeProfile["submissionFrequency"] {
+  if (value === "daily" || value === "weekly" || value === "monthly" || value === "realtime") {
+    return value;
+  }
+
+  return "realtime";
+}
+
 function sanitizeEmailRecipients(values: readonly string[]) {
   return values
     .flatMap((value) => String(value).split(/[,\n;]/))
@@ -4632,6 +4695,8 @@ function mapEmployeeProfile(row: TexEmployeeProfileRow): TexEmployeeProfile {
     name: row.name,
     phoneNumber: row.phone_number,
     department: row.department,
+    monthlySalary: row.monthly_salary,
+    submissionFrequency: row.submission_frequency,
     isActive: row.is_active
   };
 }
@@ -4908,6 +4973,8 @@ type TexEmployeeProfileRow = {
   name: string;
   phone_number: string;
   department: string | null;
+  monthly_salary: number;
+  submission_frequency: "realtime" | "daily" | "weekly" | "monthly";
   is_active: boolean;
 };
 

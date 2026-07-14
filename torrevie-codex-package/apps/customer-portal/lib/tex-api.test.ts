@@ -204,7 +204,7 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
-    if (sql.includes("select id, user_id, name, phone_number, department, is_active")) {
+    if (sql.includes("from public.tex_employee_profiles") && sql.includes("order by name asc")) {
       return { rows: [] };
     }
 
@@ -373,7 +373,9 @@ class RecordingTexApiClient implements TenantQueryClient {
             name: values[0],
             phone_number: values[1],
             department: values[2],
-            is_active: true
+            monthly_salary: values[3],
+            submission_frequency: values[4],
+            is_active: values[5]
           }
         ] as Row[]
       };
@@ -388,7 +390,9 @@ class RecordingTexApiClient implements TenantQueryClient {
             name: values[1],
             phone_number: values[2],
             department: values[3],
-            is_active: values[4]
+            monthly_salary: values[4],
+            submission_frequency: values[5],
+            is_active: values[6]
           }
         ] as Row[]
       };

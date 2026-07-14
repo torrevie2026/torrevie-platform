@@ -32,6 +32,8 @@ export async function saveTexEmployeeProfileAction(formData: FormData) {
         name: stringValue(formData, "name"),
         phoneNumber: stringValue(formData, "phoneNumber"),
         department: stringValue(formData, "department"),
+        monthlySalary: numberValue(formData, "monthlySalary"),
+        submissionFrequency: submissionFrequencyValue(formData, "submissionFrequency"),
         isActive: formData.get("isActive") === "on"
       });
       revalidatePath(`/${locale}/tex`);
@@ -59,4 +61,17 @@ async function resolveActor() {
 
 function stringValue(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
+}
+
+function numberValue(formData: FormData, key: string) {
+  const value = stringValue(formData, key);
+  return value ? Number(value) : null;
+}
+
+function submissionFrequencyValue(formData: FormData, key: string) {
+  const value = stringValue(formData, key);
+
+  return value === "daily" || value === "weekly" || value === "monthly" || value === "realtime"
+    ? value
+    : null;
 }
