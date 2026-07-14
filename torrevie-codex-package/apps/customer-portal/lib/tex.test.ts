@@ -10,6 +10,7 @@ import {
   listTexTripLegs,
   listTexExpenses,
   listTexFinanceReview,
+  listTexIntegrationWorkspace,
   listTexReportWorkspace,
   listTexTrips,
   listTexBootstrap,
@@ -174,6 +175,23 @@ class RecordingTexClient implements TenantQueryClient {
             duplicate_detection_enabled: true,
             duplicate_auto_reject_enabled: false,
             duplicate_similarity_threshold: 0.92
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("from public.tenant_whatsapp_provider_profiles")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000015001",
+            label: "Primary Wappfly",
+            provider: "wappfly",
+            status: "active",
+            is_default: true,
+            webhook_url: "https://app.torrevie.com/api/tex/webhooks/wappfly",
+            api_key_last4: "1234",
+            keys_configured: true
           }
         ] as Row[]
       };
@@ -613,6 +631,18 @@ async function main() {
 
   {
     const client = new RecordingTexClient();
+    const integrations = await listTexIntegrationWorkspace(client, {
+      ...actor,
+      roles: ["customer_admin"]
+    });
+    assert.equal(integrations.defaultProviderProfile?.label, "Primary Wappfly");
+    assert.equal(integrations.receiptStorage.bucket, "receipts");
+    assert.equal(integrations.receiptStorage.pathPrefix, `tenant/${actor.tenantId}/tex/receipts/`);
+    assert.equal(client.hasSql("from public.tenant_whatsapp_provider_profiles"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
     const employee = await createTexEmployeeProfile(client, actor, {
       name: "Omar Faris",
       phoneNumber: "+971 50 000 0002",
@@ -910,6 +940,10 @@ async function main() {
       assert.equal(headers.apikey, "sb_secret_test");
       assert.equal("Authorization" in headers, false);
       assert.equal(receipt.filename, "receipt.png");
+      assert.match(
+        receipt.storagePath,
+        new RegExp(`^tenant/${actor.tenantId}/tex/receipts/[0-9a-f-]+\\.png$`)
+      );
       assert.equal(client.valuesContain("tex.receipt.uploaded"), true);
     } finally {
       globalThis.fetch = previousFetch;

@@ -82,6 +82,28 @@ export type TexIntegrationSettings = {
   duplicateSimilarityThreshold: number;
 };
 
+export type TexProviderProfileSummary = {
+  id: string;
+  label: string;
+  provider: "ultramsg" | "wappfly" | "meta";
+  status: "active" | "inactive";
+  isDefault: boolean;
+  webhookUrl: string | null;
+  apiKeyConfigured: boolean;
+  apiKeyLast4: string;
+};
+
+export type TexIntegrationWorkspace = {
+  settings: TexIntegrationSettings | null;
+  providerProfiles: TexProviderProfileSummary[];
+  defaultProviderProfile: TexProviderProfileSummary | null;
+  receiptStorage: {
+    bucket: string;
+    pathPrefix: string;
+    convention: string;
+  };
+};
+
 export type TexExpenseInput = {
   employeeProfileId?: string | null;
   vendor?: string | null;
@@ -611,6 +633,63 @@ export async function listTexBootstrap(
       integrationSettings: integrationSettings.rows[0]
         ? mapIntegrationSettings(integrationSettings.rows[0])
         : null
+    };
+  });
+}
+
+export async function listTexIntegrationWorkspace(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<TexIntegrationWorkspace> {
+  assertTexPermission(actor, "tex.integration.manage");
+
+  return withTenantContext(client, actor, async () => {
+    const [settings, providerProfiles] = await Promise.all([
+      client.query<TexIntegrationSettingsRow>(
+        `
+          select
+            whatsapp_provider,
+            whatsapp_instance_id,
+            wappfly_session_id,
+            meta_phone_number_id,
+            meta_whatsapp_business_account_id,
+            ai_receipt_extraction_enabled,
+            duplicate_detection_enabled,
+            duplicate_auto_reject_enabled,
+            duplicate_similarity_threshold::float as duplicate_similarity_threshold
+          from public.tex_integration_settings
+          where tenant_id = public.current_tenant_id()
+          limit 1
+        `
+      ),
+      client.query<TexProviderProfileSummaryRow>(
+        `
+          select
+            id,
+            label,
+            provider,
+            status,
+            is_default,
+            webhook_url,
+            api_key_last4,
+            keys_configured
+          from public.tenant_whatsapp_provider_profiles
+          where tenant_id = public.current_tenant_id()
+          order by is_default desc, label asc
+        `
+      )
+    ]);
+    const profiles = providerProfiles.rows.map(mapProviderProfileSummary);
+
+    return {
+      settings: settings.rows[0] ? mapIntegrationSettings(settings.rows[0]) : null,
+      providerProfiles: profiles,
+      defaultProviderProfile: profiles.find((profile) => profile.isDefault) ?? null,
+      receiptStorage: {
+        bucket: receiptBucketName(),
+        pathPrefix: `tenant/${actor.tenantId}/tex/receipts/`,
+        convention: "tenant/{tenant_id}/tex/receipts/{file_id}.{extension}"
+      }
     };
   });
 }
@@ -4391,6 +4470,19 @@ function mapIntegrationSettings(row: TexIntegrationSettingsRow): TexIntegrationS
   };
 }
 
+function mapProviderProfileSummary(row: TexProviderProfileSummaryRow): TexProviderProfileSummary {
+  return {
+    id: row.id,
+    label: row.label,
+    provider: row.provider,
+    status: row.status,
+    isDefault: row.is_default,
+    webhookUrl: row.webhook_url,
+    apiKeyConfigured: row.keys_configured,
+    apiKeyLast4: row.api_key_last4 ?? ""
+  };
+}
+
 function mapExpense(row: TexExpenseRow): TexExpenseRecord {
   return {
     id: row.id,
@@ -4647,6 +4739,17 @@ type TexIntegrationSettingsRow = {
   duplicate_detection_enabled: boolean;
   duplicate_auto_reject_enabled: boolean;
   duplicate_similarity_threshold: number;
+};
+
+type TexProviderProfileSummaryRow = {
+  id: string;
+  label: string;
+  provider: "ultramsg" | "wappfly" | "meta";
+  status: "active" | "inactive";
+  is_default: boolean;
+  webhook_url: string | null;
+  api_key_last4: string | null;
+  keys_configured: boolean;
 };
 
 type TexExpenseRow = {

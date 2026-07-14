@@ -3115,6 +3115,81 @@ form.member-row {
   padding: 12px;
 }
 
+.tex-integrations-workspace {
+  display: grid;
+  gap: 16px;
+}
+
+.tex-integrations-grid {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tex-integrations-wide {
+  grid-column: 1 / -1;
+}
+
+.tex-integration-details {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.tex-integration-details div,
+.tex-provider-profile-row {
+  align-items: center;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(120px, 0.35fr) minmax(0, 1fr);
+  padding: 12px;
+}
+
+.tex-integration-details dt {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.tex-integration-details dd {
+  font-weight: 800;
+  margin: 0;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.tex-provider-profile-list {
+  display: grid;
+  gap: 10px;
+}
+
+.tex-provider-profile-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.tex-provider-profile-row span {
+  display: grid;
+  gap: 3px;
+  min-inline-size: 0;
+}
+
+.tex-provider-profile-row small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tex-provider-profile-row b {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
 .tex-muted-row {
   opacity: 0.62;
 }
@@ -3265,6 +3340,7 @@ form.member-row {
   .tex-trip-workspace,
   .tex-finance-workspace,
   .tex-people-grid,
+  .tex-integrations-grid,
   .tex-report-grid,
   .tex-settings-grid,
   .fsm-widget-grid,
@@ -3301,6 +3377,8 @@ form.member-row {
   .tex-report-row,
   .tex-report-breakdown article,
   .tex-report-controls .tex-form-grid,
+  .tex-integration-details div,
+  .tex-provider-profile-row,
   .tex-whatsapp-card,
   .tex-policy-row,
   .tex-budget-admin-row,

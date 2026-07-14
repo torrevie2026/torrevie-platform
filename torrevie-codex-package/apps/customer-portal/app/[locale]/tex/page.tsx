@@ -11,6 +11,7 @@ import {
   listTexBootstrap,
   listTexExpenses,
   listTexFinanceReview,
+  listTexIntegrationWorkspace,
   listTexReportWorkspace,
   listTexSettingsWorkspace,
   listTexTrips,
@@ -19,6 +20,7 @@ import {
 } from "../../../lib/tex";
 import { TexExpensesClient } from "./TexExpensesClient";
 import { TexFinanceClient } from "./TexFinanceClient";
+import { TexIntegrationsClient } from "./TexIntegrationsClient";
 import { TexPeopleClient } from "./TexPeopleClient";
 import { TexReportsClient } from "./TexReportsClient";
 import { TexSettingsClient } from "./TexSettingsClient";
@@ -58,6 +60,7 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
       "open"
     ).catch(() => []);
     const reportWorkspace = await listTexReportWorkspace(client, actor).catch(() => null);
+    const integrationWorkspace = await listTexIntegrationWorkspace(client, actor).catch(() => null);
     const settingsWorkspace = await listTexSettingsWorkspace(
       client,
       actor,
@@ -179,6 +182,10 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
           <TexWhatsappReviewClient
             employees={bootstrap.employeeProfiles}
             initialSubmissions={whatsappSubmissions}
+          />
+          <TexIntegrationsClient
+            adminIntegrationsHref={`/${locale}/admin/users#tex-whatsapp-settings`}
+            initialWorkspace={integrationWorkspace}
           />
           <TexSettingsClient initialSettings={settingsWorkspace} canManage={canManagePolicies} />
         </section>

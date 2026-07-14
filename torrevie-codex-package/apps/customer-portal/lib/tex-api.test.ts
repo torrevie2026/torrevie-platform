@@ -230,6 +230,23 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("from public.tenant_whatsapp_provider_profiles")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000015001",
+            label: "Primary Wappfly",
+            provider: "wappfly",
+            status: "active",
+            is_default: true,
+            webhook_url: "https://app.torrevie.com/api/tex/webhooks/wappfly",
+            api_key_last4: "1234",
+            keys_configured: true
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("from public.tex_notifications")) {
       return {
         rows: [
@@ -1322,6 +1339,23 @@ async function main() {
     assert.equal(response.status, 200);
     assert.match(JSON.stringify(response.body), /Maya Haddad/);
     assert.equal(client.hasSql("e.expense_date >= $1::date"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "GET",
+      path: "/integrations"
+    });
+    assert.equal(response.status, 200);
+    assert.match(JSON.stringify(response.body), /Primary Wappfly/);
+    assert.equal(
+      JSON.stringify(response.body).includes(
+        "tenant/00000000-0000-4000-8000-000000001001/tex/receipts/"
+      ),
+      true
+    );
+    assert.equal(client.hasSql("from public.tenant_whatsapp_provider_profiles"), true);
   }
 
   {

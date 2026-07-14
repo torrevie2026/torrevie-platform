@@ -16,6 +16,7 @@ import {
   listTexBootstrap,
   listTexExpenses,
   listTexFinanceReview,
+  listTexIntegrationWorkspace,
   listTexNotifications,
   listTexReportWorkspace,
   listTexSettingsWorkspace,
@@ -219,6 +220,10 @@ export async function handleTexApiRequest(
 
   if ((path === "/reports" || path === "/dashboard") && method === "GET") {
     return json(200, await listTexReportWorkspace(client, actor, readReportInput(request.query)));
+  }
+
+  if (path === "/integrations" && method === "GET") {
+    return json(200, await listTexIntegrationWorkspace(client, actor));
   }
 
   if (path === "/finance-review/pay" && method === "POST") {
