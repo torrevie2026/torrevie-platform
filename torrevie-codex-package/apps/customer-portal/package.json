@@ -17,6 +17,7 @@
     "@torrevie/permissions": "workspace:*",
     "@torrevie/tenant-context": "workspace:*",
     "@torrevie/ui": "workspace:*",
+    "lucide-react": "^0.462.0",
     "next": "16.2.10",
     "pg": "^8.22.0",
     "react": "19.2.7",

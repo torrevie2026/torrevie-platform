@@ -1,5 +1,16 @@
 "use client";
 
+import {
+  BarChart3,
+  ClipboardCheck,
+  LayoutGrid,
+  MapPin,
+  MessageCircle,
+  Plug,
+  Receipt,
+  Settings,
+  Users
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -11,15 +22,15 @@ type TexShellNavProps = {
 };
 
 const texNavItems = [
-  { href: "", icon: "D", label: "Dashboard" },
-  { href: "/expenses", icon: "E", label: "Expenses" },
-  { href: "/trips", icon: "T", label: "Trips" },
-  { href: "/finance-review", icon: "F", label: "Finance review" },
-  { href: "/people", icon: "P", label: "People" },
-  { href: "/reports", icon: "R", label: "Reports" },
-  { href: "/whatsapp-review", icon: "W", label: "WhatsApp review" },
-  { href: "/integrations", icon: "I", label: "Integrations" },
-  { href: "/settings", icon: "S", label: "Settings" }
+  { href: "", icon: LayoutGrid, label: "Dashboard" },
+  { href: "/expenses", icon: Receipt, label: "Expenses" },
+  { href: "/trips", icon: MapPin, label: "Trips" },
+  { href: "/finance-review", icon: ClipboardCheck, label: "Finance review" },
+  { href: "/people", icon: Users, label: "People" },
+  { href: "/reports", icon: BarChart3, label: "Reports" },
+  { href: "/whatsapp-review", icon: MessageCircle, label: "WhatsApp review" },
+  { href: "/integrations", icon: Plug, label: "Integrations" },
+  { href: "/settings", icon: Settings, label: "Settings" }
 ] as const;
 
 export function TexShellNav({ email, locale, roles, tenantId }: TexShellNavProps) {
@@ -44,6 +55,7 @@ export function TexShellNav({ email, locale, roles, tenantId }: TexShellNavProps
           const href = `${basePath}${item.href}`;
           const isDashboard = item.href === "";
           const active = isDashboard ? pathname === basePath : pathname.startsWith(href);
+          const Icon = item.icon;
 
           return (
             <Link
@@ -53,7 +65,7 @@ export function TexShellNav({ email, locale, roles, tenantId }: TexShellNavProps
               key={item.href || "dashboard"}
             >
               <span className="tex-nav-icon" aria-hidden="true">
-                {item.icon}
+                <Icon />
               </span>
               <span>{item.label}</span>
             </Link>
