@@ -1,7 +1,16 @@
 import { strict as assert } from "node:assert";
 import type { QueryResult, QueryValue, TenantQueryClient } from "@torrevie/tenant-context";
 import { handleTexApiRequest } from "./tex-api";
-import type { TexActorContext } from "./tex";
+import { setTexWhatsappNotificationDispatcherForTest, type TexActorContext } from "./tex";
+
+setTexWhatsappNotificationDispatcherForTest(async (input) => ({
+  ok: true,
+  provider: input.provider,
+  status: "sent",
+  messageId: "test-whatsapp-message",
+  error: null,
+  httpStatus: 200
+}));
 
 const actor: TexActorContext = {
   tenantId: "00000000-0000-4000-8000-000000001001",
@@ -35,10 +44,28 @@ class RecordingTexApiClient implements TenantQueryClient {
       return { rows: [] };
     }
 
+    if (sql.includes("api_secret.secret_value as api_key")) {
+      return {
+        rows: [
+          {
+            whatsapp_provider: "wappfly",
+            whatsapp_instance_id: null,
+            wappfly_session_id: "session-a",
+            meta_phone_number_id: null,
+            api_key: "test-api-key"
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("from public.tex_integration_settings")) {
       return {
         rows: [
           {
+            whatsapp_provider: "wappfly",
+            whatsapp_instance_id: null,
+            wappfly_session_id: "session-a",
+            meta_phone_number_id: null,
             ai_receipt_extraction_enabled: true,
             duplicate_detection_enabled: true,
             duplicate_auto_reject_enabled: false,

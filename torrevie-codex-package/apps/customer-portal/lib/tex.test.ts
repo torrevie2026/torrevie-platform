@@ -16,12 +16,22 @@ import {
   recordTexWebhookSubmission,
   replaceTexTripLegs,
   resolveTexActorContext,
+  setTexWhatsappNotificationDispatcherForTest,
   updateTexTrip,
   updateTexEmployeeProfile,
   updateTexExpenseStatus,
   uploadTexReceiptFile,
   type TexActorContext
 } from "./tex";
+
+setTexWhatsappNotificationDispatcherForTest(async (input) => ({
+  ok: true,
+  provider: input.provider,
+  status: "sent",
+  messageId: "test-whatsapp-message",
+  error: null,
+  httpStatus: 200
+}));
 
 const actor: TexActorContext = {
   tenantId: "00000000-0000-4000-8000-000000001001",
@@ -114,6 +124,20 @@ class RecordingTexClient implements TenantQueryClient {
             id: "00000000-0000-4000-8000-000000005001",
             name: "Ops",
             description: "Operations"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("api_secret.secret_value as api_key")) {
+      return {
+        rows: [
+          {
+            whatsapp_provider: "wappfly",
+            whatsapp_instance_id: null,
+            wappfly_session_id: "session-a",
+            meta_phone_number_id: null,
+            api_key: "test-api-key"
           }
         ] as Row[]
       };
@@ -262,7 +286,10 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
-    if (sql.includes("from public.tex_trips t") && sql.includes("driver_payout_status = 'unpaid'")) {
+    if (
+      sql.includes("from public.tex_trips t") &&
+      sql.includes("driver_payout_status = 'unpaid'")
+    ) {
       return {
         rows: [
           {
@@ -354,7 +381,9 @@ class RecordingTexClient implements TenantQueryClient {
       return {
         rows: [
           {
-            id: sql.includes("insert into public.tex_trips") ? "00000000-0000-4000-8000-000000008001" : values[18],
+            id: sql.includes("insert into public.tex_trips")
+              ? "00000000-0000-4000-8000-000000008001"
+              : values[18],
             name: values[0] ?? "Dubai run",
             description: values[1] ?? null,
             trip_type: values[2] ?? "general",
@@ -484,7 +513,10 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
-    if (sql.includes("insert into public.tex_trip_legs") || sql.includes("update public.tex_trip_legs")) {
+    if (
+      sql.includes("insert into public.tex_trip_legs") ||
+      sql.includes("update public.tex_trip_legs")
+    ) {
       return {
         rows: [
           {
@@ -534,12 +566,17 @@ async function main() {
 
   {
     const client = new RecordingTexClient();
-    const employee = await updateTexEmployeeProfile(client, actor, "00000000-0000-4000-8000-000000004001", {
-      name: "Maya Haddad Updated",
-      phoneNumber: "+971 50 000 0001",
-      department: "Finance",
-      isActive: false
-    });
+    const employee = await updateTexEmployeeProfile(
+      client,
+      actor,
+      "00000000-0000-4000-8000-000000004001",
+      {
+        name: "Maya Haddad Updated",
+        phoneNumber: "+971 50 000 0001",
+        department: "Finance",
+        isActive: false
+      }
+    );
     assert.equal(employee.name, "Maya Haddad Updated");
     assert.equal(employee.phoneNumber, "971500000001");
     assert.equal(employee.isActive, false);
@@ -627,7 +664,12 @@ async function main() {
 
   {
     const client = new RecordingTexClient();
-    await deleteTexTripLeg(client, actor, "00000000-0000-4000-8000-000000008001", "00000000-0000-4000-8000-000000009001");
+    await deleteTexTripLeg(
+      client,
+      actor,
+      "00000000-0000-4000-8000-000000008001",
+      "00000000-0000-4000-8000-000000009001"
+    );
     assert.equal(client.valuesContain("tex.trip.leg_deleted"), true);
   }
 
@@ -736,7 +778,9 @@ async function main() {
     });
     assert.equal(result.ocrStatus, "not_applicable");
     assert.match(result.replyText, /Pending: 2/);
+    assert.equal(result.delivery?.status, "sent");
     assert.equal(client.valuesContain("status"), true);
+    assert.equal(client.valuesContain("tex.notification.whatsapp_reply_sent"), true);
   }
 
   {
@@ -760,6 +804,7 @@ async function main() {
     });
     assert.equal(result.ocrStatus, "extracted");
     assert.match(result.replyText, /possible duplicate/);
+    assert.equal(result.delivery?.messageId, "test-whatsapp-message");
     assert.equal(client.valuesContain("suspected"), true);
     assert.equal(client.valuesContain(true), true);
   }

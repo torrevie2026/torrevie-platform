@@ -44,12 +44,13 @@ Completed platform migration checkpoints so far:
 - Added platform-native compatibility handlers for source notification routes, driver advance create/delete, and the legacy maps autocomplete path.
 - Added platform-native inbound webhook endpoints for Wappfly, UltraMsg, and Meta WhatsApp under `/api/tex/webhooks/[provider]`, including tenant resolution, token/signature verification, and reuse of migrated TEX WhatsApp processing.
 - Added the unregistered WhatsApp review queue to the platform TEX page, with API support to list, ignore, or resolve submissions into employee profiles and pending TEX expenses.
+- Added the shared `@torrevie/notifications` WhatsApp dispatcher and wired TEX inbound/review replies to tenant-scoped Wappfly, UltraMsg, or Meta default integration settings with audit logging for sent, skipped, and failed replies.
 - Kept `tex1.torrevie.com` untouched; no DNS, Vercel, live environment, or shutdown action is part of this migration branch.
 
 ## Remaining Gaps
 
 - Source reports, full settings/policy/budget administration, employee invitation UX, onboarding flow, dashboard metrics, email queue behavior, and several admin-only source screens still need platform-specific migration or explicit rejection.
-- Outbound WhatsApp replies from inbound webhooks still need the shared notification-service integration. This pass returns the generated reply text from processing but does not call Wappfly, UltraMsg, or Meta send APIs.
+- Outbound WhatsApp profile routing is currently limited to the default TEX WhatsApp integration settings; tenant provider-profile selection still needs a dedicated pass if multiple sending numbers are required per tenant.
 - Remaining source Edge Functions need a dedicated pass to decide whether each becomes an App Router route, a shared notification integration, or remains deferred.
 - Storage bucket policies need verification against the platform `tenant/{tenant_id}/tex/...` convention for all receipt and company-logo behavior.
 - End-to-end browser verification against seeded TEX data remains required.

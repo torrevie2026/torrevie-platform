@@ -7,6 +7,11 @@ import {
   type RoleKey
 } from "@torrevie/permissions";
 import {
+  dispatchWhatsAppNotification,
+  type WhatsAppDispatchResult,
+  type WhatsAppProvider
+} from "@torrevie/notifications";
+import {
   withTenantContext,
   type ResolvedTenantContext,
   type TenantQueryClient
@@ -383,6 +388,7 @@ export type TexUnregisteredWhatsappResolveResult = {
   submission: TexWebhookSubmissionRecord;
   employee: TexEmployeeProfile;
   expense: TexExpenseRecord;
+  delivery: WhatsAppDispatchResult | null;
 };
 
 export type TexWhatsappReceiptResult = {
@@ -390,7 +396,10 @@ export type TexWhatsappReceiptResult = {
   replyText: string;
   expense: TexExpenseRecord | null;
   ocrStatus: "pending" | "processing" | "extracted" | "failed" | "manual_review" | "not_applicable";
+  delivery: WhatsAppDispatchResult | null;
 };
+
+let texWhatsappNotificationDispatcher = dispatchWhatsAppNotification;
 
 export async function resolveTexActorContext(
   client: TenantQueryClient,
@@ -1617,6 +1626,12 @@ export async function markAllTexNotificationsRead(
   });
 }
 
+export function setTexWhatsappNotificationDispatcherForTest(
+  dispatcher: typeof dispatchWhatsAppNotification | null
+) {
+  texWhatsappNotificationDispatcher = dispatcher ?? dispatchWhatsAppNotification;
+}
+
 export async function uploadTexReceiptFile(
   client: TenantQueryClient,
   actor: TexActorContext,
@@ -1955,8 +1970,9 @@ export async function processTexWhatsappSubmission(
         ocrResult: {},
         replyText
       });
+      const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
 
-      return { submission: row, replyText, expense: null, ocrStatus: "not_applicable" };
+      return { submission: row, replyText, expense: null, ocrStatus: "not_applicable", delivery };
     });
   }
 
@@ -1985,8 +2001,9 @@ export async function processTexWhatsappSubmission(
         ocrError: extractionError,
         replyText
       });
+      const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
 
-      return { submission: row, replyText, expense: null, ocrStatus: "manual_review" };
+      return { submission: row, replyText, expense: null, ocrStatus: "manual_review", delivery };
     }
 
     if (!settings.ai_receipt_extraction_enabled) {
@@ -1999,8 +2016,9 @@ export async function processTexWhatsappSubmission(
         ocrError: extractionError,
         replyText
       });
+      const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
 
-      return { submission: row, replyText, expense: null, ocrStatus: "manual_review" };
+      return { submission: row, replyText, expense: null, ocrStatus: "manual_review", delivery };
     }
 
     if (!extraction || !extraction.expenseDate || !extraction.amount || !extraction.currency) {
@@ -2013,12 +2031,14 @@ export async function processTexWhatsappSubmission(
         ocrError: extractionError,
         replyText
       });
+      const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
 
       return {
         submission: row,
         replyText,
         expense: null,
-        ocrStatus: extractionError ? "failed" : "manual_review"
+        ocrStatus: extractionError ? "failed" : "manual_review",
+        delivery
       };
     }
 
@@ -2046,6 +2066,7 @@ export async function processTexWhatsappSubmission(
       resolvedExpenseId: expense.id,
       resolvedEmployeeProfileId: employee.id
     });
+    const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
 
     await writeTexAuditEvent(
       client,
@@ -2058,7 +2079,7 @@ export async function processTexWhatsappSubmission(
       }
     );
 
-    return { submission: row, replyText, expense, ocrStatus: "extracted" };
+    return { submission: row, replyText, expense, ocrStatus: "extracted", delivery };
   });
 }
 
@@ -2253,11 +2274,24 @@ export async function resolveTexUnregisteredWhatsappSubmission(
         employee_profile_id: employee.id
       }
     );
+    const replyText = `Receipt reviewed and linked to ${employee.name}. It is now pending finance review.`;
+    const delivery = await deliverTexWhatsappReply(
+      client,
+      actor,
+      {
+        senderRaw: submission.sender_raw,
+        senderPhone: submission.sender_phone,
+        whatsappChatJid: submission.whatsapp_chat_jid
+      },
+      replyText,
+      submission.id
+    );
 
     return {
       submission: updated,
       employee,
-      expense
+      expense,
+      delivery
     };
   });
 }
@@ -2419,6 +2453,82 @@ async function insertWhatsappSubmission(
     id: row.id,
     status: row.status
   };
+}
+
+async function deliverTexWhatsappReply(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  submission: Pick<TexWebhookSubmissionInput, "senderPhone" | "senderRaw" | "whatsappChatJid">,
+  replyText: string,
+  submissionId: string
+): Promise<WhatsAppDispatchResult | null> {
+  const to = submission.senderPhone ?? submission.senderRaw ?? submission.whatsappChatJid ?? null;
+
+  if (!to || !replyText.trim()) {
+    return null;
+  }
+
+  const settings = await getTexWhatsappNotificationSettings(client);
+  const result = settings
+    ? await texWhatsappNotificationDispatcher({
+        provider: settings.whatsapp_provider,
+        to,
+        message: replyText,
+        apiKey: settings.api_key,
+        instanceId: settings.whatsapp_instance_id,
+        wappflySessionId: settings.wappfly_session_id,
+        metaPhoneNumberId: settings.meta_phone_number_id
+      })
+    : {
+        ok: false,
+        provider: "ultramsg" as const,
+        status: "skipped" as const,
+        messageId: null,
+        error: "TEX WhatsApp integration is not configured.",
+        httpStatus: null
+      };
+
+  await writeTexAuditEvent(
+    client,
+    actor,
+    `tex.notification.whatsapp_reply_${result.status}`,
+    "tex_unregistered_whatsapp_submission",
+    submissionId,
+    {
+      provider: result.provider,
+      message_id: result.messageId ?? "",
+      error: result.error ?? "",
+      http_status: result.httpStatus === null ? "" : String(result.httpStatus)
+    }
+  );
+
+  return result;
+}
+
+async function getTexWhatsappNotificationSettings(
+  client: TenantQueryClient
+): Promise<TexWhatsappNotificationSettingsRow | null> {
+  const result = await client.query<TexWhatsappNotificationSettingsRow>(
+    `
+      select
+        tis.whatsapp_provider,
+        tis.whatsapp_instance_id,
+        tis.wappfly_session_id,
+        tis.meta_phone_number_id,
+        api_secret.secret_value as api_key
+      from public.tex_integration_settings tis
+      left join public.tenant_integration_secrets api_secret
+        on api_secret.tenant_id = tis.tenant_id
+       and api_secret.product_key = 'tex'
+       and api_secret.integration_key = 'whatsapp'
+       and api_secret.secret_name = 'api_key'
+       and api_secret.profile_id is null
+      where tis.tenant_id = public.current_tenant_id()
+      limit 1
+    `
+  );
+
+  return result.rows[0] ?? null;
 }
 
 async function getTexIntegrationSettingsForProcessing(
@@ -3915,6 +4025,14 @@ type TexNotificationRow = {
 type TexWebhookSubmissionRow = {
   id: string;
   status: "open" | "resolved" | "ignored";
+};
+
+type TexWhatsappNotificationSettingsRow = {
+  whatsapp_provider: WhatsAppProvider;
+  whatsapp_instance_id: string | null;
+  wappfly_session_id: string | null;
+  meta_phone_number_id: string | null;
+  api_key: string | null;
 };
 
 type TexUnregisteredWhatsappSubmissionRow = {
