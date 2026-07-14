@@ -39,8 +39,6 @@ type SubscriptionRow = {
 
 type DashboardRow = {
   tenant_name: string;
-  tex_open_expenses: number;
-  tex_pending_approvals: number;
   crm_open_opportunities: number;
   activity_count: number;
 };
@@ -68,8 +66,8 @@ const appCatalog: Record<ProductKey, Omit<LauncherApp, "metricValue">> = {
     key: "tex",
     label: "TEX",
     description: "Travel, expenses, receipts, trips, approvals, and finance review.",
-    href: "/tex",
-    status: "online",
+    href: null,
+    status: "coming_soon",
     metricLabel: "Open expenses",
     accent: "teal"
   },
@@ -268,14 +266,15 @@ async function listLauncherData(
       `
         select
           coalesce((select name from public.tenants where id = public.current_tenant_id()), 'Current tenant') as tenant_name,
-          (select count(*)::int from public.tex_expenses where tenant_id = public.current_tenant_id() and status in ('pending', 'approved')) as tex_open_expenses,
-          (select count(*)::int from public.tex_expenses where tenant_id = public.current_tenant_id() and status = 'pending') as tex_pending_approvals,
           (select count(*)::int from public.opportunities where tenant_id = public.current_tenant_id()) as crm_open_opportunities,
           (select count(*)::int from public.audit_events where tenant_id = public.current_tenant_id() and occurred_at >= now() - interval '7 days') as activity_count
       `
     );
     const dashboardRow = dashboard.rows[0];
-    const subscribedKeys = subscriptions.rows.map((row) => row.key).filter(isProductKey);
+    const subscribedKeys = subscriptions.rows
+      .map((row) => row.key)
+      .filter(isProductKey)
+      .filter((key) => key !== "tex");
 
     return {
       tenantName: dashboardRow?.tenant_name ?? "Current tenant",
@@ -283,7 +282,7 @@ async function listLauncherData(
         ...appCatalog[key],
         metricValue: metricForProduct(key, dashboardRow, locale)
       })),
-      actionCount: dashboardRow ? dashboardRow.tex_pending_approvals + dashboardRow.tex_open_expenses : 0,
+      actionCount: 0,
       activityCount: dashboardRow?.activity_count ?? 0
     };
   });
@@ -294,10 +293,6 @@ function metricForProduct(key: ProductKey, dashboard: DashboardRow | undefined, 
 
   if (!dashboard) {
     return "0";
-  }
-
-  if (key === "tex") {
-    return numberFormat.format(dashboard.tex_open_expenses);
   }
 
   if (key === "crm") {
