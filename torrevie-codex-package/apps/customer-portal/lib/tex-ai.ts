@@ -113,7 +113,7 @@ export async function extractReceiptWithGemini(mediaUrl: string): Promise<TexRec
   }
 
   const media = await receiptMediaForGemini(mediaUrl);
-  const model = process.env.GEMINI_RECEIPT_MODEL?.trim() || "gemini-2.5-flash";
+  const model = process.env.GEMINI_RECEIPT_MODEL?.trim() || "gemini-3.5-flash";
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: {
