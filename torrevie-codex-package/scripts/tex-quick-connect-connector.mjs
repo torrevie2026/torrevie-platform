@@ -369,6 +369,7 @@ async function handleInboundMessage(session, sock, message) {
 
   const messageId = message.key.id || randomUUID();
   const remoteJid = message.key.remoteJid || null;
+  const sender = resolveInboundSender(message);
   const text =
     message.message.conversation ||
     message.message.extendedTextMessage?.text ||
@@ -387,6 +388,7 @@ async function handleInboundMessage(session, sock, message) {
     message,
     messageId,
     remoteJid,
+    sender,
     text
   }).catch(async (error) => {
     const errorText = errorMessage(error);
@@ -395,6 +397,7 @@ async function handleInboundMessage(session, sock, message) {
       message,
       messageId,
       remoteJid,
+      sender,
       text
     });
     await insertQuickConnectEvent(session, {
@@ -404,7 +407,9 @@ async function handleInboundMessage(session, sock, message) {
       metadata: {
         error: errorText,
         message_id: messageId,
-        remote_jid: remoteJid ?? ""
+        remote_jid: remoteJid ?? "",
+        sender_jid: sender.jid ?? "",
+        sender_phone: sender.phone ?? ""
       }
     });
     logger.warn(
@@ -441,7 +446,9 @@ async function handleInboundMessage(session, sock, message) {
       expense_id: processing.expenseId ?? "",
       message_id: messageId,
       ocr_status: processing.ocrStatus ?? "",
-      remote_jid: remoteJid ?? ""
+      remote_jid: remoteJid ?? "",
+      sender_jid: sender.jid ?? "",
+      sender_phone: sender.phone ?? ""
     }
   });
 }
@@ -516,10 +523,11 @@ async function processQuickConnectIngest(session, input) {
             mimeType: input.mediaInfo.mimeType
           }
         : null,
+      sender: input.sender,
       source: "quick_connect"
     },
-    senderPhone: jidToPhone(input.remoteJid),
-    senderRaw: jidToPhone(input.remoteJid),
+    senderPhone: input.sender.phone,
+    senderRaw: input.sender.raw,
     sessionId: session.id,
     tenantId: session.tenant_id,
     whatsappChatJid: input.remoteJid
@@ -549,6 +557,8 @@ async function processQuickConnectIngest(session, input) {
       ocr_status: body.ocrStatus ?? "",
       receipt_file_id: body.receipt?.id ?? "",
       remote_jid: input.remoteJid ?? "",
+      sender_jid: input.sender.jid ?? "",
+      sender_phone: input.sender.phone ?? "",
       submission_id: body.submission?.id ?? ""
     }
   });
@@ -596,6 +606,7 @@ async function recordQuickConnectSubmission(session, input) {
     key: input.message.key,
     messageTimestamp: input.message.messageTimestamp,
     mediaInfo: input.mediaInfo,
+    sender: input.sender,
     source: "quick_connect"
   };
   await insertWhatsappSubmission({
@@ -604,8 +615,8 @@ async function recordQuickConnectSubmission(session, input) {
     message_text: input.text,
     message_type: input.mediaInfo ? "receipt" : "text",
     payload,
-    sender_phone: jidToPhone(input.remoteJid),
-    sender_raw: jidToPhone(input.remoteJid),
+    sender_phone: input.sender.phone,
+    sender_raw: input.sender.raw,
     session_id: session.id,
     status: "open",
     tenant_id: session.tenant_id,
@@ -932,8 +943,41 @@ function shouldRestartForPairingRequest(runtime, session) {
   );
 }
 
+function resolveInboundSender(message) {
+  const key = message.key || {};
+  const candidates = [
+    key.participantPn,
+    message.participantPn,
+    key.senderPn,
+    message.senderPn,
+    key.participantAlt,
+    message.participantAlt,
+    key.participant,
+    message.participant,
+    key.remoteJidAlt,
+    message.remoteJidAlt,
+    key.remoteJid
+  ].filter(Boolean);
+  const jid = candidates.find((candidate) => isPersonalJid(candidate)) || key.remoteJid || null;
+  const phone = jidToPhone(jid);
+
+  return {
+    jid,
+    phone,
+    raw: phone || jid
+  };
+}
+
+function isPersonalJid(jid) {
+  return /@(c|s)\.whatsapp\.net$/i.test(jid);
+}
+
 function jidToPhone(jid) {
-  return jid?.replace(/@(c|s)\.whatsapp\.net$/i, "").replace(/\D/g, "") || null;
+  if (!jid || !isPersonalJid(jid)) {
+    return null;
+  }
+
+  return jid.replace(/@(c|s)\.whatsapp\.net$/i, "").replace(/\D/g, "") || null;
 }
 
 function authDirectoryFor(tenantId) {
