@@ -105,6 +105,28 @@ async function pollPendingSessions() {
   const sessions = await getPendingSessions();
 
   for (const session of sessions) {
+    const activeRuntime = activeSessions.get(session.tenant_id);
+    if (activeRuntime) {
+      if (shouldRestartForPairingRequest(activeRuntime, session)) {
+        logger.info(
+          { tenantId: session.tenant_id },
+          "Quick Connect restarting tenant socket for a new pairing request"
+        );
+        try {
+          activeRuntime.sock?.end?.();
+        } catch (error) {
+          logger.warn(
+            { error: errorMessage(error), tenantId: session.tenant_id },
+            "Unable to close Quick Connect socket before pairing restart"
+          );
+        }
+        stopTenantRuntime(session.tenant_id);
+        rmSync(authDirectoryFor(session.tenant_id), { force: true, recursive: true });
+      } else {
+        continue;
+      }
+    }
+
     if (activeSessions.has(session.tenant_id)) {
       continue;
     }
@@ -121,7 +143,10 @@ async function pollPendingSessions() {
 }
 
 async function startTenantSocket(session) {
-  activeSessions.set(session.tenant_id, { startedAt: new Date().toISOString() });
+  activeSessions.set(session.tenant_id, {
+    pairingCode: session.pairing_code,
+    startedAt: new Date().toISOString()
+  });
   await insertQuickConnectEvent(session, {
     eventType: "quick_connect.connector_started",
     status: session.status,
@@ -147,6 +172,7 @@ async function startTenantSocket(session) {
 
   activeSessions.set(session.tenant_id, {
     heartbeatTimer: startHeartbeat(session),
+    pairingCode: session.pairing_code,
     sessionId: session.id,
     sock,
     startedAt: new Date().toISOString()
@@ -896,6 +922,14 @@ function stopTenantRuntime(tenantId) {
     clearInterval(runtime.heartbeatTimer);
   }
   activeSessions.delete(tenantId);
+}
+
+function shouldRestartForPairingRequest(runtime, session) {
+  return (
+    session.status === "qr_pending" &&
+    Boolean(session.pairing_code) &&
+    runtime.pairingCode !== session.pairing_code
+  );
 }
 
 function jidToPhone(jid) {
