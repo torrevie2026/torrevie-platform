@@ -292,17 +292,49 @@ async function handleInboundMessage(session, sock, message) {
     mediaInfo = await downloadMessageMedia(sock, message);
   }
 
-  await recordQuickConnectSubmission(session, {
+  const processing = await processQuickConnectIngest(session, {
     mediaInfo,
     message,
     messageId,
     remoteJid,
     text
+  }).catch(async (error) => {
+    const errorText = errorMessage(error);
+    await recordQuickConnectSubmission(session, {
+      mediaInfo,
+      message,
+      messageId,
+      remoteJid,
+      text
+    });
+    await insertQuickConnectEvent(session, {
+      eventType: "quick_connect.ingest_failed",
+      status: "connected",
+      message: "Quick Connect could not run the TEX OCR ingest workflow.",
+      metadata: {
+        error: errorText,
+        message_id: messageId,
+        remote_jid: remoteJid ?? ""
+      }
+    });
+    logger.warn(
+      { error: errorText, messageId, tenantId: session.tenant_id },
+      "Quick Connect ingest failed"
+    );
+    return {
+      error: errorText,
+      expenseId: null,
+      ocrStatus: "failed",
+      replyText: fallbackQuickConnectReply(hasMedia),
+      status: "failed",
+      submissionId: null
+    };
   });
   const acknowledgement = await sendQuickConnectAcknowledgement(session, sock, {
     hasMedia,
     messageId,
-    remoteJid
+    remoteJid,
+    replyText: processing.replyText
   });
   const now = new Date().toISOString();
   await updateQuickConnectSession(session, {
@@ -316,7 +348,9 @@ async function handleInboundMessage(session, sock, message) {
     metadata: {
       acknowledgement_status: acknowledgement.status,
       acknowledgement_error: acknowledgement.error ?? "",
+      expense_id: processing.expenseId ?? "",
       message_id: messageId,
+      ocr_status: processing.ocrStatus ?? "",
       remote_jid: remoteJid ?? ""
     }
   });
@@ -327,9 +361,7 @@ async function sendQuickConnectAcknowledgement(session, sock, input) {
     return { error: "Missing remote JID.", status: "skipped" };
   }
 
-  const text = input.hasMedia
-    ? "Receipt received by TEX. It has been queued for finance review."
-    : "Message received by TEX. Send a receipt photo or document to queue it for finance review.";
+  const text = input.replyText?.trim() || fallbackQuickConnectReply(input.hasMedia);
 
   try {
     const result = await sock.sendMessage(input.remoteJid, { text });
@@ -368,6 +400,85 @@ async function sendQuickConnectAcknowledgement(session, sock, input) {
   }
 }
 
+async function processQuickConnectIngest(session, input) {
+  if (!quickConnectIngestUrl() || !supabaseServiceRoleKey) {
+    throw new Error("Quick Connect ingest endpoint or service role key is not configured.");
+  }
+
+  const payload = {
+    media: input.mediaInfo
+      ? {
+          dataBase64: input.mediaInfo.dataBase64,
+          fileName: input.mediaInfo.fileName,
+          mimeType: input.mediaInfo.mimeType
+        }
+      : null,
+    messageId: input.messageId,
+    messageText: input.text,
+    payload: {
+      key: input.message.key,
+      messageTimestamp: input.message.messageTimestamp,
+      mediaInfo: input.mediaInfo
+        ? {
+            bufferLength: input.mediaInfo.bufferLength,
+            fileName: input.mediaInfo.fileName,
+            mediaType: input.mediaInfo.mediaType,
+            mimeType: input.mediaInfo.mimeType
+          }
+        : null,
+      source: "quick_connect"
+    },
+    senderPhone: jidToPhone(input.remoteJid),
+    senderRaw: jidToPhone(input.remoteJid),
+    sessionId: session.id,
+    tenantId: session.tenant_id,
+    whatsappChatJid: input.remoteJid
+  };
+  const response = await fetch(quickConnectIngestUrl(), {
+    body: JSON.stringify(payload),
+    headers: {
+      Authorization: `Bearer ${supabaseServiceRoleKey}`,
+      "Content-Type": "application/json"
+    },
+    method: "POST"
+  });
+  const bodyText = await response.text();
+  const body = bodyText ? JSON.parse(bodyText) : {};
+
+  if (!response.ok) {
+    throw new Error(`TEX Quick Connect ingest failed: ${response.status} ${body.error ?? bodyText}`);
+  }
+
+  await insertQuickConnectEvent(session, {
+    eventType: "quick_connect.ingest_processed",
+    status: "connected",
+    message: "Quick Connect processed inbound WhatsApp content through TEX OCR ingest.",
+    metadata: {
+      expense_id: body.expense?.id ?? "",
+      message_id: input.messageId,
+      ocr_status: body.ocrStatus ?? "",
+      receipt_file_id: body.receipt?.id ?? "",
+      remote_jid: input.remoteJid ?? "",
+      submission_id: body.submission?.id ?? ""
+    }
+  });
+
+  return {
+    error: null,
+    expenseId: body.expense?.id ?? null,
+    ocrStatus: body.ocrStatus ?? null,
+    replyText: body.replyText || fallbackQuickConnectReply(Boolean(input.mediaInfo)),
+    status: "processed",
+    submissionId: body.submission?.id ?? null
+  };
+}
+
+function fallbackQuickConnectReply(hasMedia) {
+  return hasMedia
+    ? "Receipt received by TEX. It has been queued for finance review."
+    : "Message received by TEX. Send a receipt photo or document to queue it for finance review.";
+}
+
 async function downloadMessageMedia(sock, message) {
   const buffer = await downloadMediaMessage(
     message,
@@ -383,6 +494,7 @@ async function downloadMessageMedia(sock, message) {
 
   return {
     bufferLength: Buffer.isBuffer(buffer) ? buffer.length : 0,
+    dataBase64: Buffer.isBuffer(buffer) ? buffer.toString("base64") : "",
     fileName: document?.fileName || "whatsapp-receipt",
     mediaType: image ? "image" : "document",
     mimeType: image?.mimetype || document?.mimetype || null
@@ -742,6 +854,18 @@ function optionalEnv(...keys) {
   }
 
   return null;
+}
+
+function quickConnectIngestUrl() {
+  const explicit = optionalEnv("TEX_QUICK_CONNECT_INGEST_URL");
+  if (explicit) {
+    return explicit;
+  }
+
+  const baseUrl =
+    optionalEnv("NEXT_PUBLIC_CUSTOMER_PORTAL_URL", "CUSTOMER_PORTAL_URL", "APP_URL") ||
+    "https://app.torrevie.com";
+  return `${baseUrl.replace(/\/+$/, "")}/api/tex/quick-connect/ingest`;
 }
 
 function isDuplicateError(error) {
