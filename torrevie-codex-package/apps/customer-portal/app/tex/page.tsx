@@ -21,10 +21,10 @@ export default async function TexTrialPage({
         </a>
         <div className="tex-trial-copy">
           <p className="eyebrow">15-day Starter trial</p>
-          <h1 id="tex-trial-title">Run transport expenses, trips, receipts, and finance review from one TEX workspace.</h1>
+          <h1 id="tex-trial-title">TEX Starter Trial</h1>
           <p>
-            Create a trial tenant on the SaaS platform. You will get a dedicated TEX menu, Starter package
-            entitlement, Quick Connect WhatsApp setup, and the same production login at app.torrevie.com.
+            Run transport expenses, trips, receipts, finance review, and WhatsApp receipt intake from
+            a dedicated tenant workspace on the Torrevie SaaS platform.
           </p>
         </div>
         <div className="tex-trial-points" aria-label="Trial includes">
