@@ -252,6 +252,18 @@ async function handleConnectionUpdate(session, sock, update) {
       return;
     }
 
+    if (statusCode === DisconnectReason.loggedOut) {
+      await resetQuickConnectPairing(session, statusCode);
+      await sleep(2000);
+      if (!activeSessions.has(session.tenant_id) && !shuttingDown) {
+        void startTenantSocket({
+          ...session,
+          status: "qr_pending"
+        });
+      }
+      return;
+    }
+
     if (shouldReconnect) {
       const failureCount = (reconnectFailures.get(session.tenant_id) ?? 0) + 1;
       reconnectFailures.set(session.tenant_id, failureCount);
