@@ -237,6 +237,19 @@ async function handleConnectionUpdate(session, sock, update) {
 
     stopTenantRuntime(session.tenant_id);
 
+    if (shuttingDown) {
+      await insertQuickConnectEvent(session, {
+        eventType: "quick_connect.connector_stopping",
+        status: session.status,
+        message: "WhatsApp socket closed because the Quick Connect connector is stopping.",
+        metadata: {
+          instance_id: connectorInstanceId,
+          status_code: String(statusCode ?? "")
+        }
+      });
+      return;
+    }
+
     if (shouldReconnect) {
       await insertQuickConnectEvent(session, {
         eventType: "quick_connect.reconnecting",
@@ -541,9 +554,9 @@ async function getPendingSessions() {
   if (!databaseUrl) {
     const params = new URLSearchParams({
       limit: String(maxSessions),
+      or: "(status.in.(qr_pending,connected),and(status.eq.disconnected,connected_phone.not.is.null))",
       order: "updated_at.desc",
-      select: "id,tenant_id,status,pairing_code",
-      status: "in.(qr_pending,connected)"
+      select: "id,tenant_id,status,pairing_code"
     });
     if (tenantFilter) {
       params.set("tenant_id", `eq.${tenantFilter}`);
@@ -556,7 +569,10 @@ async function getPendingSessions() {
     `
       select id, tenant_id, status, pairing_code
       from public.tex_quick_connect_sessions
-      where status in ('qr_pending', 'connected')
+      where (
+          status in ('qr_pending', 'connected')
+          or (status = 'disconnected' and connected_phone is not null)
+        )
         and ($1::uuid is null or tenant_id = $1::uuid)
       order by updated_at desc
       limit $2
