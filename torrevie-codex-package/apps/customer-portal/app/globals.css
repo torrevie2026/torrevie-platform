@@ -3307,6 +3307,257 @@ form.member-row {
   grid-column: 1 / -1;
 }
 
+.tex-whatsapp-guide {
+  gap: 18px;
+}
+
+.tex-provider-tabs {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 6px;
+}
+
+.tex-provider-tabs button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-weight: 900;
+  min-block-size: 38px;
+  padding-inline: 10px;
+}
+
+.tex-provider-tabs button[aria-selected="true"] {
+  background: var(--color-bg-primary);
+  box-shadow: 0 1px 3px rgb(10 10 10 / 8%);
+  color: var(--color-text-primary);
+}
+
+.tex-provider-guide-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.75fr);
+}
+
+.tex-provider-guide-main {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.tex-provider-guide-main p {
+  color: var(--color-text-muted);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.tex-guide-field-list,
+.tex-quick-connect-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tex-guide-field-list span {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 900;
+  padding: 7px 10px;
+}
+
+.tex-webhook-copy-panel,
+.tex-quick-connect-panel {
+  background: var(--color-bg-inverse);
+  border-radius: 8px;
+  color: var(--color-text-inverse);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.tex-webhook-copy-panel span,
+.tex-quick-connect-header span,
+.tex-quick-connect-events > span {
+  font-size: 12px;
+  font-weight: 900;
+  opacity: 0.82;
+  text-transform: uppercase;
+}
+
+.tex-webhook-copy-panel code,
+.tex-quick-connect-qr {
+  background: rgb(255 255 255 / 10%);
+  border-radius: 6px;
+  color: var(--color-text-inverse);
+  display: block;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  padding: 10px;
+}
+
+.tex-webhook-copy-panel p,
+.tex-quick-connect-qr p,
+.tex-quick-connect-panel > p,
+.tex-quick-connect-events p {
+  color: var(--color-text-inverse);
+  line-height: 1.45;
+  margin: 0;
+  opacity: 0.86;
+}
+
+.tex-webhook-copy-panel .tex-secondary-button,
+.tex-quick-connect-actions button {
+  background: var(--color-bg-primary);
+  border: 0;
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-weight: 900;
+  inline-size: fit-content;
+  min-block-size: 38px;
+  padding-inline: 12px;
+}
+
+.tex-quick-connect-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.tex-quick-connect-header b {
+  background: rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 6px 9px;
+}
+
+.tex-quick-connect-header b[data-status="connected"] {
+  background: rgb(13 148 136 / 28%);
+}
+
+.tex-quick-connect-header b[data-status="failed"] {
+  background: rgb(185 28 28 / 30%);
+}
+
+.tex-quick-connect-header b[data-status="offline"] {
+  background: rgb(255 255 255 / 16%);
+}
+
+.tex-quick-connect-qr {
+  align-items: center;
+  border: 1px dashed rgb(255 255 255 / 24%);
+  border-radius: 8px;
+  display: grid;
+  justify-items: center;
+  min-block-size: 148px;
+  padding: 14px;
+}
+
+.tex-quick-connect-qr-image {
+  aspect-ratio: 1;
+  background: #ffffff;
+  border-radius: 8px;
+  inline-size: min(220px, 100%);
+  padding: 8px;
+}
+
+.tex-quick-connect-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.tex-quick-connect-actions .tex-secondary-button {
+  background: rgb(255 255 255 / 10%);
+  color: var(--color-text-inverse);
+}
+
+.tex-quick-connect-details {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.tex-quick-connect-details div {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: minmax(110px, 0.45fr) minmax(0, 1fr);
+}
+
+.tex-quick-connect-details dt {
+  font-size: 12px;
+  font-weight: 900;
+  opacity: 0.72;
+  text-transform: uppercase;
+}
+
+.tex-quick-connect-details dd {
+  font-weight: 800;
+  margin: 0;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.tex-quick-connect-events {
+  display: grid;
+  gap: 8px;
+}
+
+.tex-quick-connect-events article {
+  background: rgb(255 255 255 / 8%);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.tex-quick-connect-events strong {
+  font-size: 13px;
+}
+
+.tex-quick-connect-events small {
+  opacity: 0.72;
+}
+
+.tex-guide-step-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tex-guide-step-list {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.tex-guide-step-list h4 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.tex-guide-step-list ol {
+  color: var(--color-text-muted);
+  display: grid;
+  gap: 8px;
+  line-height: 1.45;
+  margin: 0;
+  padding-inline-start: 18px;
+}
+
 .tex-integration-details {
   display: grid;
   gap: 10px;

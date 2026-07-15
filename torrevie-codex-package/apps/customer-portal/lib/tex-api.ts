@@ -14,6 +14,7 @@ import {
   deleteTexExpenseCategory,
   deleteTexTeam,
   deleteTexTripLeg,
+  disconnectTexQuickConnect,
   ignoreTexUnregisteredWhatsappSubmission,
   listTexBootstrap,
   listTexExpenses,
@@ -36,6 +37,7 @@ import {
   resolveTexUnregisteredWhatsappSubmission,
   replaceTexTripLegs,
   sendTexEmailReport,
+  startTexQuickConnectPairing,
   updateTexExpenseCategory,
   updateTexEmployeeProfile,
   updateTexTeam,
@@ -256,6 +258,18 @@ export async function handleTexApiRequest(
 
   if (path === "/integrations" && method === "GET") {
     return json(200, await listTexIntegrationWorkspace(client, actor));
+  }
+
+  if (path === "/integrations/quick-connect/pairing" && method === "POST") {
+    return json(202, {
+      session: await startTexQuickConnectPairing(client, actor)
+    });
+  }
+
+  if (path === "/integrations/quick-connect/disconnect" && method === "POST") {
+    return json(200, {
+      session: await disconnectTexQuickConnect(client, actor)
+    });
   }
 
   if (path === "/finance-review/pay" && method === "POST") {

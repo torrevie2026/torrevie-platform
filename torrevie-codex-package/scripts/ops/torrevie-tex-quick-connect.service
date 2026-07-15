@@ -1,0 +1,17 @@
+[Unit]
+Description=Torrevie TEX Quick Connect Connector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/torrevie/torrevie-codex-package
+EnvironmentFile=/etc/torrevie/tex-quick-connect.env
+ExecStart=/usr/bin/pnpm tex:quick-connect:connector
+Restart=always
+RestartSec=10
+User=torrevie
+Group=torrevie
+
+[Install]
+WantedBy=multi-user.target

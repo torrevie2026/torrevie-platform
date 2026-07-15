@@ -123,10 +123,45 @@ export type TexProviderProfileSummary = {
   apiKeyLast4: string;
 };
 
+export type TexQuickConnectStatus =
+  | "idle"
+  | "qr_pending"
+  | "connected"
+  | "disconnected"
+  | "failed";
+
+export type TexQuickConnectSession = {
+  id: string;
+  status: TexQuickConnectStatus;
+  pairingCode: string | null;
+  qrCodeData: string | null;
+  qrExpiresAt: string | null;
+  connectedPhone: string | null;
+  connectedAt: string | null;
+  lastSeenAt: string | null;
+  error: string | null;
+  updatedAt: string;
+};
+
+export type TexQuickConnectEvent = {
+  id: string;
+  eventType: string;
+  direction: "inbound" | "outbound" | "system";
+  status: string | null;
+  message: string | null;
+  occurredAt: string;
+};
+
 export type TexIntegrationWorkspace = {
   settings: TexIntegrationSettings | null;
   providerProfiles: TexProviderProfileSummary[];
   defaultProviderProfile: TexProviderProfileSummary | null;
+  quickConnect: {
+    available: boolean;
+    connectorActive: boolean;
+    session: TexQuickConnectSession | null;
+    events: TexQuickConnectEvent[];
+  };
   receiptStorage: {
     bucket: string;
     pathPrefix: string;
@@ -816,7 +851,7 @@ export async function listTexIntegrationWorkspace(
   assertTexPermission(actor, "tex.integration.manage");
 
   return withTenantContext(client, actor, async () => {
-    const [settings, providerProfiles] = await Promise.all([
+    const [settings, providerProfiles, quickConnect] = await Promise.all([
       client.query<TexIntegrationSettingsRow>(
         `
           select
@@ -849,7 +884,8 @@ export async function listTexIntegrationWorkspace(
           where tenant_id = public.current_tenant_id()
           order by is_default desc, label asc
         `
-      )
+      ),
+      listTexQuickConnectWorkspace(client)
     ]);
     const profiles = providerProfiles.rows.map(mapProviderProfileSummary);
 
@@ -857,12 +893,189 @@ export async function listTexIntegrationWorkspace(
       settings: settings.rows[0] ? mapIntegrationSettings(settings.rows[0]) : null,
       providerProfiles: profiles,
       defaultProviderProfile: profiles.find((profile) => profile.isDefault) ?? null,
+      quickConnect,
       receiptStorage: {
         bucket: receiptBucketName(),
         pathPrefix: `tenant/${actor.tenantId}/tex/receipts/`,
         convention: "tenant/{tenant_id}/tex/receipts/{file_id}.{extension}"
       }
     };
+  });
+}
+
+export async function startTexQuickConnectPairing(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<TexQuickConnectSession> {
+  assertTexPermission(actor, "tex.integration.manage");
+  if (!isTexQuickConnectConnectorActive()) {
+    const error = new Error("Quick Connect connector is offline.");
+    (error as Error & { statusCode?: number }).statusCode = 503;
+    throw error;
+  }
+
+  return withTenantContext(client, actor, async () => {
+    const pairingCode = randomUUID();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    const result = await client.query<TexQuickConnectSessionRow>(
+      `
+        insert into public.tex_quick_connect_sessions (
+          tenant_id,
+          status,
+          pairing_code,
+          qr_code_data,
+          qr_expires_at,
+          connected_phone,
+          connected_at,
+          last_seen_at,
+          error,
+          created_by,
+          updated_by
+        )
+        values (
+          public.current_tenant_id(),
+          'qr_pending',
+          $1,
+          null,
+          $2,
+          null,
+          null,
+          null,
+          null,
+          $3,
+          $3
+        )
+        on conflict (tenant_id)
+        do update set
+          status = 'qr_pending',
+          pairing_code = excluded.pairing_code,
+          qr_code_data = null,
+          qr_expires_at = excluded.qr_expires_at,
+          connected_phone = null,
+          connected_at = null,
+          error = null,
+          updated_by = excluded.updated_by,
+          updated_at = now()
+        returning
+          id,
+          status,
+          pairing_code,
+          qr_code_data,
+          qr_expires_at::text as qr_expires_at,
+          connected_phone,
+          connected_at::text as connected_at,
+          last_seen_at::text as last_seen_at,
+          error,
+          updated_at::text as updated_at
+      `,
+      [pairingCode, expiresAt, actor.userId]
+    );
+    const session = mapQuickConnectSession(requireSingleRow(result.rows, "Quick Connect session"));
+
+    await recordQuickConnectEvent(client, actor, session.id, {
+      eventType: "quick_connect.pairing_requested",
+      status: session.status,
+      message: "Pairing QR request queued for the WhatsApp linked-device connector.",
+      metadata: {
+        qr_expires_at: expiresAt
+      }
+    });
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.quick_connect.pairing_requested",
+      "tex_quick_connect_session",
+      session.id,
+      {
+        status: session.status,
+        qr_expires_at: expiresAt
+      }
+    );
+
+    return session;
+  });
+}
+
+export async function disconnectTexQuickConnect(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<TexQuickConnectSession> {
+  assertTexPermission(actor, "tex.integration.manage");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexQuickConnectSessionRow>(
+      `
+        insert into public.tex_quick_connect_sessions (
+          tenant_id,
+          status,
+          pairing_code,
+          qr_code_data,
+          qr_expires_at,
+          connected_phone,
+          connected_at,
+          last_seen_at,
+          error,
+          created_by,
+          updated_by
+        )
+        values (
+          public.current_tenant_id(),
+          'disconnected',
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          $1,
+          $1
+        )
+        on conflict (tenant_id)
+        do update set
+          status = 'disconnected',
+          pairing_code = null,
+          qr_code_data = null,
+          qr_expires_at = null,
+          connected_phone = null,
+          connected_at = null,
+          error = null,
+          updated_by = excluded.updated_by,
+          updated_at = now()
+        returning
+          id,
+          status,
+          pairing_code,
+          qr_code_data,
+          qr_expires_at::text as qr_expires_at,
+          connected_phone,
+          connected_at::text as connected_at,
+          last_seen_at::text as last_seen_at,
+          error,
+          updated_at::text as updated_at
+      `,
+      [actor.userId]
+    );
+    const session = mapQuickConnectSession(requireSingleRow(result.rows, "Quick Connect session"));
+
+    await recordQuickConnectEvent(client, actor, session.id, {
+      eventType: "quick_connect.disconnected",
+      status: session.status,
+      message: "Quick Connect linked-device session was disconnected from TEX.",
+      metadata: {}
+    });
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.quick_connect.disconnected",
+      "tex_quick_connect_session",
+      session.id,
+      {
+        status: session.status
+      }
+    );
+
+    return session;
   });
 }
 
@@ -3548,6 +3761,127 @@ async function writeTexAuditEvent(
   );
 }
 
+async function listTexQuickConnectWorkspace(
+  client: TenantQueryClient
+): Promise<TexIntegrationWorkspace["quickConnect"]> {
+  try {
+    const [sessionResult, eventResult] = await Promise.all([
+      client.query<TexQuickConnectSessionRow>(
+        `
+          select
+            id,
+            status,
+            pairing_code,
+            qr_code_data,
+            qr_expires_at::text as qr_expires_at,
+            connected_phone,
+            connected_at::text as connected_at,
+            last_seen_at::text as last_seen_at,
+            error,
+            updated_at::text as updated_at
+          from public.tex_quick_connect_sessions
+          where tenant_id = public.current_tenant_id()
+          limit 1
+        `
+      ),
+      client.query<TexQuickConnectEventRow>(
+        `
+          select
+            id,
+            event_type,
+            direction,
+            status,
+            message,
+            occurred_at::text as occurred_at
+          from public.tex_quick_connect_events
+          where tenant_id = public.current_tenant_id()
+            and event_type <> 'quick_connect.connector_heartbeat'
+          order by occurred_at desc
+          limit 8
+        `
+      )
+    ]);
+
+    return {
+      available: true,
+      connectorActive: isTexQuickConnectConnectorActive(),
+      session: sessionResult.rows[0] ? mapQuickConnectSession(sessionResult.rows[0]) : null,
+      events: eventResult.rows.map(mapQuickConnectEvent)
+    };
+  } catch (error) {
+    if (isMissingQuickConnectSchemaError(error)) {
+      return {
+        available: false,
+        connectorActive: false,
+        session: null,
+        events: []
+      };
+    }
+
+    throw error;
+  }
+}
+
+function isTexQuickConnectConnectorActive() {
+  return process.env.TEX_QUICK_CONNECT_CONNECTOR_ACTIVE === "true";
+}
+
+async function recordQuickConnectEvent(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  sessionId: string,
+  event: {
+    eventType: string;
+    status: string | null;
+    message: string;
+    metadata: Record<string, string>;
+  }
+) {
+  await client.query(
+    `
+      insert into public.tex_quick_connect_events (
+        tenant_id,
+        session_id,
+        event_type,
+        direction,
+        status,
+        message,
+        metadata,
+        created_by
+      )
+      values (
+        public.current_tenant_id(),
+        $1,
+        $2,
+        'system',
+        $3,
+        $4,
+        $5::jsonb,
+        $6
+      )
+    `,
+    [
+      sessionId,
+      event.eventType,
+      event.status,
+      event.message,
+      JSON.stringify(event.metadata),
+      actor.userId
+    ]
+  );
+}
+
+function isMissingQuickConnectSchemaError(error: unknown) {
+  const record = error as { code?: unknown; message?: unknown };
+  const message = typeof record.message === "string" ? record.message : "";
+
+  return (
+    record.code === "42P01" ||
+    message.includes("tex_quick_connect_sessions") ||
+    message.includes("tex_quick_connect_events")
+  );
+}
+
 async function insertWhatsappSubmission(
   client: TenantQueryClient,
   actor: TexActorContext,
@@ -5481,6 +5815,32 @@ function mapProviderProfileSummary(row: TexProviderProfileSummaryRow): TexProvid
   };
 }
 
+function mapQuickConnectSession(row: TexQuickConnectSessionRow): TexQuickConnectSession {
+  return {
+    id: row.id,
+    status: row.status,
+    pairingCode: row.pairing_code,
+    qrCodeData: row.qr_code_data,
+    qrExpiresAt: row.qr_expires_at,
+    connectedPhone: row.connected_phone,
+    connectedAt: row.connected_at,
+    lastSeenAt: row.last_seen_at,
+    error: row.error,
+    updatedAt: row.updated_at
+  };
+}
+
+function mapQuickConnectEvent(row: TexQuickConnectEventRow): TexQuickConnectEvent {
+  return {
+    id: row.id,
+    eventType: row.event_type,
+    direction: row.direction,
+    status: row.status,
+    message: row.message,
+    occurredAt: row.occurred_at
+  };
+}
+
 function mapExpense(row: TexExpenseRow): TexExpenseRecord {
   return {
     id: row.id,
@@ -5797,6 +6157,28 @@ type TexProviderProfileSummaryRow = {
   webhook_url: string | null;
   api_key_last4: string | null;
   keys_configured: boolean;
+};
+
+type TexQuickConnectSessionRow = {
+  id: string;
+  status: TexQuickConnectStatus;
+  pairing_code: string | null;
+  qr_code_data: string | null;
+  qr_expires_at: string | null;
+  connected_phone: string | null;
+  connected_at: string | null;
+  last_seen_at: string | null;
+  error: string | null;
+  updated_at: string;
+};
+
+type TexQuickConnectEventRow = {
+  id: string;
+  event_type: string;
+  direction: "inbound" | "outbound" | "system";
+  status: string | null;
+  message: string | null;
+  occurred_at: string;
 };
 
 type TexExpenseRow = {

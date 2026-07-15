@@ -72,17 +72,6 @@ type PlaceSuggestion = {
   text: string;
 };
 
-type GoogleRouteEstimate = {
-  distanceKm: number;
-  durationSeconds: number | null;
-  routePolyline: string | null;
-  source: string;
-  isReturnTrip: boolean;
-  returnDistanceKm: number | null;
-  returnDurationSeconds: number | null;
-  totalDistanceKm: number;
-};
-
 type ReceiptUploadResponse = {
   receipt: {
     id: string;

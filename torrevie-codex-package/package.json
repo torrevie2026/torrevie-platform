@@ -36,6 +36,8 @@
     "tex:migrate-data:apply": "node scripts/migrate-tex-data.mjs --apply",
     "verify:tex:staging": "node scripts/verify-tex-staging.mjs",
     "tex:create-staging-demo-access": "node scripts/create-tex-staging-demo-access.mjs",
+    "tex:quick-connect:connector": "node scripts/tex-quick-connect-connector.mjs",
+    "tex:quick-connect:health": "node scripts/tex-quick-connect-health.mjs",
     "build": "pnpm -r --if-present build",
     "dev": "pnpm --filter @torrevie/customer-portal dev",
     "supabase:start": "supabase start",
@@ -57,5 +59,10 @@
     "tsx": "4.23.0",
     "typescript": "5.8.3",
     "typescript-eslint": "8.37.0"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc13",
+    "pino": "^10.3.1",
+    "qrcode": "^1.5.4"
   }
 }
