@@ -299,6 +299,11 @@ async function handleInboundMessage(session, sock, message) {
     remoteJid,
     text
   });
+  const acknowledgement = await sendQuickConnectAcknowledgement(session, sock, {
+    hasMedia,
+    messageId,
+    remoteJid
+  });
   const now = new Date().toISOString();
   await updateQuickConnectSession(session, {
     last_seen_at: now,
@@ -309,10 +314,58 @@ async function handleInboundMessage(session, sock, message) {
     status: "connected",
     message: hasMedia ? "Inbound WhatsApp media received." : "Inbound WhatsApp message received.",
     metadata: {
+      acknowledgement_status: acknowledgement.status,
+      acknowledgement_error: acknowledgement.error ?? "",
       message_id: messageId,
       remote_jid: remoteJid ?? ""
     }
   });
+}
+
+async function sendQuickConnectAcknowledgement(session, sock, input) {
+  if (!input.remoteJid) {
+    return { error: "Missing remote JID.", status: "skipped" };
+  }
+
+  const text = input.hasMedia
+    ? "Receipt received by TEX. It has been queued for finance review."
+    : "Message received by TEX. Send a receipt photo or document to queue it for finance review.";
+
+  try {
+    const result = await sock.sendMessage(input.remoteJid, { text });
+    await insertQuickConnectEvent(session, {
+      eventType: "quick_connect.acknowledgement_sent",
+      status: "connected",
+      message: "Quick Connect sent a linked-device WhatsApp acknowledgement.",
+      metadata: {
+        message_id: input.messageId,
+        outbound_message_id: result?.key?.id ?? "",
+        remote_jid: input.remoteJid
+      }
+    });
+    logger.info(
+      { messageId: input.messageId, tenantId: session.tenant_id },
+      "Quick Connect acknowledgement sent"
+    );
+    return { error: null, status: "sent" };
+  } catch (error) {
+    const errorText = errorMessage(error);
+    await insertQuickConnectEvent(session, {
+      eventType: "quick_connect.acknowledgement_failed",
+      status: "connected",
+      message: "Quick Connect could not send the linked-device WhatsApp acknowledgement.",
+      metadata: {
+        error: errorText,
+        message_id: input.messageId,
+        remote_jid: input.remoteJid
+      }
+    });
+    logger.warn(
+      { error: errorText, messageId: input.messageId, tenantId: session.tenant_id },
+      "Quick Connect acknowledgement failed"
+    );
+    return { error: errorText, status: "failed" };
+  }
 }
 
 async function downloadMessageMedia(sock, message) {
