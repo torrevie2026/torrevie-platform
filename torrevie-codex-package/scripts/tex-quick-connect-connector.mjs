@@ -5,7 +5,7 @@ import makeWASocket, {
   useMultiFileAuthState
 } from "@whiskeysockets/baileys";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { clearInterval, setInterval as startInterval } from "node:timers";
@@ -51,6 +51,7 @@ const heartbeatMs = Number(process.env.TEX_QUICK_CONNECT_HEARTBEAT_MS || 30000);
 const connectorInstanceId =
   optionalEnv("TEX_QUICK_CONNECT_INSTANCE_ID") || `${hostname()}:${process.pid}`;
 const activeSessions = new Map();
+const reconnectFailures = new Map();
 const logger = pino({ level: process.env.TEX_QUICK_CONNECT_LOG_LEVEL || "info" });
 
 if (!manualMode && !databaseUrl && (!supabaseUrl || !supabaseServiceRoleKey)) {
@@ -130,7 +131,7 @@ async function startTenantSocket(session) {
     }
   });
 
-  const authDirectory = join(sessionRoot, session.tenant_id);
+  const authDirectory = authDirectoryFor(session.tenant_id);
   mkdirSync(authDirectory, { recursive: true });
   const { state, saveCreds } = await useMultiFileAuthState(authDirectory);
   const { version } = await fetchLatestBaileysVersion();
@@ -220,6 +221,7 @@ async function handleConnectionUpdate(session, sock, update) {
       status: "connected",
       updated_at: now
     });
+    reconnectFailures.delete(session.tenant_id);
     await insertQuickConnectEvent(session, {
       eventType: "quick_connect.connected",
       status: "connected",
@@ -251,6 +253,22 @@ async function handleConnectionUpdate(session, sock, update) {
     }
 
     if (shouldReconnect) {
+      const failureCount = (reconnectFailures.get(session.tenant_id) ?? 0) + 1;
+      reconnectFailures.set(session.tenant_id, failureCount);
+
+      if (failureCount >= 6) {
+        reconnectFailures.delete(session.tenant_id);
+        await resetQuickConnectPairing(session, statusCode);
+        await sleep(2000);
+        if (!activeSessions.has(session.tenant_id) && !shuttingDown) {
+          void startTenantSocket({
+            ...session,
+            status: "qr_pending"
+          });
+        }
+        return;
+      }
+
       await insertQuickConnectEvent(session, {
         eventType: "quick_connect.reconnecting",
         status: "qr_pending",
@@ -283,6 +301,27 @@ async function handleConnectionUpdate(session, sock, update) {
       }
     });
   }
+}
+
+async function resetQuickConnectPairing(session, statusCode) {
+  rmSync(authDirectoryFor(session.tenant_id), { force: true, recursive: true });
+  await updateQuickConnectSession(session, {
+    connected_phone: null,
+    error: "WhatsApp linked-device session could not reconnect. A new QR pairing is required.",
+    qr_code_data: null,
+    qr_expires_at: null,
+    status: "qr_pending",
+    updated_at: new Date().toISOString()
+  });
+  await insertQuickConnectEvent(session, {
+    eventType: "quick_connect.repairing_required",
+    status: "qr_pending",
+    message: "Quick Connect reset a stale WhatsApp linked-device session and requested a new QR.",
+    metadata: {
+      instance_id: connectorInstanceId,
+      status_code: String(statusCode ?? "")
+    }
+  });
 }
 
 async function handleInboundMessage(session, sock, message) {
@@ -849,6 +888,10 @@ function stopTenantRuntime(tenantId) {
 
 function jidToPhone(jid) {
   return jid?.replace(/@(c|s)\.whatsapp\.net$/i, "").replace(/\D/g, "") || null;
+}
+
+function authDirectoryFor(tenantId) {
+  return join(sessionRoot, tenantId);
 }
 
 function databaseSslConfig() {
