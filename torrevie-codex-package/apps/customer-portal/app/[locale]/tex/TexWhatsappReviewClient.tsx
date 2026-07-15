@@ -125,6 +125,11 @@ export function TexWhatsappReviewClient({
               </header>
 
               <div className="tex-whatsapp-body">
+                <ReceiptPreview
+                  contentType={submission.mediaMimeType}
+                  label="Incoming receipt"
+                  url={receiptUrlForSubmission(submission)}
+                />
                 <p>
                   {submission.messageText ||
                     submission.whatsappReplyText ||
@@ -215,6 +220,37 @@ export function TexWhatsappReviewClient({
       )}
     </section>
   );
+}
+
+function ReceiptPreview({
+  contentType,
+  label,
+  url
+}: {
+  contentType?: string | null;
+  label: string;
+  url: string | null;
+}) {
+  if (!url) {
+    return <p className="tex-field-hint">No receipt attachment captured.</p>;
+  }
+
+  const isImage = !contentType || contentType.startsWith("image/");
+
+  return (
+    <a className="tex-receipt-preview" href={url} target="_blank" rel="noreferrer">
+      {isImage ? <img src={url} alt={label} /> : null}
+      <span>{isImage ? "Open receipt" : "Open receipt file"}</span>
+    </a>
+  );
+}
+
+function receiptUrlForSubmission(submission: TexUnregisteredWhatsappSubmission) {
+  if (submission.receiptFileId) {
+    return `/api/tex/receipts/${submission.receiptFileId}`;
+  }
+
+  return submission.mediaUrl;
 }
 
 async function texFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {

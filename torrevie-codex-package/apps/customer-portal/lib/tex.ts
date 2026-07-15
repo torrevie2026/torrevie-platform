@@ -211,6 +211,13 @@ export type TexReceiptFileRecord = {
   url: string;
 };
 
+export type TexReceiptDownload = {
+  buffer: Buffer;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+};
+
 export type TexExpenseListItem = TexExpenseRecord & {
   employeeName: string | null;
   vendor: string | null;
@@ -218,6 +225,8 @@ export type TexExpenseListItem = TexExpenseRecord & {
   category: string | null;
   tripName: string | null;
   notes: string | null;
+  receiptFileId: string | null;
+  receiptUrl: string | null;
   createdAt: string;
   duplicateStatus: "clear" | "suspected" | "duplicate";
   duplicateReason: string | null;
@@ -1098,6 +1107,7 @@ export async function listTexExpenses(
           e.category,
           coalesce(t.name, e.trip_name) as trip_name,
           e.notes,
+          e.receipt_file_id,
           e.status,
           e.created_at::text as created_at,
           e.duplicate_status,
@@ -3139,6 +3149,42 @@ export async function uploadTexReceiptFile(
   });
 }
 
+export async function getTexReceiptDownload(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  receiptId: string
+): Promise<TexReceiptDownload> {
+  assertTexPermission(actor, "tex.expense.read");
+  assertUuid(receiptId, "receipt id");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<{
+      storage_path: string;
+      filename: string;
+      content_type: string;
+      size_bytes: number;
+    }>(
+      `
+        select storage_path, filename, content_type, size_bytes::int as size_bytes
+        from public.files
+        where tenant_id = public.current_tenant_id()
+          and id = $1
+        limit 1
+      `,
+      [receiptId]
+    );
+    const row = requireSingleRow(result.rows, "receipt file");
+    const buffer = await downloadReceiptObject(row.storage_path);
+
+    return {
+      buffer,
+      filename: row.filename,
+      contentType: row.content_type,
+      sizeBytes: row.size_bytes
+    };
+  });
+}
+
 export async function parseTexReceiptUpload(
   input: Pick<TexReceiptUploadInput, "contentType" | "dataBase64">
 ): Promise<TexReceiptExtraction> {
@@ -4622,6 +4668,25 @@ async function uploadReceiptObject(storagePath: string, contentType: string, buf
   }
 }
 
+async function downloadReceiptObject(storagePath: string) {
+  const bucket = receiptBucketName();
+  const encodedPath = storagePath.split("/").map(encodeURIComponent).join("/");
+  const serviceKey = supabaseServiceRoleKey();
+  const response = await fetch(
+    `${supabaseProjectUrl()}/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`,
+    {
+      headers: supabaseServiceHeaders(serviceKey)
+    }
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Receipt storage download failed: ${response.status} ${text.slice(0, 240)}`);
+  }
+
+  return Buffer.from(await response.arrayBuffer());
+}
+
 function supabaseServiceHeaders(key: string) {
   const headers: Record<string, string> = {
     apikey: key
@@ -5862,6 +5927,8 @@ function mapExpenseListItem(row: TexExpenseListRow): TexExpenseListItem {
     category: row.category,
     tripName: row.trip_name,
     notes: row.notes,
+    receiptFileId: row.receipt_file_id,
+    receiptUrl: row.receipt_file_id ? `/api/tex/receipts/${row.receipt_file_id}` : null,
     createdAt: row.created_at,
     duplicateStatus: row.duplicate_status,
     duplicateReason: row.duplicate_reason,
@@ -6195,6 +6262,7 @@ type TexExpenseListRow = TexExpenseRow & {
   category: string | null;
   trip_name: string | null;
   notes: string | null;
+  receipt_file_id: string | null;
   created_at: string;
   duplicate_status: "clear" | "suspected" | "duplicate";
   duplicate_reason: string | null;

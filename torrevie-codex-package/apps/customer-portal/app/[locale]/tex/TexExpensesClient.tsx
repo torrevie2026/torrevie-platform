@@ -432,6 +432,10 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
               <strong>{selectedExpense.duplicateStatus}</strong>
               <span>Notes</span>
               <strong>{selectedExpense.notes ?? "No notes"}</strong>
+              <span>Receipt</span>
+              <strong>
+                <ExpenseReceiptLink expense={selectedExpense} compact={false} />
+              </strong>
             </div>
             {selectedExpense.duplicateReason ? <p className="tex-error">{selectedExpense.duplicateReason}</p> : null}
             {selectedExpense.status === "pending" ? (
@@ -519,6 +523,7 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
                   {formatAmount(expense.amount)} {expense.currency}
                 </strong>
                 <div className="tex-card-actions">
+                  <ExpenseReceiptLink expense={expense} compact />
                   <button type="button" onClick={() => setSelectedExpense(expense)}>
                     Open
                   </button>
@@ -549,6 +554,30 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
         )}
       </section>
     </div>
+  );
+}
+
+function ExpenseReceiptLink({
+  compact,
+  expense
+}: {
+  compact: boolean;
+  expense: TexExpenseListItem;
+}) {
+  if (!expense.receiptUrl) {
+    return compact ? null : <span>No receipt attached</span>;
+  }
+
+  return (
+    <a
+      className={compact ? "tex-receipt-chip" : "tex-receipt-preview"}
+      href={expense.receiptUrl}
+      target="_blank"
+      rel="noreferrer"
+    >
+      {!compact ? <img src={expense.receiptUrl} alt="Expense receipt" /> : null}
+      <span>{compact ? "Receipt attached" : "Open receipt"}</span>
+    </a>
   );
 }
 

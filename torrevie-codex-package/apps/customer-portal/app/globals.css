@@ -2782,6 +2782,45 @@ form.member-row {
   margin: 4px 0 0;
 }
 
+.tex-receipt-preview {
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-primary);
+  display: inline-flex;
+  gap: 12px;
+  max-inline-size: 100%;
+  padding: 8px;
+  text-decoration: none;
+}
+
+.tex-receipt-preview img {
+  aspect-ratio: 1;
+  background: var(--color-bg-surface);
+  border-radius: 6px;
+  height: 72px;
+  object-fit: cover;
+  width: 72px;
+}
+
+.tex-receipt-preview span,
+.tex-receipt-chip {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.tex-receipt-chip {
+  align-items: center;
+  border: 1px solid var(--color-accent);
+  border-radius: 999px;
+  color: var(--color-accent);
+  display: inline-flex;
+  min-height: 32px;
+  padding: 6px 10px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 .tex-empty-state {
   background: var(--color-bg-surface);
   border: 1px dashed var(--color-border);
