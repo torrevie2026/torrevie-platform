@@ -123,7 +123,7 @@ async function startTenantSocket(session) {
   activeSessions.set(session.tenant_id, { startedAt: new Date().toISOString() });
   await insertQuickConnectEvent(session, {
     eventType: "quick_connect.connector_started",
-    status: "qr_pending",
+    status: session.status,
     message: "Quick Connect connector started a WhatsApp linked-device socket.",
     metadata: {
       instance_id: connectorInstanceId
@@ -431,7 +431,7 @@ async function getPendingSessions() {
       limit: String(maxSessions),
       order: "updated_at.desc",
       select: "id,tenant_id,status,pairing_code",
-      status: "eq.qr_pending"
+      status: "in.(qr_pending,connected)"
     });
     if (tenantFilter) {
       params.set("tenant_id", `eq.${tenantFilter}`);
@@ -444,7 +444,7 @@ async function getPendingSessions() {
     `
       select id, tenant_id, status, pairing_code
       from public.tex_quick_connect_sessions
-      where status = 'qr_pending'
+      where status in ('qr_pending', 'connected')
         and ($1::uuid is null or tenant_id = $1::uuid)
       order by updated_at desc
       limit $2
