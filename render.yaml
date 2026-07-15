@@ -6,7 +6,7 @@ services:
     region: frankfurt
     branch: main
     rootDir: torrevie-codex-package
-    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    buildCommand: pnpm install --frozen-lockfile
     startCommand: pnpm tex:quick-connect:connector
     autoDeploy: false
     disk:
