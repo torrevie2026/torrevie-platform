@@ -218,7 +218,33 @@ class RecordingTexApiClient implements TenantQueryClient {
             manager_name: "Omar Faris",
             manager_email: "omar@example.test",
             submission_frequency: "weekly",
-            is_active: true
+            is_active: true,
+            phone_digits: "971500000001"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (
+      sql.includes("from public.tex_employee_profiles ep") &&
+      sql.includes("ep.is_active = true") &&
+      sql.includes("regexp_replace(ep.phone_number")
+    ) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000004001",
+            user_id: null,
+            name: "Maya Haddad",
+            phone_number: "+971500000001",
+            department: "Operations",
+            monthly_salary: 12000,
+            manager_user_id: "00000000-0000-4000-8000-000000002002",
+            manager_name: null,
+            manager_email: null,
+            submission_frequency: "weekly",
+            is_active: true,
+            phone_digits: "971500000001"
           }
         ] as Row[]
       };
@@ -1703,7 +1729,7 @@ async function main() {
       body: {
         messageId: "wamid.status",
         messageText: "STATUS",
-        senderPhone: "+971500000001",
+        senderPhone: "+971599999999",
         payload: { provider: "meta" }
       }
     });

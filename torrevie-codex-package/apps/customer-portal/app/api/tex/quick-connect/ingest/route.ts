@@ -57,9 +57,10 @@ export async function POST(request: Request) {
       body.media?.dataBase64 && body.media.mimeType
         ? `data:${body.media.mimeType};base64,${body.media.dataBase64}`
         : null;
+    const senderPhone = normalizeQuickConnectPhone(body.senderPhone);
     const submission: TexWebhookSubmissionInput = {
-      senderRaw: body.senderRaw ?? body.senderPhone ?? null,
-      senderPhone: body.senderPhone ?? null,
+      senderRaw: senderPhone ?? body.senderRaw ?? body.senderPhone ?? null,
+      senderPhone,
       whatsappChatJid: body.whatsappChatJid ?? null,
       messageId: body.messageId ?? null,
       sessionId: body.sessionId ?? null,
@@ -139,4 +140,10 @@ function assertUuid(value: string | null | undefined, label: string) {
   }
 
   return value;
+}
+
+function normalizeQuickConnectPhone(value: string | null | undefined) {
+  const digits = value?.replace(/\D/g, "") ?? "";
+
+  return digits ? `+${digits}` : null;
 }

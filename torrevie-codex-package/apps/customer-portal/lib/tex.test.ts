@@ -110,7 +110,8 @@ class RecordingTexClient implements TenantQueryClient {
             manager_name: "Omar Faris",
             manager_email: "omar@example.test",
             submission_frequency: "weekly",
-            is_active: true
+            is_active: true,
+            phone_digits: "971500000001"
           }
         ] as Row[]
       };
@@ -1140,6 +1141,18 @@ async function main() {
     assert.equal(result.delivery?.status, "sent");
     assert.equal(client.valuesContain("status"), true);
     assert.equal(client.valuesContain("tex.notification.whatsapp_reply_sent"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const result = await processTexWhatsappSubmission(client, integrationActor, {
+      senderPhone: "500000001",
+      messageId: "wamid.status.local",
+      messageText: "STATUS",
+      payload: { provider: "meta" }
+    });
+    assert.equal(result.ocrStatus, "not_applicable");
+    assert.match(result.replyText, /Pending: 2/);
   }
 
   {

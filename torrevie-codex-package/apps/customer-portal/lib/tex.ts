@@ -1167,7 +1167,7 @@ export async function createTexEmployeeProfile(
           created_by,
           updated_by
         )
-        values (public.current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, $7)
+        values (public.current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, $8, $8)
         returning
           id,
           user_id,
@@ -4253,7 +4253,7 @@ async function findEmployeeByPhone(client: TenantQueryClient, phone: string | nu
     return null;
   }
 
-  const result = await client.query<TexEmployeeProfileRow>(
+  const result = await client.query<TexEmployeeProfileRow & { phone_digits: string | null }>(
     `
       select
         ep.id,
@@ -4266,17 +4266,36 @@ async function findEmployeeByPhone(client: TenantQueryClient, phone: string | nu
         null::text as manager_name,
         null::text as manager_email,
         ep.submission_frequency,
-        ep.is_active
+        ep.is_active,
+        regexp_replace(ep.phone_number, '[^0-9]', '', 'g') as phone_digits
       from public.tex_employee_profiles ep
       where ep.tenant_id = public.current_tenant_id()
         and ep.is_active = true
-        and regexp_replace(ep.phone_number, '[^0-9]', '', 'g') = $1
-      limit 1
     `,
-    [digits]
+    []
   );
 
-  return result.rows[0] ?? null;
+  const exactMatches = result.rows.filter((row) => row.phone_digits === digits);
+
+  if (exactMatches.length === 1) {
+    return exactMatches[0];
+  }
+
+  if (exactMatches.length > 1) {
+    return null;
+  }
+
+  const suffixMatches = result.rows.filter((row) => isSamePhoneBySafeSuffix(row.phone_digits, digits));
+
+  return suffixMatches.length === 1 ? suffixMatches[0] : null;
+}
+
+function isSamePhoneBySafeSuffix(left: string | null, right: string | null) {
+  if (!left || !right || left.length < 7 || right.length < 7) {
+    return false;
+  }
+
+  return left.endsWith(right) || right.endsWith(left);
 }
 
 function queryTexReportExpenses(client: TenantQueryClient, dateFrom: string, dateTo: string) {
