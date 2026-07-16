@@ -45,7 +45,8 @@ export function TexWhatsappReviewClient({
         mode === "existing_employee"
           ? {
               mode,
-              employeeProfileId: selectedEmployees[submission.id]
+              employeeProfileId:
+                selectedEmployees[submission.id] ?? submission.resolvedEmployeeProfileId
             }
           : {
               mode,
@@ -114,12 +115,23 @@ export function TexWhatsappReviewClient({
         </div>
       ) : (
         <div className="tex-whatsapp-list">
-          {submissions.map((submission) => (
+          {submissions.map((submission) => {
+            const matchedEmployee = activeEmployees.find(
+              (employee) => employee.id === submission.resolvedEmployeeProfileId
+            );
+            const selectedEmployeeId =
+              selectedEmployees[submission.id] ?? submission.resolvedEmployeeProfileId ?? "";
+
+            return (
             <article className="tex-whatsapp-card" key={submission.id}>
               <header>
-                <span className="tex-status tex-status-pending">Unknown sender</span>
+                <span className="tex-status tex-status-pending">
+                  {matchedEmployee ? "Matched employee" : "Unknown sender"}
+                </span>
                 <strong>
-                  {submission.senderPhone ?? submission.senderRaw ?? "Unknown number"}
+                  {matchedEmployee
+                    ? `${matchedEmployee.name} (${matchedEmployee.phoneNumber})`
+                    : (submission.senderPhone ?? submission.senderRaw ?? "Unknown number")}
                 </strong>
                 <small>{formatDateTime(submission.createdAt)}</small>
               </header>
@@ -158,7 +170,7 @@ export function TexWhatsappReviewClient({
                 <label className="tex-wide-label">
                   Assign to employee
                   <select
-                    value={selectedEmployees[submission.id] ?? ""}
+                    value={selectedEmployeeId}
                     onChange={(event) =>
                       setSelectedEmployees((current) => ({
                         ...current,
@@ -177,10 +189,10 @@ export function TexWhatsappReviewClient({
                 <button
                   type="button"
                   className="tex-secondary-button"
-                  disabled={busyId === submission.id || !selectedEmployees[submission.id]}
+                  disabled={busyId === submission.id || !selectedEmployeeId}
                   onClick={() => resolveSubmission(submission, "existing_employee")}
                 >
-                  Assign
+                  {matchedEmployee ? "Create expense" : "Assign"}
                 </button>
 
                 <label className="tex-wide-label">
@@ -215,7 +227,8 @@ export function TexWhatsappReviewClient({
                 </button>
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>

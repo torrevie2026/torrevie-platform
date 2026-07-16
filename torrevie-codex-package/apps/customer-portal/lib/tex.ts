@@ -3494,22 +3494,31 @@ export async function processTexWhatsappSubmission(
         ocrStatus: "manual_review",
         ocrResult: extraction ?? {},
         ocrError: extractionError,
-        replyText
+        replyText,
+        resolvedEmployeeProfileId: employee.id
       });
       const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
 
       return { submission: row, replyText, expense: null, ocrStatus: "manual_review", delivery };
     }
 
-    if (!extraction || !extraction.expenseDate || !extraction.amount || !extraction.currency) {
+    const extractionForProcessing = defaultReceiptCurrency(extraction);
+
+    if (
+      !extractionForProcessing ||
+      !extractionForProcessing.expenseDate ||
+      !extractionForProcessing.amount ||
+      !extractionForProcessing.currency
+    ) {
       const replyText =
         "Receipt received, but TEX could not read the key fields. It has been sent for manual review.";
       const row = await insertWhatsappSubmission(client, actor, submission, {
         messageType,
         ocrStatus: extractionError ? "failed" : "manual_review",
-        ocrResult: extraction ?? {},
+        ocrResult: extractionForProcessing ?? extraction ?? {},
         ocrError: extractionError,
-        replyText
+        replyText,
+        resolvedEmployeeProfileId: employee.id
       });
       const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
 
@@ -3523,12 +3532,12 @@ export async function processTexWhatsappSubmission(
     }
 
     const duplicate = settings.duplicate_detection_enabled
-      ? await findDuplicateExpense(client, employee.id, extraction)
+      ? await findDuplicateExpense(client, employee.id, extractionForProcessing)
       : null;
     const shouldAutoReject = Boolean(duplicate && settings.duplicate_auto_reject_enabled);
     const expense = await createExpenseFromWhatsappReceipt(client, actor, {
       employee,
-      extraction,
+      extraction: extractionForProcessing,
       submission,
       duplicate,
       shouldAutoReject
@@ -3537,11 +3546,11 @@ export async function processTexWhatsappSubmission(
       ? `Receipt received but auto-rejected as a likely duplicate of ${duplicate?.vendor ?? "an existing expense"}.`
       : duplicate
         ? "Receipt received and flagged as a possible duplicate for manager review."
-        : `Receipt received and submitted for ${formatMoney(extraction.amount, extraction.currency)}.`;
+        : `Receipt received and submitted for ${formatMoney(extractionForProcessing.amount, extractionForProcessing.currency)}.`;
     const row = await insertWhatsappSubmission(client, actor, submission, {
       messageType,
       ocrStatus: "extracted",
-      ocrResult: extraction,
+      ocrResult: extractionForProcessing,
       replyText,
       resolvedExpenseId: expense.id,
       resolvedEmployeeProfileId: employee.id
@@ -4296,6 +4305,20 @@ function isSamePhoneBySafeSuffix(left: string | null, right: string | null) {
   }
 
   return left.endsWith(right) || right.endsWith(left);
+}
+
+function defaultReceiptCurrency(extraction: TexReceiptExtraction | null) {
+  if (!extraction || extraction.currency?.trim()) {
+    return extraction;
+  }
+
+  return {
+    ...extraction,
+    currency: "AED",
+    notes: [extraction.notes, "Currency defaulted to AED because the receipt did not state a currency."]
+      .filter(Boolean)
+      .join(" ")
+  };
 }
 
 function queryTexReportExpenses(client: TenantQueryClient, dateFrom: string, dateTo: string) {

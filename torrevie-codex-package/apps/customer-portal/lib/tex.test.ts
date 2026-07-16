@@ -1165,7 +1165,7 @@ async function main() {
         vendor: "Airport Cafe",
         expenseDate: "2026-07-12",
         amount: 120,
-        currency: "AED",
+        currency: null,
         category: "Meals",
         taxAmount: 0,
         taxIdNumber: null,
@@ -1177,6 +1177,7 @@ async function main() {
     assert.equal(result.ocrStatus, "extracted");
     assert.match(result.replyText, /possible duplicate/);
     assert.equal(result.delivery?.messageId, "test-whatsapp-message");
+    assert.equal(result.expense?.currency, "AED");
     assert.equal(client.valuesContain("suspected"), true);
     assert.equal(client.valuesContain(true), true);
   }
