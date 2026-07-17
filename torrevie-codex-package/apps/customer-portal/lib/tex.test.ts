@@ -420,6 +420,17 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("from public.files") && sql.includes("select storage_path, content_type")) {
+      return {
+        rows: [
+          {
+            storage_path: "tenant/00000000-0000-4000-8000-000000001001/tex/receipts/receipt.jpg",
+            content_type: "image/jpeg"
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("insert into public.tex_expenses") && sql.includes("'whatsapp_ai'")) {
       return {
         rows: [
@@ -1206,6 +1217,8 @@ async function main() {
     assert.match(result.replyText, /possible duplicate/);
     assert.equal(result.delivery?.messageId, "test-whatsapp-message");
     assert.equal(result.expense?.currency, "AED");
+    assert.equal(client.hasSql("expense_date between ($2::date - interval '1 day')"), true);
+    assert.equal(client.hasSql("abs(amount - $3) <= $5"), true);
     assert.equal(client.valuesContain("suspected"), true);
     assert.equal(client.valuesContain(true), true);
   }

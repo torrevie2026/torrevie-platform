@@ -646,6 +646,7 @@ export type TexUnregisteredWhatsappSubmission = TexWebhookSubmissionRecord & {
   ocrError: string | null;
   whatsappReplyText: string | null;
   intakeStatus: string;
+  duplicateHint: string | null;
   payload: Record<string, unknown>;
   resolvedExpenseId: string | null;
   resolvedEmployeeProfileId: string | null;
@@ -3659,20 +3660,10 @@ export async function processTexWhatsappSubmission(
     });
   }
 
-  let extraction: TexReceiptExtraction | null = submission.extractedReceipt;
-  let extractionError: string | null = null;
-
-  if (!extraction && submission.mediaUrl) {
-    try {
-      extraction = await extractReceiptWithAI(submission.mediaUrl);
-    } catch (error) {
-      extractionError = error instanceof Error ? error.message : "Receipt extraction failed.";
-    }
-  }
-
   return withTenantContext(client, actor, async () => {
     const settings = await getTexIntegrationSettingsForProcessing(client);
     const employee = await findEmployeeBySubmissionSender(client, submission);
+    const { extraction, extractionError } = await extractReceiptForSubmission(client, submission);
 
     if (!employee) {
       const replyText =
@@ -4700,23 +4691,97 @@ async function findDuplicateExpense(
     return null;
   }
 
+  const currency = extraction.currency.trim().toUpperCase();
+  const amount = Math.round(Number(extraction.amount) * 100) / 100;
+  const amountTolerance = Math.max(0.01, Math.min(2, amount * 0.01));
   const result = await client.query<TexDuplicateCandidateRow>(
     `
       select id, vendor, amount::float as amount, currency, expense_date::text as expense_date
       from public.tex_expenses
       where tenant_id = public.current_tenant_id()
         and employee_profile_id = $1
-        and expense_date = $2::date
-        and amount = $3
-        and currency = $4
+        and expense_date between ($2::date - interval '1 day') and ($2::date + interval '1 day')
+        and abs(amount - $3) <= $5
+        and upper(currency) = $4
         and status <> 'rejected'
-      order by created_at desc
-      limit 1
+      order by
+        case when expense_date = $2::date then 0 else 1 end,
+        abs(amount - $3) asc,
+        created_at desc
+      limit 3
     `,
-    [employeeProfileId, extraction.expenseDate, extraction.amount, extraction.currency]
+    [employeeProfileId, extraction.expenseDate, amount, currency, amountTolerance]
   );
 
-  return result.rows[0] ?? null;
+  const vendorKey = normalizeDuplicateVendor(extraction.vendor);
+  const exactOrVendorMatch =
+    result.rows.find((row) => {
+      const sameAmount = Math.abs(row.amount - amount) <= 0.01;
+      const sameDate = row.expense_date === extraction.expenseDate;
+      const existingVendorKey = normalizeDuplicateVendor(row.vendor);
+      return (
+        (sameAmount && sameDate) ||
+        (Boolean(vendorKey) && vendorKey === existingVendorKey)
+      );
+    }) ?? null;
+
+  return exactOrVendorMatch ?? (result.rows.length === 1 ? result.rows[0] ?? null : null);
+}
+
+async function extractReceiptForSubmission(
+  client: TenantQueryClient,
+  submission: Required<TexWebhookSubmissionInput>
+) {
+  let extraction: TexReceiptExtraction | null = submission.extractedReceipt;
+  let extractionError: string | null = null;
+
+  if (!extraction && submission.mediaUrl) {
+    try {
+      extraction = await extractReceiptWithAI(submission.mediaUrl);
+    } catch (error) {
+      extractionError = error instanceof Error ? error.message : "Receipt extraction failed.";
+    }
+  }
+
+  if (!extraction && submission.receiptFileId) {
+    try {
+      extraction = await extractStoredReceiptWithAI(client, submission.receiptFileId);
+      extractionError = null;
+    } catch (error) {
+      extractionError = error instanceof Error ? error.message : "Stored receipt extraction failed.";
+    }
+  }
+
+  return { extraction, extractionError };
+}
+
+async function extractStoredReceiptWithAI(client: TenantQueryClient, receiptFileId: string) {
+  const result = await client.query<{
+    storage_path: string;
+    content_type: string;
+  }>(
+    `
+      select storage_path, content_type
+      from public.files
+      where tenant_id = public.current_tenant_id()
+        and id = $1
+      limit 1
+    `,
+    [receiptFileId]
+  );
+  const row = requireSingleRow(result.rows, "receipt file");
+  const contentType = cleanContentType(row.content_type);
+  if (!contentType.startsWith("image/")) {
+    throw new Error("OCR currently supports image receipts only.");
+  }
+
+  const buffer = await downloadReceiptObject(row.storage_path);
+  return extractReceiptWithAI(`data:${contentType};base64,${buffer.toString("base64")}`);
+}
+
+function normalizeDuplicateVendor(value: string | null | undefined) {
+  const clean = value?.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return clean || null;
 }
 
 async function createExpenseFromWhatsappReceipt(
@@ -6597,12 +6662,24 @@ function mapUnregisteredWhatsappSubmission(
     ocrError: row.ocr_error,
     whatsappReplyText: row.whatsapp_reply_text,
     intakeStatus: whatsappIntakeStatus(row, mediaStatus),
+    duplicateHint: whatsappDuplicateHint(row),
     payload,
     resolvedExpenseId: row.resolved_expense_id,
     resolvedEmployeeProfileId: row.resolved_employee_profile_id,
     resolvedAt: row.resolved_at,
     createdAt: row.created_at
   };
+}
+
+function whatsappDuplicateHint(row: TexUnregisteredWhatsappSubmissionRow) {
+  const result = parseSubmissionExtraction(row.ocr_result);
+  if (!result?.vendor && !result?.amount && !result?.expenseDate) {
+    return null;
+  }
+
+  return [result.vendor, result.expenseDate, result.amount, result.currency ?? "AED"]
+    .filter((value) => value !== null && value !== undefined && value !== "")
+    .join(" / ");
 }
 
 type TexExpenseCategoryRow = {
