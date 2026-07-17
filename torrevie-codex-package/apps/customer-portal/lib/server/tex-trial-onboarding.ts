@@ -54,19 +54,32 @@ function validateTrialInput(input: TexTrialInput) {
   const email = input.email.toLowerCase();
   const country = input.country.toUpperCase();
 
-  if (
-    !input.termsAccepted ||
-    input.companyName.length < 2 ||
-    input.companyName.length > 120 ||
-    input.adminName.length < 2 ||
-    input.adminName.length > 120 ||
-    input.password.length < 8 ||
-    input.phone.length < 7 ||
-    input.phone.length > 32 ||
-    !allowedCountries.has(country) ||
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-  ) {
-    throw new Error("invalid_trial_input");
+  if (!input.termsAccepted) {
+    throw new Error("trial_terms_required");
+  }
+
+  if (input.companyName.length < 2 || input.companyName.length > 120) {
+    throw new Error("trial_company_invalid");
+  }
+
+  if (input.adminName.length < 2 || input.adminName.length > 120) {
+    throw new Error("trial_admin_invalid");
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error("trial_email_invalid");
+  }
+
+  if (input.phone.length < 7 || input.phone.length > 32) {
+    throw new Error("trial_phone_invalid");
+  }
+
+  if (!allowedCountries.has(country)) {
+    throw new Error("trial_country_invalid");
+  }
+
+  if (input.password.length < 8) {
+    throw new Error("trial_password_invalid");
   }
 
   return {
@@ -103,7 +116,7 @@ async function createAuthUser(input: {
       throw new Error("existing_email");
     }
 
-    throw new Error(`Unable to create trial auth user: ${response.status}`);
+    throw new Error("trial_auth_failed");
   }
 }
 
