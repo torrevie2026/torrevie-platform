@@ -35,14 +35,19 @@ import {
   type TexActorContext
 } from "./tex";
 
-setTexWhatsappNotificationDispatcherForTest(async (input) => ({
-  ok: true,
-  provider: input.provider,
-  status: "sent",
-  messageId: "test-whatsapp-message",
-  error: null,
-  httpStatus: 200
-}));
+const whatsappMessages: string[] = [];
+
+setTexWhatsappNotificationDispatcherForTest(async (input) => {
+  whatsappMessages.push(input.message);
+  return {
+    ok: true,
+    provider: input.provider,
+    status: "sent",
+    messageId: "test-whatsapp-message",
+    error: null,
+    httpStatus: 200
+  };
+});
 
 setTexEmailNotificationDispatcherForTest(async () => ({
   ok: false,
@@ -701,6 +706,23 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("from public.tex_unregistered_whatsapp_submissions s")) {
+      return {
+        rows: [
+          {
+            submission_id: "00000000-0000-4000-8000-000000007001",
+            sender_raw: "971500000001@c.us",
+            sender_phone: "+971500000001",
+            whatsapp_chat_jid: "971500000001@c.us",
+            vendor: "Airport Cafe",
+            amount: 120,
+            currency: "AED",
+            expense_date: "2026-07-12"
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("insert into public.files")) {
       return {
         rows: [
@@ -1112,6 +1134,10 @@ async function main() {
     assert.equal(updated.status, "approved");
     assert.equal(client.hasSql("approved_by = case"), true);
     assert.equal(client.valuesContain("tex.expense.approved"), true);
+    assert.equal(
+      whatsappMessages.includes("Receipt approved: Airport Cafe / 2026-07-12 / 120 AED. Status: approved and pending payment."),
+      true
+    );
   }
 
   {
@@ -1125,6 +1151,10 @@ async function main() {
     assert.equal(updated.status, "paid");
     assert.equal(client.hasSql("paid_by = case"), true);
     assert.equal(client.valuesContain("tex.expense.paid"), true);
+    assert.equal(
+      whatsappMessages.includes("Receipt paid: Airport Cafe / 2026-07-12 / 120 AED. Status: paid."),
+      true
+    );
   }
 
   {
@@ -1221,6 +1251,40 @@ async function main() {
     assert.equal(client.hasSql("abs(amount - $3) <= $5"), true);
     assert.equal(client.valuesContain("suspected"), true);
     assert.equal(client.valuesContain(true), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const result = await processTexWhatsappSubmission(client, integrationActor, {
+      senderPhone: "+971500000001",
+      messageId: "wamid.partial.receipt",
+      receiptFileId: "00000000-0000-4000-8000-000000019001",
+      extractedReceipt: {
+        vendor: "Fuel Station",
+        expenseDate: null,
+        amount: null,
+        currency: null,
+        category: "Fuel",
+        taxAmount: null,
+        taxIdNumber: null,
+        confidence: 0.2,
+        notes: "Unreadable receipt"
+      },
+      payload: { provider: "quickconnect" }
+    });
+    assert.equal(result.ocrStatus, "manual_review");
+    assert.equal(result.expense?.status, "pending");
+    assert.match(result.replyText, /pending manager approval/);
+    assert.equal(
+      client.calls.some((call) =>
+        call.values.some(
+          (value) =>
+            typeof value === "string" &&
+            value.includes("Receipt requires manager review because TEX could not read all key fields.")
+        )
+      ),
+      true
+    );
   }
 
   {
