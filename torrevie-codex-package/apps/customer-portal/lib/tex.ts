@@ -219,6 +219,8 @@ export type TexExpenseInput = {
   source?: string | null;
 };
 
+export type TexExpenseUpdateInput = Partial<TexExpenseInput>;
+
 export type TexExpenseRecord = {
   id: string;
   status: TexExpenseStatus;
@@ -249,12 +251,17 @@ export type TexReceiptDownload = {
 };
 
 export type TexExpenseListItem = TexExpenseRecord & {
+  employeeProfileId: string | null;
   employeeName: string | null;
   vendor: string | null;
   expenseDate: string;
   category: string | null;
+  tripId: string | null;
   tripName: string | null;
   notes: string | null;
+  paymentMethod: string | null;
+  taxIdNumber: string | null;
+  taxAmount: number | null;
   receiptFileId: string | null;
   receiptUrl: string | null;
   createdAt: string;
@@ -404,6 +411,8 @@ export type TexFinanceExpense = {
   category: string | null;
   tripName: string | null;
   notes: string | null;
+  receiptFileId: string | null;
+  receiptUrl: string | null;
   approvedAt: string | null;
 };
 
@@ -1220,14 +1229,19 @@ export async function listTexExpenses(
       `
         select
           e.id,
+          e.employee_profile_id,
           coalesce(ep.name, e.employee_name) as employee_name,
           e.vendor,
           e.expense_date::text as expense_date,
           e.amount::float as amount,
           e.currency,
           e.category,
+          e.trip_id,
           coalesce(t.name, e.trip_name) as trip_name,
           e.notes,
+          e.payment_method,
+          e.tax_id_number,
+          e.tax_amount::float as tax_amount,
           e.receipt_file_id,
           e.status,
           e.created_at::text as created_at,
@@ -2123,6 +2137,7 @@ export async function listTexFinanceReview(
           e.category,
           coalesce(t.name, e.trip_name) as trip_name,
           e.notes,
+          e.receipt_file_id,
           e.approved_at::text as approved_at
         from public.tex_expenses e
         left join public.tex_employee_profiles ep
@@ -3412,6 +3427,72 @@ export async function createTexExpense(
       amount: String(row.amount),
       currency: row.currency,
       source: expense.source ?? "web"
+    });
+
+    return mapExpense(row);
+  });
+}
+
+export async function updateTexExpense(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  expenseId: string,
+  input: TexExpenseUpdateInput
+): Promise<TexExpenseRecord> {
+  assertTexPermission(actor, "tex.expense.submit");
+  assertUuid(expenseId, "expense id");
+  const expense = sanitizeExpenseUpdate(input);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexExpenseRow>(
+      `
+        update public.tex_expenses
+           set employee_profile_id = $1,
+               vendor = $2,
+               expense_date = $3,
+               amount = $4,
+               currency = $5,
+               category = $6,
+               trip_id = $7,
+               notes = $8,
+               payment_method = $9,
+               tax_id_number = $10,
+               tax_amount = $11,
+               receipt_file_id = $12,
+               extraction_source = coalesce($13::text, extraction_source),
+               extraction_confidence = $14,
+               extraction_payload = $15::jsonb,
+               manager_review_required = case when status = 'approved' then true else manager_review_required end,
+               updated_by = $16
+         where tenant_id = public.current_tenant_id()
+           and id = $17
+         returning id, status, amount::float as amount, currency
+      `,
+      [
+        expense.employeeProfileId,
+        expense.vendor,
+        expense.expenseDate,
+        expense.amount,
+        expense.currency,
+        expense.category,
+        expense.tripId,
+        expense.notes,
+        expense.paymentMethod,
+        expense.taxIdNumber,
+        expense.taxAmount,
+        expense.receiptFileId,
+        expense.extractionSource,
+        expense.extractionConfidence,
+        JSON.stringify(expense.extractionPayload ?? {}),
+        actor.userId,
+        expenseId
+      ]
+    );
+    const row = requireSingleRow(result.rows, "expense");
+    await writeTexAuditEvent(client, actor, "tex.expense.updated", "tex_expense", expenseId, {
+      amount: String(row.amount),
+      currency: row.currency,
+      source: "manual_edit"
     });
 
     return mapExpense(row);
@@ -4715,6 +4796,40 @@ function sanitizeExpense(input: TexExpenseInput): Required<TexExpenseInput> {
         : {},
     source: cleanOptional(input.source) ?? "web"
   };
+}
+
+function sanitizeExpenseUpdate(input: TexExpenseUpdateInput): Required<TexExpenseInput> {
+  if (!input.expenseDate) {
+    throw new Error("Expense date is required.");
+  }
+
+  if (input.amount === undefined || input.amount === null) {
+    throw new Error("Expense amount is required.");
+  }
+
+  if (!input.currency) {
+    throw new Error("Expense currency is required.");
+  }
+
+  return sanitizeExpense({
+    employeeProfileId: input.employeeProfileId,
+    vendor: input.vendor,
+    expenseDate: input.expenseDate,
+    amount: input.amount,
+    currency: input.currency,
+    category: input.category,
+    tripId: input.tripId,
+    tripLegId: input.tripLegId,
+    notes: input.notes,
+    paymentMethod: input.paymentMethod,
+    taxIdNumber: input.taxIdNumber,
+    taxAmount: input.taxAmount,
+    receiptFileId: input.receiptFileId,
+    extractionSource: input.extractionSource ?? "manual",
+    extractionConfidence: input.extractionConfidence ?? null,
+    extractionPayload: input.extractionPayload ?? {},
+    source: input.source ?? "web"
+  });
 }
 
 function sanitizeReceiptUpload(input: TexReceiptUploadInput) {
@@ -6164,12 +6279,17 @@ function mapExpenseListItem(row: TexExpenseListRow): TexExpenseListItem {
     status: row.status,
     amount: row.amount,
     currency: row.currency,
+    employeeProfileId: row.employee_profile_id,
     employeeName: row.employee_name,
     vendor: row.vendor,
     expenseDate: row.expense_date,
     category: row.category,
+    tripId: row.trip_id,
     tripName: row.trip_name,
     notes: row.notes,
+    paymentMethod: row.payment_method,
+    taxIdNumber: row.tax_id_number,
+    taxAmount: row.tax_amount,
     receiptFileId: row.receipt_file_id,
     receiptUrl: row.receipt_file_id ? `/api/tex/receipts/${row.receipt_file_id}` : null,
     createdAt: row.created_at,
@@ -6256,6 +6376,8 @@ function mapFinanceExpense(row: TexFinanceExpenseRow): TexFinanceExpense {
     category: row.category,
     tripName: row.trip_name,
     notes: row.notes,
+    receiptFileId: row.receipt_file_id,
+    receiptUrl: row.receipt_file_id ? `/api/tex/receipts/${row.receipt_file_id}` : null,
     approvedAt: row.approved_at
   };
 }
@@ -6508,12 +6630,17 @@ type TexExpenseRow = {
 };
 
 type TexExpenseListRow = TexExpenseRow & {
+  employee_profile_id: string | null;
   employee_name: string | null;
   vendor: string | null;
   expense_date: string;
   category: string | null;
+  trip_id: string | null;
   trip_name: string | null;
   notes: string | null;
+  payment_method: string | null;
+  tax_id_number: string | null;
+  tax_amount: number | null;
   receipt_file_id: string | null;
   created_at: string;
   duplicate_status: "clear" | "suspected" | "duplicate";
@@ -6593,6 +6720,7 @@ type TexFinanceExpenseRow = {
   category: string | null;
   trip_name: string | null;
   notes: string | null;
+  receipt_file_id: string | null;
   approved_at: string | null;
 };
 

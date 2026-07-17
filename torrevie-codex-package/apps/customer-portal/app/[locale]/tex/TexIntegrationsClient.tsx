@@ -8,6 +8,7 @@ type WhatsappProvider = "wappfly" | "ultramsg" | "meta" | "quickconnect";
 type TexIntegrationsClientProps = {
   adminIntegrationsHref: string;
   initialWorkspace: TexIntegrationWorkspace | null;
+  planKey: "trial" | "lite" | "growth" | "enterprise";
 };
 
 type ProviderGuide = {
@@ -130,7 +131,8 @@ const providerGuides: ProviderGuide[] = [
 
 export function TexIntegrationsClient({
   adminIntegrationsHref,
-  initialWorkspace
+  initialWorkspace,
+  planKey
 }: TexIntegrationsClientProps) {
   const [workspace, setWorkspace] = useState(initialWorkspace);
   const [busy, setBusy] = useState(false);
@@ -143,6 +145,14 @@ export function TexIntegrationsClient({
   useEffect(() => {
     setOrigin(window.location.origin);
   }, []);
+
+  const isStarterPlan = planKey === "trial" || planKey === "lite";
+
+  useEffect(() => {
+    if (isStarterPlan) {
+      setSelectedProvider("quickconnect");
+    }
+  }, [isStarterPlan]);
 
   useEffect(() => {
     const session = workspace?.quickConnect.session;
@@ -210,7 +220,11 @@ export function TexIntegrationsClient({
   const settings = workspace.settings;
   const defaultProfile = workspace.defaultProviderProfile;
   const quickConnect = workspace.quickConnect;
-  const selectedGuide = providerGuides.find((guide) => guide.key === selectedProvider) ?? providerGuides[0]!;
+  const visibleProviderGuides = isStarterPlan
+    ? providerGuides.filter((guide) => guide.key === "quickconnect")
+    : providerGuides;
+  const selectedGuide =
+    visibleProviderGuides.find((guide) => guide.key === selectedProvider) ?? visibleProviderGuides[0]!;
   const webhookUrl = buildWebhookUrl(selectedProvider, origin);
 
   return (
@@ -220,17 +234,20 @@ export function TexIntegrationsClient({
           <p className="eyebrow">Integrations</p>
           <h2 id="tex-integrations-title">WhatsApp setup guide</h2>
           <p>
-            Configure WhatsApp receipt intake through Quick Connect, Wappfly, UltraMsg, or Meta Cloud
-            API with tenant-scoped webhook and storage details.
+            {isStarterPlan
+              ? "Connect WhatsApp with Quick Connect, scan the QR from Linked Devices, then send a receipt to test intake."
+              : "Configure WhatsApp receipt intake through Quick Connect, Wappfly, UltraMsg, or Meta Cloud API with tenant-scoped webhook and storage details."}
           </p>
         </div>
         <div className="tex-panel-actions">
           <button type="button" disabled={busy} onClick={refresh}>
             Refresh
           </button>
-          <a className="tex-secondary-link" href={adminIntegrationsHref}>
-            Configure managed providers
-          </a>
+          {!isStarterPlan ? (
+            <a className="tex-secondary-link" href={adminIntegrationsHref}>
+              Configure managed providers
+            </a>
+          ) : null}
         </div>
       </header>
 
@@ -241,11 +258,17 @@ export function TexIntegrationsClient({
           <div className="section-heading-row">
             <div>
               <p className="eyebrow">Guided setup</p>
-              <h3>Choose the provider you want to connect</h3>
+              <h3>{isStarterPlan ? "Connect WhatsApp with Quick Connect" : "Choose the provider you want to connect"}</h3>
             </div>
           </div>
-          <div className="tex-provider-tabs" role="tablist" aria-label="WhatsApp providers">
-            {providerGuides.map((guide) => (
+          {isStarterPlan ? (
+            <div className="tex-provider-note">
+              <strong>Starter trial setup</strong>
+              <span>Only Quick Connect is shown during trial. Managed providers are available on Growth and Enterprise plans.</span>
+            </div>
+          ) : (
+            <div className="tex-provider-tabs" role="tablist" aria-label="WhatsApp providers">
+              {visibleProviderGuides.map((guide) => (
               <button
                 aria-selected={guide.key === selectedProvider}
                 key={guide.key}
@@ -255,8 +278,9 @@ export function TexIntegrationsClient({
               >
                 {guide.label}
               </button>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           <div className="tex-provider-guide-grid">
             <section className="tex-provider-guide-main">
