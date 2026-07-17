@@ -2520,7 +2520,8 @@ form.member-row {
   justify-content: space-between;
 }
 
-.tex-expense-toolbar > span {
+.tex-expense-toolbar > span,
+.tex-expense-toolbar .tex-panel-actions span {
   color: var(--color-text-muted);
   font-size: 12px;
   font-weight: 800;
@@ -2545,8 +2546,19 @@ form.member-row {
   border-radius: 8px;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(260px, 1fr) minmax(110px, auto) minmax(132px, auto);
+  grid-template-columns: 24px minmax(260px, 1fr) minmax(110px, auto) minmax(132px, auto);
   padding: 10px 12px;
+}
+
+.tex-row-checkbox {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.tex-row-checkbox input {
+  inline-size: 16px;
+  min-block-size: 16px;
 }
 
 .tex-expense-card h4 {

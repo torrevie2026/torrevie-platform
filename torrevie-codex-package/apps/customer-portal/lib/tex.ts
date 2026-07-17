@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   assertPermission,
+  hasPermission,
   roleKeys,
   type PermissionKey,
   type ProductKey,
@@ -2538,6 +2539,7 @@ export async function payTexFinanceItems(
         await writeTexAuditEvent(client, actor, "tex.finance.expense_paid", "tex_expense", row.id, {
           status: "paid"
         });
+        await deliverExpenseStatusWhatsappReply(client, actor, row.id, "paid");
       }
     }
 
@@ -3511,7 +3513,7 @@ export async function updateTexExpenseStatus(
   assertExpenseStatus(status);
 
   if (status === "paid") {
-    assertTexPermission(actor, "tex.finance.review");
+    assertTexAnyPermission(actor, ["tex.finance.review", "tex.expense.approve"]);
   } else {
     assertTexPermission(actor, "tex.expense.approve");
   }
@@ -3531,6 +3533,7 @@ export async function updateTexExpenseStatus(
                updated_by = $2
          where tenant_id = public.current_tenant_id()
            and id = $4
+           and ($1 <> 'paid' or status = 'approved')
          returning id, status, amount::float as amount, currency
       `,
       [status, actor.userId, cleanOptional(reason), expenseId]
@@ -3539,6 +3542,7 @@ export async function updateTexExpenseStatus(
     await writeTexAuditEvent(client, actor, `tex.expense.${status}`, "tex_expense", row.id, {
       status
     });
+    await deliverExpenseStatusWhatsappReply(client, actor, row.id, status);
 
     return mapExpense(row);
   });
@@ -3698,35 +3702,14 @@ export async function processTexWhatsappSubmission(
 
     const extractionForProcessing = defaultReceiptCurrency(extraction);
 
-    if (
-      !extractionForProcessing ||
-      !extractionForProcessing.expenseDate ||
-      !extractionForProcessing.amount ||
-      !extractionForProcessing.currency
-    ) {
-      const replyText =
-        "Receipt received, but TEX could not read the key fields. It has been sent for manual review.";
-      const row = await insertWhatsappSubmission(client, actor, submission, {
-        messageType,
-        ocrStatus: extractionError ? "failed" : "manual_review",
-        ocrResult: extractionForProcessing ?? extraction ?? {},
-        ocrError: extractionError,
-        replyText,
-        resolvedEmployeeProfileId: employee.id
-      });
-      const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
-
-      return {
-        submission: row,
-        replyText,
-        expense: null,
-        ocrStatus: extractionError ? "failed" : "manual_review",
-        delivery
-      };
-    }
-
-    const duplicate = settings.duplicate_detection_enabled
-      ? await findDuplicateExpense(client, employee.id, extractionForProcessing)
+    const hasCompleteExtraction = Boolean(
+      extractionForProcessing?.expenseDate &&
+      extractionForProcessing.amount &&
+      extractionForProcessing.currency
+    );
+    const duplicateExtraction = hasCompleteExtraction ? extractionForProcessing : null;
+    const duplicate = settings.duplicate_detection_enabled && duplicateExtraction
+      ? await findDuplicateExpense(client, employee.id, duplicateExtraction)
       : null;
     const shouldAutoReject = Boolean(duplicate && settings.duplicate_auto_reject_enabled);
     const expense = await createExpenseFromWhatsappReceipt(client, actor, {
@@ -3736,15 +3719,17 @@ export async function processTexWhatsappSubmission(
       duplicate,
       shouldAutoReject
     });
-    const replyText = shouldAutoReject
-      ? `Receipt received but auto-rejected as a likely duplicate of ${duplicate?.vendor ?? "an existing expense"}.`
-      : duplicate
-        ? "Receipt received and flagged as a possible duplicate for manager review."
-        : `Receipt received and submitted for ${formatMoney(extractionForProcessing.amount, extractionForProcessing.currency)}.`;
+    const replyText = buildWhatsappReceiptSubmittedReply({
+      extraction: extractionForProcessing,
+      duplicate,
+      extractionError,
+      shouldAutoReject
+    });
     const row = await insertWhatsappSubmission(client, actor, submission, {
       messageType,
-      ocrStatus: "extracted",
-      ocrResult: extractionForProcessing,
+      ocrStatus: hasCompleteExtraction ? "extracted" : extractionError ? "failed" : "manual_review",
+      ocrResult: extractionForProcessing ?? extraction ?? {},
+      ocrError: extractionError,
       replyText,
       resolvedExpenseId: expense.id,
       resolvedEmployeeProfileId: employee.id
@@ -3762,7 +3747,13 @@ export async function processTexWhatsappSubmission(
       }
     );
 
-    return { submission: row, replyText, expense, ocrStatus: "extracted", delivery };
+    return {
+      submission: row,
+      replyText,
+      expense,
+      ocrStatus: hasCompleteExtraction ? "extracted" : extractionError ? "failed" : "manual_review",
+      delivery
+    };
   });
 }
 
@@ -4001,6 +3992,26 @@ function assertTexPermission(actor: TexActorContext, permission: PermissionKey) 
     moduleAdminProducts: actor.moduleAdminProducts,
     integrationPermissions: actor.integrationPermissions
   });
+}
+
+function assertTexAnyPermission(actor: TexActorContext, permissions: readonly PermissionKey[]) {
+  if (actor.roleScope !== "customer") {
+    throw new Error("TEX access requires a customer tenant context.");
+  }
+
+  const allowed = permissions.some((permission) =>
+    hasPermission({
+      roles: actor.roles,
+      permission,
+      entitledProducts: actor.entitledProducts,
+      moduleAdminProducts: actor.moduleAdminProducts,
+      integrationPermissions: actor.integrationPermissions
+    }).allowed
+  );
+
+  if (!allowed) {
+    assertTexPermission(actor, permissions[0] ?? "tex.expense.read");
+  }
 }
 
 async function writeTexAuditEvent(
@@ -4317,6 +4328,52 @@ async function deliverTexWhatsappReply(
   );
 
   return result;
+}
+
+async function deliverExpenseStatusWhatsappReply(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  expenseId: string,
+  status: Exclude<TexExpenseStatus, "pending">
+) {
+  const result = await client.query<TexWhatsappExpenseStatusReplyRow>(
+    `
+      select
+        s.id as submission_id,
+        s.sender_raw,
+        s.sender_phone,
+        s.whatsapp_chat_jid,
+        e.vendor,
+        e.amount::float as amount,
+        e.currency,
+        e.expense_date::text as expense_date
+      from public.tex_unregistered_whatsapp_submissions s
+      join public.tex_expenses e
+        on e.tenant_id = s.tenant_id
+       and e.id = s.resolved_expense_id
+      where s.tenant_id = public.current_tenant_id()
+        and s.resolved_expense_id = $1
+      order by s.resolved_at desc nulls last, s.created_at desc
+      limit 1
+    `,
+    [expenseId]
+  );
+  const row = result.rows[0];
+  if (!row) {
+    return null;
+  }
+
+  return deliverTexWhatsappReply(
+    client,
+    actor,
+    {
+      senderRaw: row.sender_raw,
+      senderPhone: row.sender_phone,
+      whatsappChatJid: row.whatsapp_chat_jid
+    },
+    buildExpenseStatusReply(row, status),
+    row.submission_id
+  );
 }
 
 async function getTexWhatsappNotificationSettings(
@@ -4789,12 +4846,13 @@ async function createExpenseFromWhatsappReceipt(
   actor: TexActorContext,
   input: {
     employee: TexEmployeeProfileRow;
-    extraction: TexReceiptExtraction;
+    extraction: TexReceiptExtraction | null;
     submission: Required<TexWebhookSubmissionInput>;
     duplicate: TexDuplicateCandidateRow | null;
     shouldAutoReject: boolean;
   }
 ): Promise<TexExpenseRecord> {
+  const resolved = resolveKnownSenderWhatsappExpenseFields(input.submission, input.extraction);
   const duplicateStatus = input.duplicate
     ? input.shouldAutoReject
       ? "duplicate"
@@ -4875,27 +4933,55 @@ async function createExpenseFromWhatsappReceipt(
       input.employee.name,
       input.employee.phone_number,
       input.submission.whatsappChatJid,
-      input.extraction.vendor,
-      input.extraction.expenseDate,
-      input.extraction.amount,
-      input.extraction.currency,
-      input.extraction.category,
-      input.extraction.notes,
-      input.extraction.taxIdNumber,
-      input.extraction.taxAmount,
+      resolved.vendor,
+      resolved.expenseDate,
+      resolved.amount,
+      resolved.currency,
+      input.extraction?.category ?? null,
+      resolved.notes,
+      input.extraction?.taxIdNumber ?? null,
+      input.extraction?.taxAmount ?? null,
       input.submission.receiptFileId,
-      input.extraction.confidence,
-      JSON.stringify(input.extraction),
+      input.extraction?.confidence ?? 0,
+      JSON.stringify(input.extraction ?? {}),
       duplicateStatus,
       input.duplicate?.id ?? null,
       duplicateReason,
-      Boolean(input.duplicate && !input.shouldAutoReject),
+      Boolean((input.duplicate && !input.shouldAutoReject) || resolved.requiresManualReview),
       input.shouldAutoReject ? "rejected" : "pending"
     ]
   );
   const row = requireSingleRow(result.rows, "expense");
 
   return mapExpense(row);
+}
+
+function resolveKnownSenderWhatsappExpenseFields(
+  submission: Required<TexWebhookSubmissionInput>,
+  extraction: TexReceiptExtraction | null
+) {
+  const amount = extraction?.amount && extraction.amount > 0 ? extraction.amount : 0.01;
+  const currency = extraction?.currency?.trim().toUpperCase() || "AED";
+  const expenseDate = extraction?.expenseDate ?? new Date().toISOString().slice(0, 10);
+  const requiresManualReview = amount === 0.01 || !extraction?.expenseDate;
+  const notes = [
+    extraction?.notes,
+    submission.messageText,
+    requiresManualReview
+      ? "Receipt requires manager review because TEX could not read all key fields."
+      : null
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    vendor: extraction?.vendor ?? null,
+    expenseDate,
+    amount,
+    currency,
+    notes,
+    requiresManualReview
+  };
 }
 
 async function assertTripExists(client: TenantQueryClient, tripId: string) {
@@ -6260,6 +6346,70 @@ function formatMoney(amount: number, currency: string) {
   return `${new Intl.NumberFormat("en", { maximumFractionDigits: 2 }).format(amount)} ${currency}`;
 }
 
+function buildWhatsappReceiptSubmittedReply(input: {
+  extraction: TexReceiptExtraction | null;
+  duplicate: TexDuplicateCandidateRow | null;
+  extractionError: string | null;
+  shouldAutoReject: boolean;
+}) {
+  if (input.shouldAutoReject) {
+    return `Receipt received but auto-rejected as a likely duplicate of ${input.duplicate?.vendor ?? "an existing expense"}.`;
+  }
+
+  const fields = whatsappOcrSummary(input.extraction);
+  const duplicateText = input.duplicate
+    ? " It is flagged as a possible duplicate for manager review."
+    : "";
+  const reviewText = input.extractionError
+    ? " TEX could not read all receipt fields, so the manager must review the values."
+    : "";
+
+  return `Receipt received. OCR: ${fields}. Status: pending manager approval.${duplicateText}${reviewText}`;
+}
+
+function buildExpenseStatusReply(
+  row: Pick<TexWhatsappExpenseStatusReplyRow, "vendor" | "amount" | "currency" | "expense_date">,
+  status: Exclude<TexExpenseStatus, "pending">
+) {
+  const receipt = whatsappExpenseSummary(row);
+
+  if (status === "approved") {
+    return `Receipt approved: ${receipt}. Status: approved and pending payment.`;
+  }
+
+  if (status === "paid") {
+    return `Receipt paid: ${receipt}. Status: paid.`;
+  }
+
+  return `Receipt rejected: ${receipt}. Please contact your manager for details.`;
+}
+
+function whatsappOcrSummary(extraction: TexReceiptExtraction | null) {
+  return [
+    `vendor ${extraction?.vendor ?? "not read"}`,
+    `date ${extraction?.expenseDate ?? "not read"}`,
+    `amount ${
+      extraction?.amount != null
+        ? formatMoney(extraction.amount, extraction.currency?.trim().toUpperCase() || "AED")
+        : "not read"
+    }`,
+    `VAT ${extraction?.taxAmount != null ? extraction.taxAmount : "not read"}`,
+    `TRN ${extraction?.taxIdNumber ?? "not read"}`
+  ].join(", ");
+}
+
+function whatsappExpenseSummary(
+  row: Pick<TexWhatsappExpenseStatusReplyRow, "vendor" | "amount" | "currency" | "expense_date">
+) {
+  return [
+    row.vendor ?? "receipt",
+    row.expense_date,
+    formatMoney(row.amount, row.currency)
+  ]
+    .filter(Boolean)
+    .join(" / ");
+}
+
 function requireSingleRow<Row>(rows: readonly Row[], label: string) {
   const [row] = rows;
 
@@ -6983,6 +7133,17 @@ type TexWhatsappNotificationSettingsRow = {
   wappfly_session_id: string | null;
   meta_phone_number_id: string | null;
   api_key: string | null;
+};
+
+type TexWhatsappExpenseStatusReplyRow = {
+  submission_id: string;
+  sender_raw: string | null;
+  sender_phone: string | null;
+  whatsapp_chat_jid: string | null;
+  vendor: string | null;
+  amount: number;
+  currency: string;
+  expense_date: string;
 };
 
 type TexUnregisteredWhatsappSubmissionRow = {

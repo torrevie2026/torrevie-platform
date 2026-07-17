@@ -100,6 +100,7 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
   const [isExpenseDrawerOpen, setIsExpenseDrawerOpen] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [selectedExpense, setSelectedExpense] = useState<TexExpenseListItem | null>(null);
+  const [selectedExpenseIds, setSelectedExpenseIds] = useState<Set<string>>(new Set());
   const [busyExpenseId, setBusyExpenseId] = useState<string | null>(null);
   const [isReceiptParsing, setIsReceiptParsing] = useState(false);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<keyof ExpenseFormState>>(new Set());
@@ -114,11 +115,18 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
   const activeEmployees = employees.filter((employee) => employee.isActive);
   const activeCategories = categories.filter((category) => category.isActive);
   const openTrips = trips.filter((trip) => trip.status !== "closed" && trip.status !== "cancelled");
+  const selectedExpenses = expenses.filter((expense) => selectedExpenseIds.has(expense.id));
+  const selectedPendingCount = selectedExpenses.filter((expense) => expense.status === "pending").length;
+  const selectedApprovedCount = selectedExpenses.filter((expense) => expense.status === "approved").length;
 
   async function refreshExpenses() {
     const response = await texFetch<{ expenses: TexExpenseListItem[] }>("/expenses");
     setExpenses(response.expenses);
     setSelectedExpense((current) => response.expenses.find((expense) => expense.id === current?.id) ?? current);
+    setSelectedExpenseIds((current) => {
+      const nextIds = new Set(response.expenses.map((expense) => expense.id));
+      return new Set([...current].filter((id) => nextIds.has(id)));
+    });
   }
 
   function closeExpenseDrawer() {
@@ -307,6 +315,49 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
     } finally {
       setBusyExpenseId(null);
     }
+  }
+
+  async function bulkUpdateStatus(status: Exclude<TexExpenseStatus, "pending">) {
+    const targetIds = selectedExpenses
+      .filter((expense) => (status === "approved" ? expense.status === "pending" : expense.status === "approved"))
+      .map((expense) => expense.id);
+
+    if (targetIds.length === 0) {
+      setError(status === "approved" ? "Select pending expenses to approve." : "Select approved expenses to mark paid.");
+      return;
+    }
+
+    setBusyExpenseId("bulk");
+    setError(null);
+    setNotice(null);
+
+    try {
+      for (const expenseId of targetIds) {
+        await texFetch(`/expenses/${expenseId}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({ status })
+        });
+      }
+      setNotice(`${targetIds.length} expense${targetIds.length === 1 ? "" : "s"} ${status}.`);
+      setSelectedExpenseIds(new Set());
+      await refreshExpenses();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setBusyExpenseId(null);
+    }
+  }
+
+  function toggleExpenseSelection(expenseId: string) {
+    setSelectedExpenseIds((current) => {
+      const next = new Set(current);
+      if (next.has(expenseId)) {
+        next.delete(expenseId);
+      } else {
+        next.add(expenseId);
+      }
+      return next;
+    });
   }
 
   return (
@@ -517,6 +568,18 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
                 </button>
               </div>
             ) : null}
+            {selectedExpense.status === "approved" ? (
+              <div className="tex-hero-actions">
+                <button
+                  type="button"
+                  className="tex-primary-button"
+                  disabled={busyExpenseId === selectedExpense.id}
+                  onClick={() => updateStatus(selectedExpense.id, "paid")}
+                >
+                  Mark paid
+                </button>
+              </div>
+            ) : null}
             {error ? <p className="tex-error">{error}</p> : null}
           </aside>
         </div>
@@ -554,7 +617,25 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
               </button>
             ))}
           </div>
-          <span>{visibleExpenses.length} shown</span>
+          <div className="tex-panel-actions">
+            <button
+              type="button"
+              className="tex-secondary-button"
+              disabled={busyExpenseId === "bulk" || selectedPendingCount === 0}
+              onClick={() => bulkUpdateStatus("approved")}
+            >
+              Approve selected
+            </button>
+            <button
+              type="button"
+              className="tex-secondary-button"
+              disabled={busyExpenseId === "bulk" || selectedApprovedCount === 0}
+              onClick={() => bulkUpdateStatus("paid")}
+            >
+              Mark paid selected
+            </button>
+            <span>{visibleExpenses.length} shown</span>
+          </div>
         </div>
         {notice ? <p className="tex-notice">{notice}</p> : null}
         {error && !isExpenseDrawerOpen ? <p className="tex-error">{error}</p> : null}
@@ -565,6 +646,13 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
           <div className="tex-expense-list">
             {visibleExpenses.map((expense) => (
               <article key={expense.id} className="tex-expense-card">
+                <label className="tex-row-checkbox" aria-label={`Select ${expense.vendor ?? "expense"}`}>
+                  <input
+                    type="checkbox"
+                    checked={selectedExpenseIds.has(expense.id)}
+                    onChange={() => toggleExpenseSelection(expense.id)}
+                  />
+                </label>
                 <div>
                   <span className={`tex-status tex-status-${expense.status}`}>{expense.status}</span>
                   <h4>{expense.vendor ?? expense.category ?? "Expense"}</h4>
@@ -601,6 +689,14 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
                         Reject
                       </button>
                     </>
+                  ) : expense.status === "approved" ? (
+                    <button
+                      type="button"
+                      disabled={busyExpenseId === expense.id}
+                      onClick={() => updateStatus(expense.id, "paid")}
+                    >
+                      Mark paid
+                    </button>
                   ) : (
                     <span>{expense.category ?? "No category"}</span>
                   )}
