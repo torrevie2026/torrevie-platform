@@ -6,7 +6,10 @@ import {
   listTexExpenses,
   listTexFinanceReview,
   listTexReportWorkspace,
-  listTexTrips
+  listTexTrips,
+  type TexBootstrap,
+  type TexExpenseListItem,
+  type TexOnboardingStatus
 } from "../../../lib/tex";
 import { TexRoleDashboard } from "./TexRoleDashboard";
 import { isTexSessionError, requireTexRequestContext } from "./tex-request-context";
@@ -39,6 +42,10 @@ export default async function TexPage({
     const rejectedCount = reportExpenses.filter((expense) => expense.status === "rejected").length;
     const categorySpend = buildCategorySpend(reportExpenses);
     const maxCategorySpend = Math.max(...categorySpend.map((item) => item.amount), 1);
+    const onboardingTasks = buildOnboardingTasks(locale, onboarding, bootstrap, expenses, growthFeaturesEnabled);
+    const completedTasks = onboardingTasks.filter((task) => task.completed).length;
+    const onboardingProgress = Math.round((completedTasks / onboardingTasks.length) * 100);
+    const nextOnboardingTask = onboardingTasks.find((task) => !task.completed);
 
     return (
       <>
@@ -69,24 +76,30 @@ export default async function TexPage({
               <p className="eyebrow">{actor.texPlan.planKey} plan</p>
               <h2>Set up TEX</h2>
             </div>
-            <strong>{onboarding.progress}%</strong>
+            <strong>{onboardingProgress}%</strong>
           </div>
           <div className="tex-bar-row">
             <span>Onboarding</span>
             <span className="tex-bar-track">
-              <i style={{ inlineSize: `${onboarding.progress}%` }} />
+              <i style={{ inlineSize: `${onboardingProgress}%` }} />
             </span>
             <strong>{actor.texPlan.employeeLimit || "Unlimited"} seats</strong>
           </div>
-          <div className="tex-role-shortcuts">
-            <a href={`/${locale}/tex/integrations`}>Connect WhatsApp</a>
-            <a href={`/${locale}/tex/people`}>Add employees</a>
-            <a href={`/${locale}/tex/expenses`}>Review expenses</a>
-            {growthFeaturesEnabled ? (
-              <a href={`/${locale}/tex/trips`}>Open trips</a>
-            ) : (
-              <a href={`/${locale}/tex?upgrade=growth`}>Growth modules</a>
-            )}
+          <div className="tex-onboarding-steps">
+            {onboardingTasks.map((task) => (
+              <a
+                aria-current={nextOnboardingTask?.key === task.key ? "step" : undefined}
+                className={`tex-onboarding-step${task.completed ? " tex-onboarding-step-complete" : ""}`}
+                href={task.href}
+                key={task.key}
+              >
+                <span>
+                  <strong>{task.label}</strong>
+                  <small>{task.detail}</small>
+                </span>
+                <b>{task.completed ? "Completed" : nextOnboardingTask?.key === task.key ? "Next" : "Pending"}</b>
+              </a>
+            ))}
           </div>
         </section>
 
@@ -219,6 +232,64 @@ function buildCategorySpend(expenses: Array<{ baseAmount: number; category: stri
     .map(([category, amount]) => ({ amount, category }))
     .sort((left, right) => right.amount - left.amount)
     .slice(0, 5);
+}
+
+function buildOnboardingTasks(
+  locale: string,
+  onboarding: TexOnboardingStatus,
+  bootstrap: TexBootstrap,
+  expenses: TexExpenseListItem[],
+  growthFeaturesEnabled: boolean
+) {
+  const hasWhatsappRoute = Boolean(
+    onboarding.whatsappConnectedAt || bootstrap.integrationSettings?.whatsappProvider
+  );
+  const hasAdditionalEmployee = bootstrap.employeeProfiles.some((employee) => employee.userId === null);
+  const hasReceipt = Boolean(
+    onboarding.firstReceiptReceivedAt || expenses.some((expense) => expense.receiptFileId)
+  );
+  const hasReviewedExpense = Boolean(
+    onboarding.firstExpenseApprovedAt ||
+      expenses.some((expense) => expense.status === "approved" || expense.status === "paid")
+  );
+
+  return [
+    {
+      key: "whatsapp",
+      label: "Connect WhatsApp",
+      detail: hasWhatsappRoute ? "Receipt intake route is ready" : "Scan Quick Connect and send a test receipt",
+      href: `/${locale}/tex/integrations`,
+      completed: hasWhatsappRoute
+    },
+    {
+      key: "people",
+      label: "Add employees",
+      detail: hasAdditionalEmployee ? "Driver or employee profile exists" : "Add at least one sender profile",
+      href: `/${locale}/tex/people`,
+      completed: hasAdditionalEmployee
+    },
+    {
+      key: "receipt",
+      label: "Receive receipt",
+      detail: hasReceipt ? "Receipt file captured" : "Send or upload the first receipt",
+      href: `/${locale}/tex/whatsapp-review`,
+      completed: hasReceipt
+    },
+    {
+      key: "review",
+      label: "Review expense",
+      detail: hasReviewedExpense ? "Expense approved for finance" : "Check OCR values and approve",
+      href: `/${locale}/tex/expenses`,
+      completed: hasReviewedExpense
+    },
+    {
+      key: "modules",
+      label: growthFeaturesEnabled ? "Open trips" : "Growth modules",
+      detail: growthFeaturesEnabled ? "Plan trips and driver payouts" : "Upgrade when trips and finance are needed",
+      href: growthFeaturesEnabled ? `/${locale}/tex/trips` : `/${locale}/tex?upgrade=growth`,
+      completed: growthFeaturesEnabled
+    }
+  ];
 }
 
 function emptyFinanceReview(now: Date) {

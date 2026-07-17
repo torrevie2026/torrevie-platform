@@ -39,6 +39,7 @@ import {
   sendTexEmailReport,
   startTexQuickConnectPairing,
   updateTexExpenseCategory,
+  updateTexExpense,
   updateTexEmployeeProfile,
   updateTexTeam,
   updateTexTrip,
@@ -52,6 +53,7 @@ import {
   type TexExpenseCategoryInput,
   type TexEmployeeProfileInput,
   type TexExpenseInput,
+  type TexExpenseUpdateInput,
   type TexExpenseStatus,
   type TexFinancePaymentInput,
   type TexNotificationInput,
@@ -155,6 +157,18 @@ export async function handleTexApiRequest(
   if (path === "/expenses" && method === "POST") {
     return json(201, {
       expense: await createTexExpense(client, actor, request.body as TexExpenseInput)
+    });
+  }
+
+  const expenseMatch = path.match(/^\/expenses\/([0-9a-f-]+)$/i);
+  if (expenseMatch && method === "PATCH") {
+    return json(200, {
+      expense: await updateTexExpense(
+        client,
+        actor,
+        expenseMatch[1] ?? "",
+        request.body as TexExpenseUpdateInput
+      )
     });
   }
 

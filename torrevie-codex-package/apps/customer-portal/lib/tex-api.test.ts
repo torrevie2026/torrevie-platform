@@ -884,6 +884,19 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("update public.tex_expenses") && sql.includes("employee_profile_id = $1")) {
+      return {
+        rows: [
+          {
+            id: values[16],
+            status: "pending",
+            amount: values[3],
+            currency: values[4]
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("update public.tex_expenses")) {
       return {
         rows: [
@@ -1011,6 +1024,26 @@ async function main() {
     assert.equal(response.status, 201);
     assert.equal(client.hasSql("insert into public.tex_expenses"), true);
     assert.equal(client.valuesContain("tex.expense.created"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "PATCH",
+      path: "/expenses/00000000-0000-4000-8000-000000006001",
+      body: {
+        employeeProfileId: "00000000-0000-4000-8000-000000004001",
+        vendor: "Fuel Station",
+        expenseDate: "2026-07-13",
+        amount: 155.5,
+        currency: "AED",
+        category: "Fuel",
+        notes: "Corrected from receipt review"
+      }
+    });
+    assert.equal(response.status, 200);
+    assert.equal(client.hasSql("employee_profile_id = $1"), true);
+    assert.equal(client.valuesContain("tex.expense.updated"), true);
   }
 
   {

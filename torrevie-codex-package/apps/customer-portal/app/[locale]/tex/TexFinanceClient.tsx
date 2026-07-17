@@ -171,6 +171,7 @@ export function TexFinanceClient({ initialReview }: TexFinanceClientProps) {
                     {expense.tripName ? ` - ${expense.tripName}` : ""}
                   </small>
                 </span>
+                <FinanceReceiptLink expense={expense} />
                 <b>{formatMoney(expense.baseAmount, review.currency)}</b>
               </label>
             ))}
@@ -221,6 +222,22 @@ const monthNames = [
   "November",
   "December"
 ];
+
+function FinanceReceiptLink({
+  expense
+}: {
+  expense: TexFinanceReview["approvedExpenses"][number];
+}) {
+  if (!expense.receiptUrl) {
+    return <small className="tex-muted-inline">No receipt</small>;
+  }
+
+  return (
+    <a className="tex-receipt-chip" href={expense.receiptUrl} target="_blank" rel="noreferrer">
+      Receipt
+    </a>
+  );
+}
 
 function toggleId(current: string[], setCurrent: (value: string[]) => void, id: string, checked: boolean) {
   setCurrent(checked ? Array.from(new Set([...current, id])) : current.filter((value) => value !== id));

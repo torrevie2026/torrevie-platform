@@ -25,6 +25,7 @@ export default async function TexIntegrationsPage({
         <TexIntegrationsClient
           adminIntegrationsHref={`/${locale}/admin/users#tex-whatsapp-settings`}
           initialWorkspace={integrationWorkspace}
+          planKey={actor.texPlan.planKey}
         />
       </>
     );

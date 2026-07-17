@@ -71,12 +71,34 @@ const blankForm = (): ExpenseFormState => ({
   extractionPayload: null
 });
 
+function expenseToForm(expense: TexExpenseListItem): ExpenseFormState {
+  return {
+    employeeProfileId: expense.employeeProfileId ?? "",
+    vendor: expense.vendor ?? "",
+    expenseDate: expense.expenseDate,
+    amount: String(expense.amount),
+    currency: expense.currency,
+    category: expense.category ?? "",
+    tripId: expense.tripId ?? "",
+    notes: expense.notes ?? "",
+    paymentMethod: expense.paymentMethod ?? "",
+    taxIdNumber: expense.taxIdNumber ?? "",
+    taxAmount: expense.taxAmount == null ? "" : String(expense.taxAmount),
+    receiptFileId: expense.receiptFileId ?? "",
+    receiptUrl: expense.receiptUrl ?? "",
+    receiptFileName: expense.receiptUrl ? "Existing receipt" : "",
+    extractionConfidence: null,
+    extractionPayload: null
+  };
+}
+
 export function TexExpensesClient({ categories, employees, trips, initialExpenses }: TexExpensesClientProps) {
   const [expenses, setExpenses] = useState(initialExpenses);
   const [form, setForm] = useState<ExpenseFormState>(blankForm);
   const [statusFilter, setStatusFilter] = useState<"all" | TexExpenseStatus>("all");
   const [isCreating, setIsCreating] = useState(false);
   const [isExpenseDrawerOpen, setIsExpenseDrawerOpen] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [selectedExpense, setSelectedExpense] = useState<TexExpenseListItem | null>(null);
   const [busyExpenseId, setBusyExpenseId] = useState<string | null>(null);
   const [isReceiptParsing, setIsReceiptParsing] = useState(false);
@@ -99,38 +121,68 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
     setSelectedExpense((current) => response.expenses.find((expense) => expense.id === current?.id) ?? current);
   }
 
-  async function createExpense() {
+  function closeExpenseDrawer() {
+    setIsExpenseDrawerOpen(false);
+    setEditingExpenseId(null);
+    setForm(blankForm());
+    setAutoFilledFields(new Set());
+    setReceiptWarning(null);
+  }
+
+  function openNewExpenseDrawer() {
+    setEditingExpenseId(null);
+    setForm(blankForm());
+    setAutoFilledFields(new Set());
+    setReceiptWarning(null);
+    setError(null);
+    setNotice(null);
+    setIsExpenseDrawerOpen(true);
+  }
+
+  function openEditExpense(expense: TexExpenseListItem) {
+    setSelectedExpense(null);
+    setEditingExpenseId(expense.id);
+    setForm(expenseToForm(expense));
+    setAutoFilledFields(new Set());
+    setReceiptWarning(null);
+    setError(null);
+    setNotice(null);
+    setIsExpenseDrawerOpen(true);
+  }
+
+  async function submitExpense() {
     setIsCreating(true);
     setError(null);
     setNotice(null);
 
     try {
-      await texFetch("/expenses", {
-        method: "POST",
+      const body = {
+        employeeProfileId: form.employeeProfileId || null,
+        vendor: form.vendor || null,
+        expenseDate: form.expenseDate,
+        amount: Number(form.amount),
+        currency: form.currency,
+        category: form.category || null,
+        tripId: form.tripId || null,
+        notes: form.notes || null,
+        paymentMethod: form.paymentMethod || null,
+        taxIdNumber: form.taxIdNumber || null,
+        taxAmount: form.taxAmount ? Number(form.taxAmount) : null,
+        receiptFileId: form.receiptFileId || null,
+        extractionSource: "manual",
+        extractionConfidence: form.extractionConfidence,
+        extractionPayload: form.extractionPayload,
+        source: "web"
+      };
+      await texFetch(editingExpenseId ? `/expenses/${editingExpenseId}` : "/expenses", {
+        method: editingExpenseId ? "PATCH" : "POST",
         body: JSON.stringify({
-          employeeProfileId: form.employeeProfileId || null,
-          vendor: form.vendor || null,
-          expenseDate: form.expenseDate,
-          amount: Number(form.amount),
-          currency: form.currency,
-          category: form.category || null,
-          tripId: form.tripId || null,
-          notes: form.notes || null,
-          paymentMethod: form.paymentMethod || null,
-          taxIdNumber: form.taxIdNumber || null,
-          taxAmount: form.taxAmount ? Number(form.taxAmount) : null,
-          receiptFileId: form.receiptFileId || null,
-          extractionSource: "manual",
-          extractionConfidence: form.extractionConfidence,
-          extractionPayload: form.extractionPayload,
-          source: "web"
+          ...body,
+          extractionPayload: body.extractionPayload ?? {}
         })
       });
-      setNotice("Expense submitted.");
-      setForm(blankForm());
-      setAutoFilledFields(new Set());
-      setReceiptWarning(null);
-      setIsExpenseDrawerOpen(false);
+      setNotice(editingExpenseId ? "Expense updated." : "Expense submitted.");
+      closeExpenseDrawer();
       await refreshExpenses();
     } catch (caught) {
       setError(errorMessage(caught));
@@ -263,10 +315,7 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
         <div
           className="tex-drawer-backdrop"
           role="presentation"
-          onMouseDown={() => {
-            setIsExpenseDrawerOpen(false);
-            setForm(blankForm());
-          }}
+          onMouseDown={closeExpenseDrawer}
         >
           <aside
             className="tex-drawer"
@@ -276,14 +325,11 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="section-heading-row">
-              <h3 id="tex-new-expense-title">New expense</h3>
+              <h3 id="tex-new-expense-title">{editingExpenseId ? "Edit expense" : "New expense"}</h3>
               <button
                 type="button"
                 className="tex-secondary-button"
-                onClick={() => {
-                  setIsExpenseDrawerOpen(false);
-                  setForm(blankForm());
-                }}
+                onClick={closeExpenseDrawer}
               >
                 Close
               </button>
@@ -388,8 +434,8 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
             </div>
 
             <div className="tex-drawer-submit-row">
-              <button type="button" className="tex-primary-button" disabled={isCreating} onClick={createExpense}>
-                {isCreating ? "Submitting..." : "Submit expense"}
+              <button type="button" className="tex-primary-button" disabled={isCreating} onClick={submitExpense}>
+                {isCreating ? "Saving..." : editingExpenseId ? "Save changes" : "Submit expense"}
               </button>
             </div>
             {error ? <p className="tex-error">{error}</p> : null}
@@ -438,6 +484,11 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
               </strong>
             </div>
             {selectedExpense.duplicateReason ? <p className="tex-error">{selectedExpense.duplicateReason}</p> : null}
+            <div className="tex-hero-actions">
+              <button type="button" className="tex-secondary-button" onClick={() => openEditExpense(selectedExpense)}>
+                Edit
+              </button>
+            </div>
             {selectedExpense.status === "pending" ? (
               <div className="tex-hero-actions">
                 <button
@@ -473,12 +524,7 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
             <button
               type="button"
               className="tex-primary-button"
-              onClick={() => {
-                setForm(blankForm());
-                setError(null);
-                setNotice(null);
-                setIsExpenseDrawerOpen(true);
-              }}
+              onClick={openNewExpenseDrawer}
             >
               New expense
             </button>
@@ -526,6 +572,9 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
                   <ExpenseReceiptLink expense={expense} compact />
                   <button type="button" onClick={() => setSelectedExpense(expense)}>
                     Open
+                  </button>
+                  <button type="button" onClick={() => openEditExpense(expense)}>
+                    Edit
                   </button>
                   {expense.status === "pending" ? (
                     <>
