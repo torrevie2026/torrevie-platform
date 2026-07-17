@@ -5,9 +5,19 @@ import { isTexSessionError, requireTexRequestContext } from "../tex-request-cont
 
 export const runtime = "nodejs";
 
-export default async function TexFinanceReviewPage() {
+export default async function TexFinanceReviewPage({
+  params
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+
   try {
     const { actor, client } = await requireTexRequestContext();
+    if (!actor.texPlan.growthFeaturesEnabled) {
+      redirect(`/${locale}/tex?upgrade=growth`);
+    }
+
     const now = new Date();
     const financeReview = await listTexFinanceReview(
       client,

@@ -3,6 +3,8 @@ import { Client } from "pg";
 
 const allowedCountries = new Set(["AE", "SA", "QA", "BH", "KW", "OM"]);
 const defaultCategories = ["Fuel", "Toll", "Parking", "Meals", "Maintenance", "Other"];
+const texTrialDays = 15;
+const texTrialEmployeeLimit = 5;
 
 export type TexTrialInput = {
   adminName: string;
@@ -193,15 +195,63 @@ async function seedTrialTenant(input: {
     );
     await client.query(
       `
-        insert into public.subscriptions (
-          tenant_id, product_id, plan_id, status, starts_at, expires_at, created_by, updated_by
+        with tex_subscription as (
+          insert into public.subscriptions (
+            tenant_id, product_id, plan_id, status, starts_at, expires_at, created_by, updated_by
+          )
+          select $1, products.id, plans.id, 'trial', now(), now() + ($3::int * interval '1 day'), $2, $2
+          from public.products
+          join public.plans on plans.product_id = products.id and plans.key = 'trial'
+          where products.key = 'tex'
+          on conflict (tenant_id, product_id) do update set
+            plan_id = excluded.plan_id,
+            status = 'trial',
+            starts_at = coalesce(public.subscriptions.starts_at, excluded.starts_at),
+            expires_at = excluded.expires_at,
+            updated_by = excluded.updated_by
+          returning id
         )
-        select $1, products.id, plans.id, 'trial', now(), now() + interval '15 days', $2, $2
-        from public.products
-        join public.plans on plans.product_id = products.id and plans.key = 'starter'
-        where products.key = 'tex'
+        insert into public.tex_plan_controls (
+          tenant_id,
+          subscription_id,
+          plan_key,
+          plan_status,
+          trial_start_date,
+          trial_end_date,
+          employee_limit,
+          seat_count,
+          whatsapp_provider_scope,
+          billing_status,
+          created_by,
+          updated_by
+        )
+        select
+          $1,
+          tex_subscription.id,
+          'trial',
+          'trialing',
+          current_date,
+          current_date + $3::integer,
+          $4,
+          1,
+          'torrevie_managed',
+          'manual_invoice_pending',
+          $2,
+          $2
+        from tex_subscription
+        on conflict (tenant_id) do update set
+          subscription_id = excluded.subscription_id,
+          plan_key = excluded.plan_key,
+          plan_status = excluded.plan_status,
+          trial_start_date = coalesce(public.tex_plan_controls.trial_start_date, excluded.trial_start_date),
+          trial_end_date = excluded.trial_end_date,
+          employee_limit = excluded.employee_limit,
+          seat_count = excluded.seat_count,
+          whatsapp_provider_scope = excluded.whatsapp_provider_scope,
+          billing_status = excluded.billing_status,
+          updated_by = excluded.updated_by
       `,
-      [input.tenantId, input.userId]
+      [input.tenantId, input.userId, texTrialDays, texTrialEmployeeLimit]
     );
     await client.query(
       `
@@ -256,6 +306,31 @@ async function seedTrialTenant(input: {
     );
     await client.query(
       `
+        insert into public.tex_onboarding_status (
+          tenant_id,
+          company_profile_completed_at,
+          first_employee_invited_at,
+          last_activity_at,
+          created_by,
+          updated_by
+        )
+        values ($1, now(), now(), now(), $2, $2)
+        on conflict (tenant_id) do update set
+          company_profile_completed_at = coalesce(
+            public.tex_onboarding_status.company_profile_completed_at,
+            excluded.company_profile_completed_at
+          ),
+          first_employee_invited_at = coalesce(
+            public.tex_onboarding_status.first_employee_invited_at,
+            excluded.first_employee_invited_at
+          ),
+          last_activity_at = excluded.last_activity_at,
+          updated_by = excluded.updated_by
+      `,
+      [input.tenantId, input.userId]
+    );
+    await client.query(
+      `
         insert into public.audit_events (tenant_id, actor_user_id, action, target_type, target_id, metadata)
         values (
           $1,
@@ -264,14 +339,15 @@ async function seedTrialTenant(input: {
           'tenant',
           $1,
           jsonb_build_object(
-            'plan', 'starter',
-            'trial_days', 15,
+            'plan', 'trial',
+            'trial_days', $4,
+            'employee_limit', $5,
             'source', 'app.torrevie.com/tex',
             'country', $3
           )
         )
       `,
-      [input.tenantId, input.userId, input.input.country]
+      [input.tenantId, input.userId, input.input.country, texTrialDays, texTrialEmployeeLimit]
     );
     await client.query("commit");
   } catch (error) {

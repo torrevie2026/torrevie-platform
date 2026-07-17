@@ -18,25 +18,36 @@ import { TexInstallPrompt } from "./TexInstallPrompt";
 type TexShellNavProps = {
   email: string | null;
   locale: string;
+  planKey: "trial" | "lite" | "growth" | "enterprise";
   roles: readonly string[];
   tenantId: string;
 };
 
 const texNavItems = [
-  { href: "", icon: LayoutGrid, label: "Dashboard" },
-  { href: "/expenses", icon: Receipt, label: "Expenses" },
-  { href: "/trips", icon: MapPin, label: "Trips" },
-  { href: "/finance-review", icon: ClipboardCheck, label: "Finance review" },
-  { href: "/people", icon: Users, label: "People" },
-  { href: "/reports", icon: BarChart3, label: "Reports" },
-  { href: "/whatsapp-review", icon: MessageCircle, label: "WhatsApp review" },
-  { href: "/integrations", icon: Plug, label: "Integrations" },
-  { href: "/settings", icon: Settings, label: "Settings" }
+  { href: "", icon: LayoutGrid, label: "Dashboard", minimumPlan: "trial" },
+  { href: "/expenses", icon: Receipt, label: "Expenses", minimumPlan: "trial" },
+  { href: "/trips", icon: MapPin, label: "Trips", minimumPlan: "growth" },
+  { href: "/finance-review", icon: ClipboardCheck, label: "Finance review", minimumPlan: "growth" },
+  { href: "/people", icon: Users, label: "People", minimumPlan: "trial" },
+  { href: "/reports", icon: BarChart3, label: "Reports", minimumPlan: "trial" },
+  { href: "/whatsapp-review", icon: MessageCircle, label: "WhatsApp receipts", minimumPlan: "trial" },
+  { href: "/integrations", icon: Plug, label: "WhatsApp setup", minimumPlan: "trial" },
+  { href: "/settings", icon: Settings, label: "Settings", minimumPlan: "trial" }
 ] as const;
 
-export function TexShellNav({ email, locale, roles, tenantId }: TexShellNavProps) {
+const planRank = {
+  trial: 0,
+  lite: 1,
+  growth: 2,
+  enterprise: 3
+} as const;
+
+export function TexShellNav({ email, locale, planKey, roles, tenantId }: TexShellNavProps) {
   const pathname = usePathname();
   const basePath = `/${locale}/tex`;
+  const visibleNavItems = texNavItems.filter(
+    (item) => planRank[planKey] >= planRank[item.minimumPlan]
+  );
 
   return (
     <aside className="customer-sidebar tex-sidebar" aria-label="TEX sections">
@@ -52,7 +63,7 @@ export function TexShellNav({ email, locale, roles, tenantId }: TexShellNavProps
       </div>
 
       <nav className="tex-nav">
-        {texNavItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const href = `${basePath}${item.href}`;
           const isDashboard = item.href === "";
           const active = isDashboard ? pathname === basePath : pathname.startsWith(href);

@@ -10,6 +10,8 @@ export const texStagingDemoAccess = {
   teamId: "20000000-0000-4000-8000-00000004e001"
 } as const;
 
+const texStagingEmployeeLimit = 75;
+
 export function isTexStagingDemoCredential(email: string, password: string) {
   return (
     email.trim().toLowerCase() === texStagingDemoAccess.email &&
@@ -250,14 +252,55 @@ async function seedPlatformRecords() {
     );
     await client.query(
       `
-        insert into public.subscriptions (tenant_id, product_id, plan_id, status, starts_at)
-        select $1, products.id, plans.id, 'active', now() - interval '1 day'
-        from public.products
-        join public.plans on plans.product_id = products.id and plans.key = 'growth'
-        where products.key = 'tex'
-        on conflict (tenant_id, product_id) do update set status = 'active', starts_at = excluded.starts_at, expires_at = null
+        with tex_subscription as (
+          insert into public.subscriptions (tenant_id, product_id, plan_id, status, starts_at)
+          select $1, products.id, plans.id, 'active', now() - interval '1 day'
+          from public.products
+          join public.plans on plans.product_id = products.id and plans.key = 'growth'
+          where products.key = 'tex'
+          on conflict (tenant_id, product_id) do update set
+            plan_id = excluded.plan_id,
+            status = 'active',
+            starts_at = excluded.starts_at,
+            expires_at = null
+          returning id
+        )
+        insert into public.tex_plan_controls (
+          tenant_id,
+          subscription_id,
+          plan_key,
+          plan_status,
+          trial_start_date,
+          trial_end_date,
+          employee_limit,
+          seat_count,
+          whatsapp_provider_scope,
+          billing_status
+        )
+        select
+          $1,
+          tex_subscription.id,
+          'growth',
+          'active',
+          null,
+          null,
+          $2,
+          1,
+          'torrevie_managed',
+          'waived'
+        from tex_subscription
+        on conflict (tenant_id) do update set
+          subscription_id = excluded.subscription_id,
+          plan_key = excluded.plan_key,
+          plan_status = excluded.plan_status,
+          trial_start_date = excluded.trial_start_date,
+          trial_end_date = excluded.trial_end_date,
+          employee_limit = excluded.employee_limit,
+          seat_count = excluded.seat_count,
+          whatsapp_provider_scope = excluded.whatsapp_provider_scope,
+          billing_status = excluded.billing_status
       `,
-      [texStagingDemoAccess.tenantId]
+      [texStagingDemoAccess.tenantId, texStagingEmployeeLimit]
     );
     await client.query(
       `
@@ -295,6 +338,34 @@ async function seedPlatformRecords() {
         on conflict (team_id, employee_profile_id) do nothing
       `,
       [texStagingDemoAccess.tenantId, texStagingDemoAccess.teamId, texStagingDemoAccess.employeeId]
+    );
+    await client.query(
+      `
+        insert into public.tex_onboarding_status (
+          tenant_id,
+          company_profile_completed_at,
+          whatsapp_connected_at,
+          first_employee_invited_at,
+          dashboard_first_viewed_at,
+          last_activity_at
+        )
+        values ($1, now(), null, now(), now(), now())
+        on conflict (tenant_id) do update set
+          company_profile_completed_at = coalesce(
+            public.tex_onboarding_status.company_profile_completed_at,
+            excluded.company_profile_completed_at
+          ),
+          first_employee_invited_at = coalesce(
+            public.tex_onboarding_status.first_employee_invited_at,
+            excluded.first_employee_invited_at
+          ),
+          dashboard_first_viewed_at = coalesce(
+            public.tex_onboarding_status.dashboard_first_viewed_at,
+            excluded.dashboard_first_viewed_at
+          ),
+          last_activity_at = excluded.last_activity_at
+      `,
+      [texStagingDemoAccess.tenantId]
     );
     await client.query("commit");
   } catch (error) {

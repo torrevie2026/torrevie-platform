@@ -1,5 +1,10 @@
 import type { TenantQueryClient } from "@torrevie/tenant-context";
-import { refreshTexFxRates, type TexActorContext, type TexFxRefreshResult } from "./tex";
+import {
+  defaultTexPlanContext,
+  refreshTexFxRates,
+  type TexActorContext,
+  type TexFxRefreshResult
+} from "./tex";
 
 export type TexFxCronTenantResult = {
   tenantId: string;
@@ -66,6 +71,7 @@ function texCronActor(tenantId: string): TexActorContext {
     roleScope: "customer",
     roles: ["integration_service"],
     entitledProducts: ["tex"],
+    texPlan: defaultTexPlanContext(),
     integrationPermissions: ["tex.integration.manage"]
   };
 }

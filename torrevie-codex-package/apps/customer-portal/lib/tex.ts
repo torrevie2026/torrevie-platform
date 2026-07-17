@@ -23,8 +23,25 @@ import { extractReceiptWithAI, type TexReceiptExtraction } from "./tex-ai";
 export type TexActorContext = ResolvedTenantContext & {
   roles: readonly RoleKey[];
   entitledProducts: readonly ProductKey[];
+  texPlan: TexPlanContext;
   moduleAdminProducts?: readonly ProductKey[];
   integrationPermissions?: readonly PermissionKey[];
+};
+
+export type TexPlanKey = "trial" | "lite" | "growth" | "enterprise";
+export type TexPlanStatus = "trialing" | "active" | "expired" | "suspended" | "cancelled";
+export type TexWhatsappProviderScope = "not_configured" | "torrevie_managed" | "customer_owned";
+
+export type TexPlanContext = {
+  planKey: TexPlanKey;
+  planStatus: TexPlanStatus;
+  trialStartDate: string | null;
+  trialEndDate: string | null;
+  employeeLimit: number;
+  seatCount: number;
+  whatsappProviderScope: TexWhatsappProviderScope;
+  growthFeaturesEnabled: boolean;
+  enterpriseFeaturesEnabled: boolean;
 };
 
 export type TexExpenseStatus = "pending" | "approved" | "rejected" | "paid";
@@ -689,7 +706,7 @@ export async function resolveTexActorContext(
       throw new Error("The user is deactivated.");
     }
 
-    const [roles, entitledProducts] = await Promise.all([
+    const [roles, entitledProducts, texPlan] = await Promise.all([
       client.query<TexRoleRow>(
         `
           select r.key
@@ -710,15 +727,50 @@ export async function resolveTexActorContext(
             and s.starts_at <= now()
             and (s.expires_at is null or s.expires_at > now())
         `
+      ),
+      client.query<TexPlanContextRow>(
+        `
+          select
+            coalesce(tpc.plan_key::text, plans.key, 'trial') as plan_key,
+            coalesce(
+              tpc.plan_status::text,
+              case when s.status = 'trial' then 'trialing' else s.status end,
+              'trialing'
+            ) as plan_status,
+            coalesce(tpc.trial_start_date::text, s.starts_at::date::text) as trial_start_date,
+            coalesce(tpc.trial_end_date::text, s.expires_at::date::text) as trial_end_date,
+            coalesce(tpc.employee_limit, pf.limit_value, 5)::int as employee_limit,
+            coalesce(tpc.seat_count, 0)::int as seat_count,
+            coalesce(tpc.whatsapp_provider_scope::text, 'not_configured') as whatsapp_provider_scope
+          from public.subscriptions s
+          join public.products products
+            on products.id = s.product_id
+          join public.plans plans
+            on plans.id = s.plan_id
+          left join public.tex_plan_controls tpc
+            on tpc.tenant_id = s.tenant_id
+          left join public.plan_features pf
+            on pf.plan_id = plans.id
+           and pf.feature_key = 'tex.employee_limit'
+          where s.tenant_id = public.current_tenant_id()
+            and products.key = 'tex'
+            and s.status in ('trial', 'active')
+            and s.starts_at <= now()
+            and (s.expires_at is null or s.expires_at > now())
+          order by s.created_at desc
+          limit 1
+        `
       )
     ]);
     const resolvedRoles = roles.rows.map((row) => row.key).filter(isRoleKey);
     const resolvedProducts = entitledProducts.rows.map((row) => row.key).filter(isProductKey);
+    const resolvedTexPlan = mapTexPlanContext(texPlan.rows[0]);
 
     return {
       ...context,
       roles: resolvedRoles,
       entitledProducts: resolvedProducts,
+      texPlan: resolvedTexPlan,
       moduleAdminProducts: resolvedRoles.includes("customer_module_admin") ? resolvedProducts : []
     };
   });
@@ -1152,6 +1204,7 @@ export async function createTexEmployeeProfile(
     if (managerUserId) {
       await assertTenantManagerUser(client, managerUserId);
     }
+    await assertTexEmployeeLimitAvailable(client, actor, phoneNumber);
 
     const result = await client.query<TexEmployeeProfileRow>(
       `
@@ -5299,6 +5352,8 @@ async function createTexEmployeeProfileFromWhatsapp(
     throw new Error("Employee WhatsApp phone is required.");
   }
 
+  await assertTexEmployeeLimitAvailable(client, actor, phoneNumber);
+
   const result = await client.query<TexEmployeeProfileRow>(
     `
       insert into public.tex_employee_profiles (
@@ -5355,6 +5410,34 @@ async function createTexEmployeeProfileFromWhatsapp(
   );
 
   return employee;
+}
+
+async function assertTexEmployeeLimitAvailable(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  phoneNumber: string
+) {
+  if (actor.texPlan.employeeLimit <= 0) {
+    return;
+  }
+
+  const result = await client.query<TexEmployeeLimitRow>(
+    `
+      select
+        count(*) filter (where is_active = true)::int as active_count,
+        coalesce(bool_or(phone_number = $1), false) as existing_phone
+      from public.tex_employee_profiles
+      where tenant_id = public.current_tenant_id()
+    `,
+    [phoneNumber]
+  );
+  const row = result.rows[0];
+  const activeCount = Number(row?.active_count ?? 0);
+  const existingPhone = Boolean(row?.existing_phone);
+
+  if (!existingPhone && activeCount >= actor.texPlan.employeeLimit) {
+    throw new Error(`TEX ${actor.texPlan.planKey} plan employee limit reached.`);
+  }
 }
 
 async function assertTenantManagerUser(client: TenantQueryClient, managerUserId: string) {
@@ -6528,6 +6611,83 @@ type TexRoleRow = {
 type TexProductRow = {
   key: string;
 };
+
+type TexEmployeeLimitRow = {
+  active_count: number;
+  existing_phone: boolean;
+};
+
+type TexPlanContextRow = {
+  plan_key: string;
+  plan_status: string;
+  trial_start_date: string | null;
+  trial_end_date: string | null;
+  employee_limit: number | string | null;
+  seat_count: number | string | null;
+  whatsapp_provider_scope: string | null;
+};
+
+export function defaultTexPlanContext(): TexPlanContext {
+  return {
+    planKey: "trial",
+    planStatus: "trialing",
+    trialStartDate: null,
+    trialEndDate: null,
+    employeeLimit: 5,
+    seatCount: 0,
+    whatsappProviderScope: "not_configured",
+    growthFeaturesEnabled: false,
+    enterpriseFeaturesEnabled: false
+  };
+}
+
+function mapTexPlanContext(row: TexPlanContextRow | undefined): TexPlanContext {
+  const fallback = defaultTexPlanContext();
+  const planKey = isTexPlanKey(row?.plan_key) ? row.plan_key : fallback.planKey;
+  const planStatus = isTexPlanStatus(row?.plan_status) ? row.plan_status : fallback.planStatus;
+  const employeeLimit = positiveInteger(row?.employee_limit, fallback.employeeLimit);
+  const seatCount = positiveInteger(row?.seat_count, fallback.seatCount);
+  const whatsappProviderScope = isTexWhatsappProviderScope(row?.whatsapp_provider_scope)
+    ? row.whatsapp_provider_scope
+    : fallback.whatsappProviderScope;
+
+  return {
+    planKey,
+    planStatus,
+    trialStartDate: row?.trial_start_date ?? null,
+    trialEndDate: row?.trial_end_date ?? null,
+    employeeLimit,
+    seatCount,
+    whatsappProviderScope,
+    growthFeaturesEnabled: planKey === "growth" || planKey === "enterprise",
+    enterpriseFeaturesEnabled: planKey === "enterprise"
+  };
+}
+
+function positiveInteger(value: number | string | null | undefined, fallback: number) {
+  const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function isTexPlanKey(value: string | undefined): value is TexPlanKey {
+  return value === "trial" || value === "lite" || value === "growth" || value === "enterprise";
+}
+
+function isTexPlanStatus(value: string | undefined): value is TexPlanStatus {
+  return (
+    value === "trialing" ||
+    value === "active" ||
+    value === "expired" ||
+    value === "suspended" ||
+    value === "cancelled"
+  );
+}
+
+function isTexWhatsappProviderScope(
+  value: string | null | undefined
+): value is TexWhatsappProviderScope {
+  return value === "not_configured" || value === "torrevie_managed" || value === "customer_owned";
+}
 
 function isRoleKey(value: string): value is RoleKey {
   return (roleKeys as readonly string[]).includes(value);

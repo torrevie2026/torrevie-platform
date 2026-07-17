@@ -31,6 +31,7 @@ import {
   updateTexTeam,
   updateTexExpenseStatus,
   uploadTexReceiptFile,
+  defaultTexPlanContext,
   type TexActorContext
 } from "./tex";
 
@@ -57,7 +58,8 @@ const actor: TexActorContext = {
   userId: "00000000-0000-4000-8000-000000002001",
   roleScope: "customer",
   roles: ["customer_admin"],
-  entitledProducts: ["tex"]
+  entitledProducts: ["tex"],
+  texPlan: defaultTexPlanContext()
 };
 
 const standardActor: TexActorContext = {

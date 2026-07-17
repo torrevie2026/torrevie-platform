@@ -29,6 +29,7 @@ export default async function TexLayout({
         <TexShellNav
           email={session.email}
           locale={locale}
+          planKey={actor.texPlan.planKey}
           roles={actor.roles}
           tenantId={actor.tenantId}
         />

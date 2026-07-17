@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import type { QueryResult, QueryValue, TenantQueryClient } from "@torrevie/tenant-context";
 import { handleTexApiRequest } from "./tex-api";
 import {
+  defaultTexPlanContext,
   setTexEmailNotificationDispatcherForTest,
   setTexWhatsappNotificationDispatcherForTest,
   type TexActorContext
@@ -30,7 +31,8 @@ const actor: TexActorContext = {
   userId: "00000000-0000-4000-8000-000000002001",
   roleScope: "customer",
   roles: ["customer_admin"],
-  entitledProducts: ["tex"]
+  entitledProducts: ["tex"],
+  texPlan: defaultTexPlanContext()
 };
 
 const integrationActor: TexActorContext = {

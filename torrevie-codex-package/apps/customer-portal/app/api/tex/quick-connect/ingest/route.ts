@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
+  defaultTexPlanContext,
   processTexWhatsappSubmission,
   uploadTexReceiptFile,
   type TexActorContext,
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
       roleScope: "customer",
       roles: ["integration_service"],
       entitledProducts: ["tex"],
+      texPlan: defaultTexPlanContext(),
       integrationPermissions: ["tex.expense.submit", "tex.integration.manage"]
     };
     const media = body.media?.dataBase64

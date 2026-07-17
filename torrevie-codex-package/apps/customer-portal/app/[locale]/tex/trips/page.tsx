@@ -5,9 +5,19 @@ import { isTexSessionError, requireTexRequestContext } from "../tex-request-cont
 
 export const runtime = "nodejs";
 
-export default async function TexTripsPage() {
+export default async function TexTripsPage({
+  params
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+
   try {
     const { actor, client } = await requireTexRequestContext();
+    if (!actor.texPlan.growthFeaturesEnabled) {
+      redirect(`/${locale}/tex?upgrade=growth`);
+    }
+
     const bootstrap = await listTexBootstrap(client, actor);
     const trips = await listTexTrips(client, actor);
 

@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { QueryValue, TenantQueryClient } from "@torrevie/tenant-context";
 import {
+  defaultTexPlanContext,
   processTexWhatsappSubmission,
   type TexActorContext,
   type TexWebhookSubmissionInput
@@ -73,6 +74,7 @@ export async function handleTexWebhookRequest(
     roleScope: "customer",
     roles: ["integration_service"],
     entitledProducts: ["tex"],
+    texPlan: defaultTexPlanContext(),
     integrationPermissions: ["tex.integration.manage"]
   };
   const result = await processTexWhatsappSubmission(client, actor, normalized.submission);
