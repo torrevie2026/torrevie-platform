@@ -143,6 +143,7 @@ export function TexWhatsappReviewClient({
                   label="Incoming receipt"
                   mediaError={submission.mediaError ?? submission.ocrError}
                   mediaStatus={submission.mediaStatus}
+                  ocrStatus={submission.ocrStatus}
                   url={receiptUrlForSubmission(submission)}
                 />
                 <MediaStatusSummary submission={submission} />
@@ -245,6 +246,7 @@ function ReceiptPreview({
   label,
   mediaError,
   mediaStatus,
+  ocrStatus,
   url
 }: {
   contentType?: string | null;
@@ -252,13 +254,20 @@ function ReceiptPreview({
   label: string;
   mediaError?: string | null;
   mediaStatus?: string | null;
+  ocrStatus?: string | null;
   url: string | null;
 }) {
   if (!url) {
     return (
       <div className="tex-receipt-missing">
-        <strong>{expected ? "Receipt attachment unavailable" : "No receipt attachment"}</strong>
-        <span>{receiptMissingText(mediaStatus, mediaError)}</span>
+        <strong>
+          {ocrStatus === "pending" || ocrStatus === "processing"
+            ? "Receipt processing"
+            : expected
+              ? "Receipt attachment unavailable"
+              : "No receipt attachment"}
+        </strong>
+        <span>{receiptMissingText(mediaStatus, mediaError, ocrStatus)}</span>
       </div>
     );
   }
@@ -293,6 +302,16 @@ function MediaStatusSummary({
       {submission.ocrError && submission.ocrError !== submission.mediaError ? (
         <small>{submission.ocrError}</small>
       ) : null}
+      {submission.ocrResult?.taxAmount != null || submission.ocrResult?.taxIdNumber ? (
+        <small>
+          {submission.ocrResult.taxAmount != null
+            ? `VAT ${submission.ocrResult.taxAmount}`
+            : "VAT not read"}
+          {submission.ocrResult.taxIdNumber
+            ? ` / TRN ${submission.ocrResult.taxIdNumber}`
+            : ""}
+        </small>
+      ) : null}
     </div>
   );
 }
@@ -305,9 +324,17 @@ function receiptUrlForSubmission(submission: TexUnregisteredWhatsappSubmission) 
   return submission.mediaUrl;
 }
 
-function receiptMissingText(mediaStatus?: string | null, mediaError?: string | null) {
+function receiptMissingText(
+  mediaStatus?: string | null,
+  mediaError?: string | null,
+  ocrStatus?: string | null
+) {
   if (mediaError) {
     return mediaError;
+  }
+
+  if (ocrStatus === "pending" || ocrStatus === "processing") {
+    return "TEX has captured the message and is waiting for the receipt file to finish processing.";
   }
 
   if (mediaStatus === "download_failed") {

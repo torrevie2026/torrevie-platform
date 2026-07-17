@@ -1160,6 +1160,32 @@ async function main() {
   {
     const client = new RecordingTexClient();
     const result = await processTexWhatsappSubmission(client, integrationActor, {
+      senderRaw: "971500000001@c.us",
+      whatsappChatJid: "971500000001@c.us",
+      messageId: "wamid.receipt.jid",
+      mediaUrl: "https://example.test/receipt.jpg",
+      extractedReceipt: {
+        vendor: "Airport Cafe",
+        expenseDate: "2026-07-12",
+        amount: 120,
+        currency: "AED",
+        category: "Meals",
+        taxAmount: 5,
+        taxIdNumber: "100000000000003",
+        confidence: 0.94,
+        notes: "Lunch"
+      },
+      payload: { provider: "quickconnect" }
+    });
+    assert.equal(result.ocrStatus, "extracted");
+    assert.equal(result.expense?.status, "pending");
+    assert.equal(client.valuesContain("00000000-0000-4000-8000-000000004001"), true);
+    assert.equal(client.valuesContain("100000000000003"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const result = await processTexWhatsappSubmission(client, integrationActor, {
       senderPhone: "+971500000001",
       messageId: "wamid.receipt",
       mediaUrl: "https://example.test/receipt.jpg",

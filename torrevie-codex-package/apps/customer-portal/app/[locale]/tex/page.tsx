@@ -43,9 +43,39 @@ export default async function TexPage({
     const categorySpend = buildCategorySpend(reportExpenses);
     const maxCategorySpend = Math.max(...categorySpend.map((item) => item.amount), 1);
     const onboardingTasks = buildOnboardingTasks(locale, onboarding, bootstrap, expenses, growthFeaturesEnabled);
-    const completedTasks = onboardingTasks.filter((task) => task.completed).length;
-    const onboardingProgress = Math.round((completedTasks / onboardingTasks.length) * 100);
+    const requiredOnboardingTasks = onboardingTasks.filter((task) => task.required);
+    const completedTasks = requiredOnboardingTasks.filter((task) => task.completed).length;
+    const onboardingProgress = Math.round((completedTasks / requiredOnboardingTasks.length) * 100);
     const nextOnboardingTask = onboardingTasks.find((task) => !task.completed);
+    const showOnboardingGate =
+      (actor.texPlan.planKey === "trial" || actor.texPlan.planKey === "lite") &&
+      completedTasks < requiredOnboardingTasks.length;
+
+    if (showOnboardingGate) {
+      return (
+        <>
+          <header className="customer-topbar tex-topbar">
+            <div>
+              <p className="eyebrow">TEX workspace</p>
+              <h1>Set up TEX</h1>
+              <p>Complete the starter setup flow, then launch the TEX dashboard.</p>
+            </div>
+            <div className="customer-context tex-context" aria-label="TEX context">
+              <span>Tenant scoped by RLS</span>
+              <span>TEX entitlement active</span>
+              <span>{bootstrap.integrationSettings?.whatsappProvider ?? "No WhatsApp provider"}</span>
+            </div>
+          </header>
+
+          <TexTrialOnboardingGate
+            employeeLimit={actor.texPlan.employeeLimit}
+            nextTask={nextOnboardingTask}
+            progress={onboardingProgress}
+            tasks={requiredOnboardingTasks}
+          />
+        </>
+      );
+    }
 
     return (
       <>
@@ -234,6 +264,63 @@ function buildCategorySpend(expenses: Array<{ baseAmount: number; category: stri
     .slice(0, 5);
 }
 
+function TexTrialOnboardingGate({
+  employeeLimit,
+  nextTask,
+  progress,
+  tasks
+}: {
+  employeeLimit: number;
+  nextTask: ReturnType<typeof buildOnboardingTasks>[number] | undefined;
+  progress: number;
+  tasks: ReturnType<typeof buildOnboardingTasks>;
+}) {
+  return (
+    <section className="tex-analytics-panel tex-onboarding-gate" aria-label="TEX starter onboarding">
+      <div className="section-heading-row">
+        <div>
+          <p className="eyebrow">Starter onboarding</p>
+          <h2>Prepare your TEX workspace</h2>
+          <p>Follow these steps in order so receipts, employees, and approvals are ready before the dashboard opens.</p>
+        </div>
+        <strong>{progress}%</strong>
+      </div>
+      <div className="tex-bar-row">
+        <span>Setup progress</span>
+        <span className="tex-bar-track">
+          <i style={{ inlineSize: `${progress}%` }} />
+        </span>
+        <strong>{employeeLimit || "Unlimited"} seats</strong>
+      </div>
+      <div className="tex-onboarding-flow">
+        {tasks.map((task, index) => {
+          const isNext = nextTask?.key === task.key;
+
+          return (
+            <article
+              className={`tex-onboarding-flow-step${task.completed ? " tex-onboarding-step-complete" : ""}`}
+              key={task.key}
+            >
+              <b>{index + 1}</b>
+              <span>
+                <strong>{task.label}</strong>
+                <small>{task.detail}</small>
+              </span>
+              <a
+                aria-disabled={!task.completed && !isNext}
+                className={isNext ? "tex-primary-link" : "tex-secondary-link"}
+                href={task.completed || isNext ? task.href : "#"}
+              >
+                {task.completed ? "Review" : isNext ? "Start" : "Next"}
+              </a>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function buildOnboardingTasks(
   locale: string,
   onboarding: TexOnboardingStatus,
@@ -259,35 +346,40 @@ function buildOnboardingTasks(
       label: "Connect WhatsApp",
       detail: hasWhatsappRoute ? "Receipt intake route is ready" : "Scan Quick Connect and send a test receipt",
       href: `/${locale}/tex/integrations`,
-      completed: hasWhatsappRoute
+      completed: hasWhatsappRoute,
+      required: true
     },
     {
       key: "people",
       label: "Add employees",
       detail: hasAdditionalEmployee ? "Driver or employee profile exists" : "Add at least one sender profile",
       href: `/${locale}/tex/people`,
-      completed: hasAdditionalEmployee
+      completed: hasAdditionalEmployee,
+      required: true
     },
     {
       key: "receipt",
       label: "Receive receipt",
       detail: hasReceipt ? "Receipt file captured" : "Send or upload the first receipt",
       href: `/${locale}/tex/whatsapp-review`,
-      completed: hasReceipt
+      completed: hasReceipt,
+      required: true
     },
     {
       key: "review",
       label: "Review expense",
       detail: hasReviewedExpense ? "Expense approved for finance" : "Check OCR values and approve",
       href: `/${locale}/tex/expenses`,
-      completed: hasReviewedExpense
+      completed: hasReviewedExpense,
+      required: true
     },
     {
       key: "modules",
       label: growthFeaturesEnabled ? "Open trips" : "Growth modules",
       detail: growthFeaturesEnabled ? "Plan trips and driver payouts" : "Upgrade when trips and finance are needed",
       href: growthFeaturesEnabled ? `/${locale}/tex/trips` : `/${locale}/tex?upgrade=growth`,
-      completed: growthFeaturesEnabled
+      completed: growthFeaturesEnabled,
+      required: false
     }
   ];
 }

@@ -3672,7 +3672,7 @@ export async function processTexWhatsappSubmission(
 
   return withTenantContext(client, actor, async () => {
     const settings = await getTexIntegrationSettingsForProcessing(client);
-    const employee = await findEmployeeByPhone(client, submission.senderPhone);
+    const employee = await findEmployeeBySubmissionSender(client, submission);
 
     if (!employee) {
       const replyText =
@@ -3817,7 +3817,15 @@ export async function listTexUnregisteredWhatsappSubmissions(
       [normalizedStatus === "all" ? null : normalizedStatus]
     );
 
-    return result.rows.map(mapUnregisteredWhatsappSubmission);
+    const employees = await listEmployeePhoneMatchRows(client);
+
+    return result.rows.map((row) =>
+      mapUnregisteredWhatsappSubmission({
+        ...row,
+        resolved_employee_profile_id:
+          row.resolved_employee_profile_id ?? findEmployeeIdForSubmissionRow(row, employees)
+      })
+    );
   });
 }
 
@@ -4504,12 +4512,96 @@ async function findEmployeeByPhone(client: TenantQueryClient, phone: string | nu
   return suffixMatches.length === 1 ? suffixMatches[0] : null;
 }
 
+async function listEmployeePhoneMatchRows(client: TenantQueryClient) {
+  const result = await client.query<{ id: string; phone_digits: string | null }>(
+    `
+      select
+        ep.id,
+        regexp_replace(ep.phone_number, '[^0-9]', '', 'g') as phone_digits
+      from public.tex_employee_profiles ep
+      where ep.tenant_id = public.current_tenant_id()
+        and ep.is_active = true
+    `
+  );
+
+  return result.rows;
+}
+
+function findEmployeeIdForSubmissionRow(
+  row: Pick<
+    TexUnregisteredWhatsappSubmissionRow,
+    "sender_phone" | "sender_raw" | "whatsapp_chat_jid"
+  >,
+  employees: Array<{ id: string; phone_digits: string | null }>
+) {
+  const candidates = [
+    row.sender_phone,
+    row.sender_raw,
+    row.whatsapp_chat_jid,
+    phoneFromWhatsappJid(row.sender_raw),
+    phoneFromWhatsappJid(row.whatsapp_chat_jid)
+  ]
+    .map(normalizePhoneDigits)
+    .filter((value): value is string => Boolean(value));
+
+  for (const digits of Array.from(new Set(candidates))) {
+    const exactMatches = employees.filter((employee) => employee.phone_digits === digits);
+    if (exactMatches.length === 1) {
+      return exactMatches[0]?.id ?? null;
+    }
+
+    const suffixMatches = employees.filter((employee) =>
+      isSamePhoneBySafeSuffix(employee.phone_digits, digits)
+    );
+    if (suffixMatches.length === 1) {
+      return suffixMatches[0]?.id ?? null;
+    }
+  }
+
+  return null;
+}
+
+async function findEmployeeBySubmissionSender(
+  client: TenantQueryClient,
+  submission: Pick<
+    Required<TexWebhookSubmissionInput>,
+    "senderPhone" | "senderRaw" | "whatsappChatJid"
+  >
+) {
+  const candidates = [
+    submission.senderPhone,
+    submission.senderRaw,
+    submission.whatsappChatJid,
+    phoneFromWhatsappJid(submission.senderRaw),
+    phoneFromWhatsappJid(submission.whatsappChatJid)
+  ]
+    .map(normalizePhoneDigits)
+    .filter((value): value is string => Boolean(value));
+
+  for (const digits of Array.from(new Set(candidates))) {
+    const employee = await findEmployeeByPhone(client, digits);
+    if (employee) {
+      return employee;
+    }
+  }
+
+  return null;
+}
+
 function isSamePhoneBySafeSuffix(left: string | null, right: string | null) {
   if (!left || !right || left.length < 7 || right.length < 7) {
     return false;
   }
 
   return left.endsWith(right) || right.endsWith(left);
+}
+
+function phoneFromWhatsappJid(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  return value.split("@")[0] ?? null;
 }
 
 function defaultReceiptCurrency(extraction: TexReceiptExtraction | null) {
