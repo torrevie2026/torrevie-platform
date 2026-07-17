@@ -378,13 +378,39 @@ async function handleInboundMessage(session, sock, message) {
     "";
   const hasMedia = Boolean(message.message.imageMessage || message.message.documentMessage);
   let mediaInfo = null;
+  let mediaError = null;
 
   if (hasMedia) {
-    mediaInfo = await downloadMessageMedia(sock, message);
+    try {
+      mediaInfo = await downloadMessageMedia(sock, message);
+      if (!mediaInfo.dataBase64) {
+        mediaError = "WhatsApp media download returned an empty file.";
+      }
+    } catch (error) {
+      mediaError = errorMessage(error);
+      await insertQuickConnectEvent(session, {
+        eventType: "quick_connect.media_download_failed",
+        status: "connected",
+        message: "Quick Connect received WhatsApp media but could not download the attachment.",
+        metadata: {
+          error: mediaError,
+          message_id: messageId,
+          remote_jid: remoteJid ?? "",
+          sender_jid: sender.jid ?? "",
+          sender_phone: sender.phone ?? ""
+        }
+      });
+      logger.warn(
+        { error: mediaError, messageId, tenantId: session.tenant_id },
+        "Quick Connect media download failed"
+      );
+    }
   }
 
   const processing = await processQuickConnectIngest(session, {
+    hasMedia,
     mediaInfo,
+    mediaError,
     message,
     messageId,
     remoteJid,
@@ -393,7 +419,9 @@ async function handleInboundMessage(session, sock, message) {
   }).catch(async (error) => {
     const errorText = errorMessage(error);
     await recordQuickConnectSubmission(session, {
+      hasMedia,
       mediaInfo,
+      mediaError,
       message,
       messageId,
       remoteJid,
@@ -515,6 +543,11 @@ async function processQuickConnectIngest(session, input) {
     payload: {
       key: input.message.key,
       messageTimestamp: input.message.messageTimestamp,
+      media: {
+        error: input.mediaError,
+        expected: Boolean(input.hasMedia),
+        status: input.mediaError ? "download_failed" : input.mediaInfo ? "downloaded" : "not_provided"
+      },
       mediaInfo: input.mediaInfo
         ? {
             bufferLength: input.mediaInfo.bufferLength,
@@ -605,6 +638,11 @@ async function recordQuickConnectSubmission(session, input) {
   const payload = {
     key: input.message.key,
     messageTimestamp: input.message.messageTimestamp,
+    media: {
+      error: input.mediaError,
+      expected: Boolean(input.hasMedia),
+      status: input.mediaError ? "download_failed" : input.mediaInfo ? "downloaded" : "not_provided"
+    },
     mediaInfo: input.mediaInfo,
     sender: input.sender,
     source: "quick_connect"
@@ -613,7 +651,7 @@ async function recordQuickConnectSubmission(session, input) {
     media_mime_type: input.mediaInfo?.mimeType ?? null,
     message_id: input.messageId,
     message_text: input.text,
-    message_type: input.mediaInfo ? "receipt" : "text",
+    message_type: input.hasMedia || input.mediaInfo ? "receipt" : "text",
     payload,
     sender_phone: input.sender.phone,
     sender_raw: input.sender.raw,

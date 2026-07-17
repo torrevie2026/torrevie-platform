@@ -2809,6 +2809,49 @@ form.member-row {
   font-weight: 800;
 }
 
+.tex-receipt-missing {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  color: #7c2d12;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.tex-receipt-missing strong {
+  color: #7c2d12;
+  font-size: 13px;
+}
+
+.tex-receipt-missing span,
+.tex-media-state small {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.tex-media-state {
+  background: var(--color-bg-canvas);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+}
+
+.tex-media-state span:first-child {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.tex-media-state span:nth-child(2) {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
 .tex-receipt-chip {
   align-items: center;
   border: 1px solid var(--color-accent);
