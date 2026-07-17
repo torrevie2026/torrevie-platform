@@ -54,6 +54,19 @@ export type TexBootstrap = {
   integrationSettings: TexIntegrationSettings | null;
 };
 
+export type TexOnboardingStatus = {
+  companyProfileCompletedAt: string | null;
+  whatsappConnectedAt: string | null;
+  firstEmployeeInvitedAt: string | null;
+  firstReceiptReceivedAt: string | null;
+  firstExpenseApprovedAt: string | null;
+  dashboardFirstViewedAt: string | null;
+  lastActivityAt: string | null;
+  ocrPendingCount: number;
+  manualReviewCount: number;
+  progress: number;
+};
+
 export type TexExpenseCategory = {
   id: string;
   name: string;
@@ -902,6 +915,58 @@ export async function listTexBootstrap(
         ? mapIntegrationSettings(integrationSettings.rows[0])
         : null
     };
+  });
+}
+
+export async function getTexOnboardingStatus(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  options: { markDashboardViewed?: boolean } = {}
+): Promise<TexOnboardingStatus> {
+  assertTexPermission(actor, "tex.expense.read");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexOnboardingStatusRow>(
+      `
+        insert into public.tex_onboarding_status (
+          tenant_id,
+          dashboard_first_viewed_at,
+          last_activity_at,
+          created_by,
+          updated_by
+        )
+        values (
+          public.current_tenant_id(),
+          case when $2::boolean then now() else null end,
+          now(),
+          $1,
+          $1
+        )
+        on conflict (tenant_id) do update set
+          dashboard_first_viewed_at = case
+            when $2::boolean then coalesce(
+              public.tex_onboarding_status.dashboard_first_viewed_at,
+              excluded.dashboard_first_viewed_at
+            )
+            else public.tex_onboarding_status.dashboard_first_viewed_at
+          end,
+          last_activity_at = excluded.last_activity_at,
+          updated_by = excluded.updated_by
+        returning
+          company_profile_completed_at::text as company_profile_completed_at,
+          whatsapp_connected_at::text as whatsapp_connected_at,
+          first_employee_invited_at::text as first_employee_invited_at,
+          first_receipt_received_at::text as first_receipt_received_at,
+          first_expense_approved_at::text as first_expense_approved_at,
+          dashboard_first_viewed_at::text as dashboard_first_viewed_at,
+          last_activity_at::text as last_activity_at,
+          ocr_pending_count,
+          manual_review_count
+      `,
+      [actor.userId, options.markDashboardViewed === true]
+    );
+
+    return mapOnboardingStatus(requireSingleRow(result.rows, "TEX onboarding status"));
   });
 }
 
@@ -6612,6 +6677,18 @@ type TexProductRow = {
   key: string;
 };
 
+type TexOnboardingStatusRow = {
+  company_profile_completed_at: string | null;
+  whatsapp_connected_at: string | null;
+  first_employee_invited_at: string | null;
+  first_receipt_received_at: string | null;
+  first_expense_approved_at: string | null;
+  dashboard_first_viewed_at: string | null;
+  last_activity_at: string | null;
+  ocr_pending_count: number;
+  manual_review_count: number;
+};
+
 type TexEmployeeLimitRow = {
   active_count: number;
   existing_phone: boolean;
@@ -6661,6 +6738,30 @@ function mapTexPlanContext(row: TexPlanContextRow | undefined): TexPlanContext {
     whatsappProviderScope,
     growthFeaturesEnabled: planKey === "growth" || planKey === "enterprise",
     enterpriseFeaturesEnabled: planKey === "enterprise"
+  };
+}
+
+function mapOnboardingStatus(row: TexOnboardingStatusRow): TexOnboardingStatus {
+  const completedSteps = [
+    row.company_profile_completed_at,
+    row.whatsapp_connected_at,
+    row.first_employee_invited_at,
+    row.first_receipt_received_at,
+    row.first_expense_approved_at,
+    row.dashboard_first_viewed_at
+  ].filter(Boolean).length;
+
+  return {
+    companyProfileCompletedAt: row.company_profile_completed_at,
+    whatsappConnectedAt: row.whatsapp_connected_at,
+    firstEmployeeInvitedAt: row.first_employee_invited_at,
+    firstReceiptReceivedAt: row.first_receipt_received_at,
+    firstExpenseApprovedAt: row.first_expense_approved_at,
+    dashboardFirstViewedAt: row.dashboard_first_viewed_at,
+    lastActivityAt: row.last_activity_at,
+    ocrPendingCount: Number(row.ocr_pending_count ?? 0),
+    manualReviewCount: Number(row.manual_review_count ?? 0),
+    progress: Math.round((completedSteps / 6) * 100)
   };
 }
 

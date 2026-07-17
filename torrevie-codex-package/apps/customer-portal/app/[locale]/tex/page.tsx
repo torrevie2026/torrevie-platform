@@ -1,6 +1,7 @@
 import { CheckCircle2, Clock, MapPin, Receipt, WalletCards } from "lucide-react";
 import { redirect } from "next/navigation";
 import {
+  getTexOnboardingStatus,
   listTexBootstrap,
   listTexExpenses,
   listTexFinanceReview,
@@ -21,15 +22,14 @@ export default async function TexPage({
     const { locale } = await params;
     const { actor, client, session } = await requireTexRequestContext();
     const now = new Date();
+    const growthFeaturesEnabled = actor.texPlan.growthFeaturesEnabled;
     const bootstrap = await listTexBootstrap(client, actor);
     const expenses = await listTexExpenses(client, actor);
-    const trips = await listTexTrips(client, actor);
-    const financeReview = await listTexFinanceReview(
-      client,
-      actor,
-      now.getUTCMonth() + 1,
-      now.getUTCFullYear()
-    );
+    const onboarding = await getTexOnboardingStatus(client, actor, { markDashboardViewed: true });
+    const trips = growthFeaturesEnabled ? await listTexTrips(client, actor) : [];
+    const financeReview = growthFeaturesEnabled
+      ? await listTexFinanceReview(client, actor, now.getUTCMonth() + 1, now.getUTCFullYear())
+      : emptyFinanceReview(now);
     const reportWorkspace = await listTexReportWorkspace(client, actor).catch(() => null);
     const reportExpenses = reportWorkspace?.expenses ?? [];
     const pendingCount = expenses.filter((expense) => expense.status === "pending").length;
@@ -45,10 +45,11 @@ export default async function TexPage({
         <header className="customer-topbar tex-topbar">
           <div>
             <p className="eyebrow">TEX workspace</p>
-            <h1>Travel and expense operations</h1>
+            <h1>{growthFeaturesEnabled ? "Travel and expense operations" : "TEX expense workspace"}</h1>
             <p>
-              Start from the role dashboard, then use the TEX menu to move into expenses, trips,
-              finance review, people, reports, integrations, and settings.
+              {growthFeaturesEnabled
+                ? "Start from the role dashboard, then use the TEX menu to move into expenses, trips, finance review, people, reports, integrations, and settings."
+                : "Start with WhatsApp setup, invite employees, and review receipts from a compact Trial workspace."}
             </p>
           </div>
           <div className="customer-context tex-context" aria-label="TEX context">
@@ -61,6 +62,33 @@ export default async function TexPage({
             <span>{bootstrap.integrationSettings?.whatsappProvider ?? "No WhatsApp provider"}</span>
           </div>
         </header>
+
+        <section className="tex-analytics-panel" aria-label="TEX onboarding progress">
+          <div className="section-heading-row">
+            <div>
+              <p className="eyebrow">{actor.texPlan.planKey} plan</p>
+              <h2>Set up TEX</h2>
+            </div>
+            <strong>{onboarding.progress}%</strong>
+          </div>
+          <div className="tex-bar-row">
+            <span>Onboarding</span>
+            <span className="tex-bar-track">
+              <i style={{ inlineSize: `${onboarding.progress}%` }} />
+            </span>
+            <strong>{actor.texPlan.employeeLimit || "Unlimited"} seats</strong>
+          </div>
+          <div className="tex-role-shortcuts">
+            <a href={`/${locale}/tex/integrations`}>Connect WhatsApp</a>
+            <a href={`/${locale}/tex/people`}>Add employees</a>
+            <a href={`/${locale}/tex/expenses`}>Review expenses</a>
+            {growthFeaturesEnabled ? (
+              <a href={`/${locale}/tex/trips`}>Open trips</a>
+            ) : (
+              <a href={`/${locale}/tex?upgrade=growth`}>Growth modules</a>
+            )}
+          </div>
+        </section>
 
         <section className="tex-kpi-grid" aria-label="TEX summary">
           <article className="tex-kpi-card tex-kpi-teal">
@@ -83,9 +111,9 @@ export default async function TexPage({
             <span className="tex-kpi-icon" aria-hidden="true">
               <MapPin />
             </span>
-            <span>Open trips</span>
-            <strong>{openTripCount}</strong>
-            <small>Active trip budgets and legs</small>
+            <span>{growthFeaturesEnabled ? "Open trips" : "Employees"}</span>
+            <strong>{growthFeaturesEnabled ? openTripCount : bootstrap.employeeProfiles.length}</strong>
+            <small>{growthFeaturesEnabled ? "Active trip budgets and legs" : "People in this TEX workspace"}</small>
           </article>
           <article className="tex-kpi-card tex-kpi-gold">
             <span className="tex-kpi-icon" aria-hidden="true">
@@ -191,4 +219,19 @@ function buildCategorySpend(expenses: Array<{ baseAmount: number; category: stri
     .map(([category, amount]) => ({ amount, category }))
     .sort((left, right) => right.amount - left.amount)
     .slice(0, 5);
+}
+
+function emptyFinanceReview(now: Date) {
+  return {
+    month: now.getUTCMonth() + 1,
+    year: now.getUTCFullYear(),
+    currency: "AED",
+    approvedExpenses: [],
+    tripPayouts: [],
+    totals: {
+      approvedExpenseAmount: 0,
+      tripPayoutAmount: 0,
+      netPayable: 0
+    }
+  };
 }
