@@ -476,6 +476,14 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
               <strong>{selectedExpense.tripName ?? "No trip"}</strong>
               <span>Duplicate review</span>
               <strong>{selectedExpense.duplicateStatus}</strong>
+              <span>TRN / tax number</span>
+              <strong>{selectedExpense.taxIdNumber ?? "Not read"}</strong>
+              <span>VAT / tax amount</span>
+              <strong>
+                {selectedExpense.taxAmount == null
+                  ? "Not read"
+                  : `${formatAmount(selectedExpense.taxAmount)} ${selectedExpense.currency}`}
+              </strong>
               <span>Notes</span>
               <strong>{selectedExpense.notes ?? "No notes"}</strong>
               <span>Receipt</span>

@@ -125,6 +125,11 @@ export default async function CustomerPortalShell({
     }
 
     const launcher = await listLauncherData(client, tenantContext, locale);
+    const onlineApps = launcher.apps.filter((app) => app.status === "online" && app.href);
+
+    if (onlineApps.length === 1 && onlineApps[0]?.href) {
+      redirect(`/${locale}${onlineApps[0].href}`);
+    }
 
     return (
       <main className="customer-shell app-launcher-shell" data-visual-check="customer-shell" lang={locale} dir={dirForLocale(locale)}>

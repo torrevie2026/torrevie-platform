@@ -3426,6 +3426,57 @@ form.member-row {
   color: var(--color-status-success);
 }
 
+.tex-onboarding-gate {
+  gap: 18px;
+}
+
+.tex-onboarding-gate .section-heading-row p {
+  color: var(--color-text-muted);
+  margin: 6px 0 0;
+}
+
+.tex-onboarding-flow {
+  display: grid;
+  gap: 10px;
+}
+
+.tex-onboarding-flow-step {
+  align-items: center;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 42px minmax(0, 1fr) minmax(92px, auto);
+  padding: 14px;
+}
+
+.tex-onboarding-flow-step > b {
+  align-items: center;
+  aspect-ratio: 1;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.tex-onboarding-flow-step strong,
+.tex-onboarding-flow-step small {
+  display: block;
+}
+
+.tex-onboarding-flow-step small {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  margin-block-start: 4px;
+}
+
+.tex-onboarding-flow-step a[aria-disabled="true"] {
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
 .tex-integrations-workspace {
   display: grid;
   gap: 16px;
@@ -4115,6 +4166,7 @@ form.member-row {
   .pipeline-board,
   .tex-form-grid,
   .tex-onboarding-steps,
+  .tex-onboarding-flow-step,
   .tenant-integration-grid,
   .tenant-secret-grid,
   .tex-dashboard-hero,
