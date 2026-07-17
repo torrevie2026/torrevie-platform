@@ -33,6 +33,8 @@ Environment:
   TEX_QUICK_CONNECT_SESSION_DIR=<path>            Local auth state directory
   TEX_QUICK_CONNECT_POLL_MS=5000                  Poll interval
   TEX_QUICK_CONNECT_HEARTBEAT_MS=30000            Connector heartbeat interval
+  TEX_QUICK_CONNECT_RECONNECT_BASE_DELAY_MS=2000  Initial reconnect delay
+  TEX_QUICK_CONNECT_RECONNECT_MAX_DELAY_MS=60000  Maximum reconnect delay
 `);
   process.exit(0);
 }
@@ -43,6 +45,8 @@ const supabaseServiceRoleKey = optionalEnv("SUPABASE_SERVICE_ROLE_KEY");
 const sessionRoot = resolve(process.env.TEX_QUICK_CONNECT_SESSION_DIR || ".tex-quick-connect-sessions");
 const pollMs = Number(process.env.TEX_QUICK_CONNECT_POLL_MS || 5000);
 const qrTtlSeconds = Number(process.env.TEX_QUICK_CONNECT_QR_TTL_SECONDS || 55);
+const reconnectBaseDelayMs = Number(process.env.TEX_QUICK_CONNECT_RECONNECT_BASE_DELAY_MS || 2000);
+const reconnectMaxDelayMs = Number(process.env.TEX_QUICK_CONNECT_RECONNECT_MAX_DELAY_MS || 60000);
 const tenantFilter = process.env.TEX_QUICK_CONNECT_TENANT_ID?.trim() || null;
 const manualSessionId = optionalEnv("TEX_QUICK_CONNECT_MANUAL_SESSION_ID");
 const manualMode = Boolean(manualSessionId && tenantFilter);
@@ -70,6 +74,8 @@ logger.info(
     manualMode,
     maxSessions,
     pollMs,
+    reconnectBaseDelayMs,
+    reconnectMaxDelayMs,
     sessionRoot,
     tenantFilter: tenantFilter ?? "all"
   },
@@ -121,7 +127,7 @@ async function pollPendingSessions() {
           );
         }
         stopTenantRuntime(session.tenant_id);
-        rmSync(authDirectoryFor(session.tenant_id), { force: true, recursive: true });
+        clearQuickConnectAuthState(session.tenant_id);
       } else {
         continue;
       }
@@ -279,7 +285,10 @@ async function handleConnectionUpdate(session, sock, update) {
     }
 
     if (statusCode === DisconnectReason.loggedOut) {
-      await resetQuickConnectPairing(session, statusCode);
+      await resetQuickConnectPairing(session, statusCode, {
+        clearAuthState: true,
+        reason: "logged_out"
+      });
       await sleep(2000);
       if (!activeSessions.has(session.tenant_id) && !shuttingDown) {
         void startTenantSocket({
@@ -293,30 +302,35 @@ async function handleConnectionUpdate(session, sock, update) {
     if (shouldReconnect) {
       const failureCount = (reconnectFailures.get(session.tenant_id) ?? 0) + 1;
       reconnectFailures.set(session.tenant_id, failureCount);
-
-      if (failureCount >= 6) {
-        reconnectFailures.delete(session.tenant_id);
-        await resetQuickConnectPairing(session, statusCode);
-        await sleep(2000);
-        if (!activeSessions.has(session.tenant_id) && !shuttingDown) {
-          void startTenantSocket({
-            ...session,
-            status: "qr_pending"
-          });
-        }
-        return;
-      }
+      const reconnectDelayMs = reconnectDelayFor(failureCount);
+      const reconnectingStatus = session.status === "connected" ? "connected" : "qr_pending";
+      const reconnectingMessage =
+        failureCount >= 6
+          ? "WhatsApp socket is still reconnecting. Saved linked-device credentials were preserved."
+          : "WhatsApp socket closed and will reconnect.";
 
       await insertQuickConnectEvent(session, {
         eventType: "quick_connect.reconnecting",
-        status: "qr_pending",
-        message: "WhatsApp socket closed and will reconnect.",
+        status: reconnectingStatus,
+        message: reconnectingMessage,
         metadata: {
+          failure_count: String(failureCount),
           instance_id: connectorInstanceId,
+          reconnect_delay_ms: String(reconnectDelayMs),
           status_code: String(statusCode ?? "")
         }
       });
-      await sleep(2000);
+      await updateQuickConnectSession(session, {
+        error:
+          failureCount >= 6
+            ? "WhatsApp connection is reconnecting. The saved linked-device session is being preserved."
+            : null,
+        qr_code_data: null,
+        qr_expires_at: null,
+        status: reconnectingStatus,
+        updated_at: new Date().toISOString()
+      });
+      await sleep(reconnectDelayMs);
       if (!activeSessions.has(session.tenant_id) && !shuttingDown) {
         void startTenantSocket(session);
       }
@@ -341,11 +355,16 @@ async function handleConnectionUpdate(session, sock, update) {
   }
 }
 
-async function resetQuickConnectPairing(session, statusCode) {
-  rmSync(authDirectoryFor(session.tenant_id), { force: true, recursive: true });
+async function resetQuickConnectPairing(session, statusCode, options = {}) {
+  if (options.clearAuthState) {
+    clearQuickConnectAuthState(session.tenant_id);
+  }
   await updateQuickConnectSession(session, {
     connected_phone: null,
-    error: "WhatsApp linked-device session could not reconnect. A new QR pairing is required.",
+    error:
+      options.reason === "logged_out"
+        ? "WhatsApp reported this linked device as logged out. A new QR pairing is required."
+        : "WhatsApp linked-device session requires a new QR pairing.",
     qr_code_data: null,
     qr_expires_at: null,
     status: "qr_pending",
@@ -354,9 +373,13 @@ async function resetQuickConnectPairing(session, statusCode) {
   await insertQuickConnectEvent(session, {
     eventType: "quick_connect.repairing_required",
     status: "qr_pending",
-    message: "Quick Connect reset a stale WhatsApp linked-device session and requested a new QR.",
+    message: options.clearAuthState
+      ? "Quick Connect cleared a logged-out WhatsApp linked-device session and requested a new QR."
+      : "Quick Connect requested a new QR without clearing saved linked-device credentials.",
     metadata: {
+      auth_state_cleared: String(Boolean(options.clearAuthState)),
       instance_id: connectorInstanceId,
+      reason: options.reason ?? "",
       status_code: String(statusCode ?? "")
     }
   });
@@ -971,6 +994,18 @@ function stopTenantRuntime(tenantId) {
     clearInterval(runtime.heartbeatTimer);
   }
   activeSessions.delete(tenantId);
+}
+
+function reconnectDelayFor(failureCount) {
+  const safeBase = Number.isFinite(reconnectBaseDelayMs) && reconnectBaseDelayMs > 0 ? reconnectBaseDelayMs : 2000;
+  const safeMax = Number.isFinite(reconnectMaxDelayMs) && reconnectMaxDelayMs > 0 ? reconnectMaxDelayMs : 60000;
+  const exponential = safeBase * 2 ** Math.max(0, Math.min(failureCount - 1, 6));
+
+  return Math.min(exponential, safeMax);
+}
+
+function clearQuickConnectAuthState(tenantId) {
+  rmSync(authDirectoryFor(tenantId), { force: true, recursive: true });
 }
 
 function shouldRestartForPairingRequest(runtime, session) {
