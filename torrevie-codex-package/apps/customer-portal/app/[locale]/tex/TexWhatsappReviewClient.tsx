@@ -114,7 +114,13 @@ export function TexWhatsappReviewClient({
           No unregistered WhatsApp submissions waiting for review.
         </div>
       ) : (
-        <div className="tex-whatsapp-list">
+        <div className="tex-whatsapp-table" role="table" aria-label="WhatsApp receipt review queue">
+          <div className="tex-whatsapp-table-head" role="row">
+            <span role="columnheader">Sender</span>
+            <span role="columnheader">Receipt</span>
+            <span role="columnheader">OCR result</span>
+            <span role="columnheader">Action</span>
+          </div>
           {submissions.map((submission) => {
             const matchedEmployee = activeEmployees.find(
               (employee) => employee.id === submission.resolvedEmployeeProfileId
@@ -123,115 +129,134 @@ export function TexWhatsappReviewClient({
               selectedEmployees[submission.id] ?? submission.resolvedEmployeeProfileId ?? "";
 
             return (
-            <article className="tex-whatsapp-card" key={submission.id}>
-              <header>
-                <span className={`tex-status ${statusClassForIntake(submission.intakeStatus)}`}>
-                  {submission.intakeStatus}
-                </span>
-                <strong>
-                  {matchedEmployee
-                    ? `${matchedEmployee.name} (${matchedEmployee.phoneNumber})`
-                    : (submission.senderPhone ?? submission.senderRaw ?? "Unknown number")}
-                </strong>
-                <small>{formatDateTime(submission.createdAt)}</small>
-              </header>
-
-              <div className="tex-whatsapp-body">
-                <ReceiptPreview
-                  contentType={submission.mediaMimeType}
-                  expected={submission.messageType === "receipt"}
-                  label="Incoming receipt"
-                  mediaError={submission.mediaError ?? submission.ocrError}
-                  mediaStatus={submission.mediaStatus}
-                  ocrStatus={submission.ocrStatus}
-                  url={receiptUrlForSubmission(submission)}
-                />
-                <MediaStatusSummary submission={submission} />
-                <p>
-                  {submission.messageText ||
-                    submission.whatsappReplyText ||
-                    "No message text captured."}
-                </p>
-                <dl>
-                  <div>
-                    <dt>OCR</dt>
-                    <dd>{formatStatus(submission.ocrStatus)}</dd>
+              <article className="tex-whatsapp-row" key={submission.id} role="row">
+                <div className="tex-whatsapp-sender" role="cell">
+                  <div className="tex-whatsapp-status-line">
+                    <span className={`tex-status ${statusClassForIntake(submission.intakeStatus)}`}>
+                      {submission.intakeStatus}
+                    </span>
+                    {matchedEmployee ? <span className="tex-match-chip">Matched</span> : null}
                   </div>
-                  <div>
-                    <dt>Message</dt>
-                    <dd>{submission.messageId ?? "Not provided"}</dd>
-                  </div>
-                </dl>
-                {submission.ocrResult ? (
-                  <p className="tex-field-hint">
-                    {submission.ocrResult.vendor ?? "Unknown vendor"} ·{" "}
-                    {submission.ocrResult.currency ?? "AED"}{" "}
-                    {submission.ocrResult.amount ?? "needs review"}
-                  </p>
-                ) : null}
-              </div>
+                  <strong>{matchedEmployee?.name ?? "Unknown sender"}</strong>
+                  <span>{matchedEmployee?.phoneNumber ?? senderLabel(submission)}</span>
+                  <small>{formatDateTime(submission.createdAt)}</small>
+                </div>
 
-              <div className="tex-whatsapp-actions">
-                <label className="tex-wide-label">
-                  Assign to employee
-                  <select
-                    value={selectedEmployeeId}
-                    onChange={(event) =>
-                      setSelectedEmployees((current) => ({
-                        ...current,
-                        [submission.id]: event.target.value
-                      }))
-                    }
-                  >
-                    <option value="">Select employee</option>
-                    {activeEmployees.map((employee) => (
-                      <option key={employee.id} value={employee.id}>
-                        {employee.name} ({employee.phoneNumber})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  className="tex-secondary-button"
-                  disabled={busyId === submission.id || !selectedEmployeeId}
-                  onClick={() => resolveSubmission(submission, "existing_employee")}
-                >
-                  {matchedEmployee ? "Create expense" : "Assign"}
-                </button>
-
-                <label className="tex-wide-label">
-                  Add as employee
-                  <input
-                    value={newEmployeeNames[submission.id] ?? ""}
-                    onChange={(event) =>
-                      setNewEmployeeNames((current) => ({
-                        ...current,
-                        [submission.id]: event.target.value
-                      }))
-                    }
-                    placeholder="Employee name"
+                <div className="tex-whatsapp-receipt-cell" role="cell">
+                  <ReceiptPreview
+                    contentType={submission.mediaMimeType}
+                    expected={submission.messageType === "receipt"}
+                    label="Incoming receipt"
+                    mediaError={submission.mediaError ?? submission.ocrError}
+                    mediaStatus={submission.mediaStatus}
+                    ocrStatus={submission.ocrStatus}
+                    url={receiptUrlForSubmission(submission)}
                   />
-                </label>
-                <button
-                  type="button"
-                  className="tex-primary-button"
-                  disabled={busyId === submission.id || !newEmployeeNames[submission.id]?.trim()}
-                  onClick={() => resolveSubmission(submission, "new_employee")}
-                >
-                  Add and assign
-                </button>
+                  <MediaStatusSummary submission={submission} />
+                </div>
 
-                <button
-                  type="button"
-                  className="tex-inline-button"
-                  disabled={busyId === submission.id}
-                  onClick={() => ignoreSubmission(submission)}
-                >
-                  Ignore
-                </button>
-              </div>
-            </article>
+                <div className="tex-whatsapp-ocr-cell" role="cell">
+                  <dl className="tex-compact-dl">
+                    <div>
+                      <dt>OCR</dt>
+                      <dd>{formatStatus(submission.ocrStatus)}</dd>
+                    </div>
+                    <div>
+                      <dt>Message</dt>
+                      <dd>{submission.messageId ?? "Not provided"}</dd>
+                    </div>
+                    <div>
+                      <dt>Vendor</dt>
+                      <dd>{submission.ocrResult?.vendor ?? "Needs review"}</dd>
+                    </div>
+                    <div>
+                      <dt>Amount</dt>
+                      <dd>
+                        {submission.ocrResult?.amount != null
+                          ? `${submission.ocrResult.currency ?? "AED"} ${submission.ocrResult.amount}`
+                          : "Needs review"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Date</dt>
+                      <dd>{submission.ocrResult?.expenseDate ?? "Needs review"}</dd>
+                    </div>
+                    <div>
+                      <dt>VAT / TRN</dt>
+                      <dd>{vatTrnLabel(submission)}</dd>
+                    </div>
+                  </dl>
+                  <p className="tex-whatsapp-message">
+                    {submission.messageText ||
+                      submission.whatsappReplyText ||
+                      "No message text captured."}
+                  </p>
+                  {submission.duplicateHint ? (
+                    <p className="tex-field-hint">Duplicate check: {submission.duplicateHint}</p>
+                  ) : null}
+                </div>
+
+                <div className="tex-whatsapp-actions" role="cell">
+                  <label className="tex-wide-label">
+                    Assign to employee
+                    <select
+                      value={selectedEmployeeId}
+                      onChange={(event) =>
+                        setSelectedEmployees((current) => ({
+                          ...current,
+                          [submission.id]: event.target.value
+                        }))
+                      }
+                    >
+                      <option value="">Select employee</option>
+                      {activeEmployees.map((employee) => (
+                        <option key={employee.id} value={employee.id}>
+                          {employee.name} ({employee.phoneNumber})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="tex-secondary-button"
+                    disabled={busyId === submission.id || !selectedEmployeeId}
+                    onClick={() => resolveSubmission(submission, "existing_employee")}
+                  >
+                    {matchedEmployee ? "Create expense" : "Assign"}
+                  </button>
+
+                  <label className="tex-wide-label">
+                    Add as employee
+                    <input
+                      value={newEmployeeNames[submission.id] ?? ""}
+                      onChange={(event) =>
+                        setNewEmployeeNames((current) => ({
+                          ...current,
+                          [submission.id]: event.target.value
+                        }))
+                      }
+                      placeholder="Employee name"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="tex-primary-button"
+                    disabled={busyId === submission.id || !newEmployeeNames[submission.id]?.trim()}
+                    onClick={() => resolveSubmission(submission, "new_employee")}
+                  >
+                    Add and assign
+                  </button>
+
+                  <button
+                    type="button"
+                    className="tex-inline-button"
+                    disabled={busyId === submission.id}
+                    onClick={() => ignoreSubmission(submission)}
+                  >
+                    Ignore
+                  </button>
+                </div>
+              </article>
             );
           })}
         </div>
@@ -302,16 +327,6 @@ function MediaStatusSummary({
       {submission.ocrError && submission.ocrError !== submission.mediaError ? (
         <small>{submission.ocrError}</small>
       ) : null}
-      {submission.ocrResult?.taxAmount != null || submission.ocrResult?.taxIdNumber ? (
-        <small>
-          {submission.ocrResult.taxAmount != null
-            ? `VAT ${submission.ocrResult.taxAmount}`
-            : "VAT not read"}
-          {submission.ocrResult.taxIdNumber
-            ? ` / TRN ${submission.ocrResult.taxIdNumber}`
-            : ""}
-        </small>
-      ) : null}
     </div>
   );
 }
@@ -362,6 +377,23 @@ function statusClassForIntake(status: string) {
   }
 
   return "tex-status-pending";
+}
+
+function senderLabel(submission: TexUnregisteredWhatsappSubmission) {
+  return submission.senderPhone ?? submission.senderRaw ?? submission.whatsappChatJid ?? "Unknown number";
+}
+
+function vatTrnLabel(submission: TexUnregisteredWhatsappSubmission) {
+  if (submission.ocrResult?.taxAmount == null && !submission.ocrResult?.taxIdNumber) {
+    return "Not read";
+  }
+
+  return [
+    submission.ocrResult.taxAmount != null ? `VAT ${submission.ocrResult.taxAmount}` : null,
+    submission.ocrResult.taxIdNumber ? `TRN ${submission.ocrResult.taxIdNumber}` : null
+  ]
+    .filter(Boolean)
+    .join(" / ");
 }
 
 function formatStatus(value: string) {
