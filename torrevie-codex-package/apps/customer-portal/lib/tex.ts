@@ -629,11 +629,15 @@ export type TexUnregisteredWhatsappSubmission = TexWebhookSubmissionRecord & {
   receiptFileId: string | null;
   mediaUrl: string | null;
   mediaMimeType: string | null;
+  mediaStatus: string | null;
+  mediaError: string | null;
   messageType: "receipt" | "status" | "text";
   ocrStatus: TexWhatsappReceiptResult["ocrStatus"];
   ocrResult: TexReceiptExtraction | null;
   ocrError: string | null;
   whatsappReplyText: string | null;
+  intakeStatus: string;
+  payload: Record<string, unknown>;
   resolvedExpenseId: string | null;
   resolvedEmployeeProfileId: string | null;
   resolvedAt: string | null;
@@ -3716,6 +3720,7 @@ export async function listTexUnregisteredWhatsappSubmissions(
           ocr_status,
           ocr_result,
           ocr_error,
+          payload,
           whatsapp_reply_text,
           status,
           resolved_expense_id,
@@ -3808,6 +3813,7 @@ export async function resolveTexUnregisteredWhatsappSubmission(
               ocr_status,
               ocr_result,
               ocr_error,
+              payload,
               whatsapp_reply_text,
               status,
               resolved_expense_id,
@@ -5645,6 +5651,52 @@ function parseSubmissionExtraction(value: unknown): TexReceiptExtraction | null 
   };
 }
 
+function readRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function whatsappIntakeStatus(row: TexUnregisteredWhatsappSubmissionRow, mediaStatus: string | null) {
+  if (row.resolved_expense_id) {
+    return "Expense created";
+  }
+
+  if (row.message_type === "text") {
+    return "Message received";
+  }
+
+  if (!row.receipt_file_id && mediaStatus === "download_failed") {
+    return "Media download failed";
+  }
+
+  if (!row.receipt_file_id && mediaStatus === "upload_failed") {
+    return "Media upload failed";
+  }
+
+  if (row.receipt_file_id) {
+    return row.ocr_status === "extracted" ? "Receipt processed" : "Receipt attached";
+  }
+
+  if (row.ocr_status === "pending" || row.ocr_status === "processing") {
+    return "OCR processing";
+  }
+
+  if (row.ocr_status === "failed") {
+    return "OCR failed";
+  }
+
+  if (row.ocr_status === "manual_review") {
+    return "Needs manual review";
+  }
+
+  return "Received";
+}
+
 function resolveWhatsappExpenseFields(
   submission: TexUnregisteredWhatsappSubmissionRow,
   extraction: TexReceiptExtraction | null
@@ -5923,7 +5975,8 @@ function classifyWhatsappMessage(
     return "status";
   }
 
-  return submission.mediaUrl || submission.receiptFileId ? "receipt" : "text";
+  const media = readRecord(submission.payload.media);
+  return submission.mediaUrl || submission.receiptFileId || media.expected === true ? "receipt" : "text";
 }
 
 function normalizePhoneDigits(value: string | null) {
@@ -6305,6 +6358,11 @@ function mapNotification(row: TexNotificationRow): TexNotification {
 function mapUnregisteredWhatsappSubmission(
   row: TexUnregisteredWhatsappSubmissionRow
 ): TexUnregisteredWhatsappSubmission {
+  const payload = readRecord(row.payload);
+  const media = readRecord(payload.media);
+  const mediaStatus = readString(media.status);
+  const mediaError = readString(media.error);
+
   return {
     id: row.id,
     status: row.status,
@@ -6317,11 +6375,15 @@ function mapUnregisteredWhatsappSubmission(
     receiptFileId: row.receipt_file_id,
     mediaUrl: row.media_url,
     mediaMimeType: row.media_mime_type,
+    mediaStatus,
+    mediaError,
     messageType: row.message_type,
     ocrStatus: row.ocr_status,
     ocrResult: parseSubmissionExtraction(row.ocr_result),
     ocrError: row.ocr_error,
     whatsappReplyText: row.whatsapp_reply_text,
+    intakeStatus: whatsappIntakeStatus(row, mediaStatus),
+    payload,
     resolvedExpenseId: row.resolved_expense_id,
     resolvedEmployeeProfileId: row.resolved_employee_profile_id,
     resolvedAt: row.resolved_at,
@@ -6641,6 +6703,7 @@ type TexUnregisteredWhatsappSubmissionRow = {
   ocr_status: TexWhatsappReceiptResult["ocrStatus"];
   ocr_result: unknown;
   ocr_error: string | null;
+  payload: unknown;
   whatsapp_reply_text: string | null;
   status: "open" | "resolved" | "ignored";
   resolved_expense_id: string | null;

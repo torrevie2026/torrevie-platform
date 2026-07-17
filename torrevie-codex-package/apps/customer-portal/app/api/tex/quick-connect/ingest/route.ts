@@ -48,18 +48,35 @@ export async function POST(request: Request) {
       texPlan: defaultTexPlanContext(),
       integrationPermissions: ["tex.expense.submit", "tex.integration.manage"]
     };
-    const media = body.media?.dataBase64
-      ? await uploadTexReceiptFile(client, actor, {
+    let media: Awaited<ReturnType<typeof uploadTexReceiptFile>> | null = null;
+    let mediaUploadError: string | null = null;
+    if (body.media?.dataBase64) {
+      try {
+        media = await uploadTexReceiptFile(client, actor, {
           contentType: body.media.mimeType ?? "image/jpeg",
           dataBase64: body.media.dataBase64,
           fileName: body.media.fileName ?? "whatsapp-receipt"
-        })
-      : null;
+        });
+      } catch (error) {
+        mediaUploadError = error instanceof Error ? error.message : "Receipt attachment upload failed.";
+        console.error(
+          JSON.stringify({
+            event: "tex.quick_connect.media_upload_failed",
+            hasMedia: true,
+            mediaMimeType: body.media.mimeType ?? null,
+            messageId: body.messageId ?? null,
+            tenantId
+          })
+        );
+      }
+    }
     const mediaUrl =
       body.media?.dataBase64 && body.media.mimeType
         ? `data:${body.media.mimeType};base64,${body.media.dataBase64}`
         : null;
     const senderPhone = normalizeQuickConnectPhone(body.senderPhone);
+    const rawPayload = body.payload ?? {};
+    const connectorMedia = readRecord(rawPayload.media);
     const submission: TexWebhookSubmissionInput = {
       senderRaw: senderPhone ?? body.senderRaw ?? body.senderPhone ?? null,
       senderPhone,
@@ -71,8 +88,18 @@ export async function POST(request: Request) {
       mediaUrl,
       mediaMimeType: body.media?.mimeType ?? null,
       payload: {
-        ...(body.payload ?? {}),
+        ...rawPayload,
         quick_connect: true,
+        media: {
+          ...connectorMedia,
+          error: mediaUploadError ?? readString(connectorMedia.error),
+          expected: Boolean(connectorMedia.expected) || Boolean(body.media?.dataBase64),
+          status: mediaUploadError
+            ? "upload_failed"
+            : media?.id
+              ? "stored"
+              : readString(connectorMedia.status) ?? (body.media?.dataBase64 ? "downloaded" : "not_provided")
+        },
         receipt_file_id: media?.id ?? null
       }
     };
@@ -148,4 +175,14 @@ function normalizeQuickConnectPhone(value: string | null | undefined) {
   const digits = value?.replace(/\D/g, "") ?? "";
 
   return digits ? `+${digits}` : null;
+}
+
+function readRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }

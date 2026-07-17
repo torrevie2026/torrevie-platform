@@ -125,8 +125,8 @@ export function TexWhatsappReviewClient({
             return (
             <article className="tex-whatsapp-card" key={submission.id}>
               <header>
-                <span className="tex-status tex-status-pending">
-                  {matchedEmployee ? "Matched employee" : "Unknown sender"}
+                <span className={`tex-status ${statusClassForIntake(submission.intakeStatus)}`}>
+                  {submission.intakeStatus}
                 </span>
                 <strong>
                   {matchedEmployee
@@ -139,9 +139,13 @@ export function TexWhatsappReviewClient({
               <div className="tex-whatsapp-body">
                 <ReceiptPreview
                   contentType={submission.mediaMimeType}
+                  expected={submission.messageType === "receipt"}
                   label="Incoming receipt"
+                  mediaError={submission.mediaError ?? submission.ocrError}
+                  mediaStatus={submission.mediaStatus}
                   url={receiptUrlForSubmission(submission)}
                 />
+                <MediaStatusSummary submission={submission} />
                 <p>
                   {submission.messageText ||
                     submission.whatsappReplyText ||
@@ -150,7 +154,7 @@ export function TexWhatsappReviewClient({
                 <dl>
                   <div>
                     <dt>OCR</dt>
-                    <dd>{submission.ocrStatus}</dd>
+                    <dd>{formatStatus(submission.ocrStatus)}</dd>
                   </div>
                   <div>
                     <dt>Message</dt>
@@ -237,15 +241,26 @@ export function TexWhatsappReviewClient({
 
 function ReceiptPreview({
   contentType,
+  expected,
   label,
+  mediaError,
+  mediaStatus,
   url
 }: {
   contentType?: string | null;
+  expected: boolean;
   label: string;
+  mediaError?: string | null;
+  mediaStatus?: string | null;
   url: string | null;
 }) {
   if (!url) {
-    return <p className="tex-field-hint">No receipt attachment captured.</p>;
+    return (
+      <div className="tex-receipt-missing">
+        <strong>{expected ? "Receipt attachment unavailable" : "No receipt attachment"}</strong>
+        <span>{receiptMissingText(mediaStatus, mediaError)}</span>
+      </div>
+    );
   }
 
   const isImage = !contentType || contentType.startsWith("image/");
@@ -258,12 +273,72 @@ function ReceiptPreview({
   );
 }
 
+function MediaStatusSummary({
+  submission
+}: {
+  submission: TexUnregisteredWhatsappSubmission;
+}) {
+  const hasReceipt = Boolean(receiptUrlForSubmission(submission));
+  const mediaLabel = hasReceipt
+    ? "Receipt copy attached"
+    : submission.messageType === "receipt"
+      ? "Receipt copy missing"
+      : "No receipt expected";
+
+  return (
+    <div className="tex-media-state" aria-label="WhatsApp intake status">
+      <span>{mediaLabel}</span>
+      <span>{formatStatus(submission.mediaStatus ?? submission.messageType)}</span>
+      {submission.mediaError ? <small>{submission.mediaError}</small> : null}
+      {submission.ocrError && submission.ocrError !== submission.mediaError ? (
+        <small>{submission.ocrError}</small>
+      ) : null}
+    </div>
+  );
+}
+
 function receiptUrlForSubmission(submission: TexUnregisteredWhatsappSubmission) {
   if (submission.receiptFileId) {
     return `/api/tex/receipts/${submission.receiptFileId}`;
   }
 
   return submission.mediaUrl;
+}
+
+function receiptMissingText(mediaStatus?: string | null, mediaError?: string | null) {
+  if (mediaError) {
+    return mediaError;
+  }
+
+  if (mediaStatus === "download_failed") {
+    return "WhatsApp sent media, but Quick Connect could not download it.";
+  }
+
+  if (mediaStatus === "upload_failed") {
+    return "WhatsApp media was received, but TEX could not store the receipt copy.";
+  }
+
+  return "The message was captured, but no receipt file is attached to it.";
+}
+
+function statusClassForIntake(status: string) {
+  if (status.toLowerCase().includes("failed")) {
+    return "tex-status-rejected";
+  }
+
+  if (status.toLowerCase().includes("processed") || status.toLowerCase().includes("created")) {
+    return "tex-status-approved";
+  }
+
+  if (status.toLowerCase().includes("attached")) {
+    return "tex-status-open";
+  }
+
+  return "tex-status-pending";
+}
+
+function formatStatus(value: string) {
+  return value.replace(/_/g, " ");
 }
 
 async function texFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {
