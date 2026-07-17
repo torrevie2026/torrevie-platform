@@ -35,6 +35,10 @@ Environment:
   TEX_QUICK_CONNECT_HEARTBEAT_MS=30000            Connector heartbeat interval
   TEX_QUICK_CONNECT_RECONNECT_BASE_DELAY_MS=2000  Initial reconnect delay
   TEX_QUICK_CONNECT_RECONNECT_MAX_DELAY_MS=60000  Maximum reconnect delay
+  TEX_QUICK_CONNECT_MAX_QR_PER_PAIRING=2          Stop QR registration loops after this many QR refs
+  TEX_QUICK_CONNECT_ACKS_ENABLED=true             Send WhatsApp acknowledgement replies
+  TEX_QUICK_CONNECT_ACKS_PER_TENANT_HOUR=10       Tenant-level outbound acknowledgement limit
+  TEX_QUICK_CONNECT_ACKS_PER_CHAT_10M=3           Chat-level outbound acknowledgement limit
 `);
   process.exit(0);
 }
@@ -47,6 +51,10 @@ const pollMs = Number(process.env.TEX_QUICK_CONNECT_POLL_MS || 5000);
 const qrTtlSeconds = Number(process.env.TEX_QUICK_CONNECT_QR_TTL_SECONDS || 55);
 const reconnectBaseDelayMs = Number(process.env.TEX_QUICK_CONNECT_RECONNECT_BASE_DELAY_MS || 2000);
 const reconnectMaxDelayMs = Number(process.env.TEX_QUICK_CONNECT_RECONNECT_MAX_DELAY_MS || 60000);
+const maxQrPerPairing = Number(process.env.TEX_QUICK_CONNECT_MAX_QR_PER_PAIRING || 2);
+const acknowledgementsEnabled = process.env.TEX_QUICK_CONNECT_ACKS_ENABLED !== "false";
+const ackPerTenantHour = Number(process.env.TEX_QUICK_CONNECT_ACKS_PER_TENANT_HOUR || 10);
+const ackPerChatTenMinutes = Number(process.env.TEX_QUICK_CONNECT_ACKS_PER_CHAT_10M || 3);
 const tenantFilter = process.env.TEX_QUICK_CONNECT_TENANT_ID?.trim() || null;
 const manualSessionId = optionalEnv("TEX_QUICK_CONNECT_MANUAL_SESSION_ID");
 const manualMode = Boolean(manualSessionId && tenantFilter);
@@ -55,6 +63,7 @@ const heartbeatMs = Number(process.env.TEX_QUICK_CONNECT_HEARTBEAT_MS || 30000);
 const connectorInstanceId =
   optionalEnv("TEX_QUICK_CONNECT_INSTANCE_ID") || `${hostname()}:${process.pid}`;
 const activeSessions = new Map();
+const acknowledgementWindows = new Map();
 const reconnectFailures = new Map();
 const logger = pino({ level: process.env.TEX_QUICK_CONNECT_LOG_LEVEL || "info" });
 
@@ -73,7 +82,11 @@ logger.info(
     instanceId: connectorInstanceId,
     manualMode,
     maxSessions,
+    maxQrPerPairing,
     pollMs,
+    ackPerChatTenMinutes,
+    ackPerTenantHour,
+    acknowledgementsEnabled,
     reconnectBaseDelayMs,
     reconnectMaxDelayMs,
     sessionRoot,
@@ -179,6 +192,8 @@ async function startTenantSocket(session) {
   activeSessions.set(session.tenant_id, {
     heartbeatTimer: startHeartbeat(session),
     pairingCode: session.pairing_code,
+    pairingPaused: false,
+    qrCount: 0,
     sessionId: session.id,
     sock,
     startedAt: new Date().toISOString()
@@ -215,6 +230,49 @@ async function startTenantSocket(session) {
 
 async function handleConnectionUpdate(session, sock, update) {
   if (update.qr) {
+    const runtime = activeSessions.get(session.tenant_id);
+    const qrCount = (runtime?.qrCount ?? 0) + 1;
+    if (runtime) {
+      runtime.qrCount = qrCount;
+    }
+
+    if (Number.isFinite(maxQrPerPairing) && maxQrPerPairing > 0 && qrCount > maxQrPerPairing) {
+      if (runtime) {
+        runtime.pairingPaused = true;
+      }
+      await updateQuickConnectSession(session, {
+        error: "Quick Connect paused QR generation to protect the WhatsApp account. Request a new pairing when ready.",
+        qr_code_data: null,
+        qr_expires_at: null,
+        status: "qr_pending",
+        updated_at: new Date().toISOString()
+      });
+      await insertQuickConnectEvent(session, {
+        eventType: "quick_connect.qr.paused",
+        status: "qr_pending",
+        message: "Quick Connect paused repeated QR generation to protect the WhatsApp account.",
+        metadata: {
+          instance_id: connectorInstanceId,
+          max_qr_per_pairing: String(maxQrPerPairing),
+          pairing_code: session.pairing_code ?? "",
+          qr_count: String(qrCount)
+        }
+      });
+      logger.warn(
+        { maxQrPerPairing, qrCount, tenantId: session.tenant_id },
+        "Quick Connect QR generation paused"
+      );
+      try {
+        sock.end?.();
+      } catch (error) {
+        logger.warn(
+          { error: errorMessage(error), tenantId: session.tenant_id },
+          "Unable to close Quick Connect socket after QR pause"
+        );
+      }
+      return;
+    }
+
     const qrCodeData = await QRCode.toDataURL(update.qr, {
       errorCorrectionLevel: "M",
       margin: 2,
@@ -234,6 +292,8 @@ async function handleConnectionUpdate(session, sock, update) {
       status: "qr_pending",
       message: "WhatsApp linked-device QR generated and sent to TEX.",
       metadata: {
+        max_qr_per_pairing: String(maxQrPerPairing),
+        qr_count: String(qrCount),
         qr_expires_at: expiresAt
       }
     });
@@ -267,9 +327,23 @@ async function handleConnectionUpdate(session, sock, update) {
 
   if (update.connection === "close") {
     const statusCode = statusCodeFromDisconnect(update.lastDisconnect?.error);
+    const closingRuntime = activeSessions.get(session.tenant_id);
     const shouldReconnect = statusCode !== DisconnectReason.loggedOut && !shuttingDown;
 
     stopTenantRuntime(session.tenant_id);
+
+    if (closingRuntime?.pairingPaused) {
+      await insertQuickConnectEvent(session, {
+        eventType: "quick_connect.pairing_paused",
+        status: "qr_pending",
+        message: "WhatsApp socket closed after QR generation was paused.",
+        metadata: {
+          instance_id: connectorInstanceId,
+          status_code: String(statusCode ?? "")
+        }
+      });
+      return;
+    }
 
     if (shuttingDown) {
       await insertQuickConnectEvent(session, {
@@ -507,6 +581,48 @@ async function handleInboundMessage(session, sock, message) {
 async function sendQuickConnectAcknowledgement(session, sock, input) {
   if (!input.remoteJid) {
     return { error: "Missing remote JID.", status: "skipped" };
+  }
+
+  if (!acknowledgementsEnabled) {
+    await insertQuickConnectEvent(session, {
+      eventType: "quick_connect.acknowledgement_skipped",
+      status: "connected",
+      message: "Quick Connect acknowledgement replies are disabled for this worker.",
+      metadata: {
+        message_id: input.messageId,
+        remote_jid: input.remoteJid,
+        reason: "disabled"
+      }
+    });
+    return { error: null, status: "disabled" };
+  }
+
+  const acknowledgementLimit = reserveAcknowledgementSlot(session.tenant_id, input.remoteJid);
+  if (!acknowledgementLimit.allowed) {
+    await insertQuickConnectEvent(session, {
+      eventType: "quick_connect.acknowledgement_skipped",
+      status: "connected",
+      message: "Quick Connect skipped an acknowledgement to protect the WhatsApp account.",
+      metadata: {
+        chat_count: String(acknowledgementLimit.chatCount),
+        chat_limit: String(ackPerChatTenMinutes),
+        message_id: input.messageId,
+        reason: acknowledgementLimit.reason,
+        remote_jid: input.remoteJid,
+        tenant_count: String(acknowledgementLimit.tenantCount),
+        tenant_limit: String(ackPerTenantHour)
+      }
+    });
+    logger.warn(
+      {
+        messageId: input.messageId,
+        reason: acknowledgementLimit.reason,
+        remoteJid: input.remoteJid,
+        tenantId: session.tenant_id
+      },
+      "Quick Connect acknowledgement skipped"
+    );
+    return { error: acknowledgementLimit.reason, status: "rate_limited" };
   }
 
   const text = input.replyText?.trim() || fallbackQuickConnectReply(input.hasMedia);
@@ -1002,6 +1118,55 @@ function reconnectDelayFor(failureCount) {
   const exponential = safeBase * 2 ** Math.max(0, Math.min(failureCount - 1, 6));
 
   return Math.min(exponential, safeMax);
+}
+
+function reserveAcknowledgementSlot(tenantId, remoteJid) {
+  const now = Date.now();
+  const tenantKey = `tenant:${tenantId}`;
+  const chatKey = `chat:${tenantId}:${remoteJid}`;
+  const tenantWindow = pruneWindow(acknowledgementWindows.get(tenantKey), now - 60 * 60 * 1000);
+  const chatWindow = pruneWindow(acknowledgementWindows.get(chatKey), now - 10 * 60 * 1000);
+  const safeTenantLimit =
+    Number.isFinite(ackPerTenantHour) && ackPerTenantHour >= 0 ? ackPerTenantHour : 10;
+  const safeChatLimit =
+    Number.isFinite(ackPerChatTenMinutes) && ackPerChatTenMinutes >= 0 ? ackPerChatTenMinutes : 3;
+
+  if (safeTenantLimit === 0 || tenantWindow.length >= safeTenantLimit) {
+    acknowledgementWindows.set(tenantKey, tenantWindow);
+    acknowledgementWindows.set(chatKey, chatWindow);
+    return {
+      allowed: false,
+      chatCount: chatWindow.length,
+      reason: "tenant_rate_limit",
+      tenantCount: tenantWindow.length
+    };
+  }
+
+  if (safeChatLimit === 0 || chatWindow.length >= safeChatLimit) {
+    acknowledgementWindows.set(tenantKey, tenantWindow);
+    acknowledgementWindows.set(chatKey, chatWindow);
+    return {
+      allowed: false,
+      chatCount: chatWindow.length,
+      reason: "chat_rate_limit",
+      tenantCount: tenantWindow.length
+    };
+  }
+
+  tenantWindow.push(now);
+  chatWindow.push(now);
+  acknowledgementWindows.set(tenantKey, tenantWindow);
+  acknowledgementWindows.set(chatKey, chatWindow);
+  return {
+    allowed: true,
+    chatCount: chatWindow.length,
+    reason: "",
+    tenantCount: tenantWindow.length
+  };
+}
+
+function pruneWindow(values, cutoff) {
+  return Array.isArray(values) ? values.filter((value) => value >= cutoff) : [];
 }
 
 function clearQuickConnectAuthState(tenantId) {
