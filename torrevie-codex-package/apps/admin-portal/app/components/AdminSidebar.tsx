@@ -13,7 +13,13 @@ const navItems = [
   { href: "/", label: "Audit" }
 ];
 
-export function AdminSidebar({ activeHref = "/", session }: { activeHref?: string; session?: PlatformSession }) {
+export function AdminSidebar({
+  activeHref = "/",
+  session
+}: {
+  activeHref?: string;
+  session?: PlatformSession;
+}) {
   if (session?.mfaRequired && activeHref !== "/mfa") {
     redirect("/mfa");
   }
@@ -29,7 +35,11 @@ export function AdminSidebar({ activeHref = "/", session }: { activeHref?: strin
       </a>
       <nav>
         {navItems.map((item) => (
-          <a key={`${item.href}-${item.label}`} href={item.href} aria-current={item.href === activeHref ? "page" : undefined}>
+          <a
+            key={`${item.href}-${item.label}`}
+            href={item.href}
+            aria-current={item.href === activeHref ? "page" : undefined}
+          >
             {item.label}
           </a>
         ))}

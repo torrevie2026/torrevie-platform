@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { getTenantClaimsFromJwt, requireSupabaseBrowserEnv } from "@torrevie/auth";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { canAccessAdminPortalFromClaims } from "./access";
 import { getSupabaseAdminClient } from "./admin-client";
 
@@ -24,6 +24,10 @@ export type PlatformSession = {
 };
 
 export async function getPlatformSession(): Promise<PlatformSession | null> {
+  if (await isLocalReviewBypassEnabled()) {
+    return localReviewSession();
+  }
+
   const cookieStore = await cookies();
   const { url, anonKey } = requireSupabaseBrowserEnv();
   const supabase = createServerClient(url, anonKey, {
@@ -59,6 +63,38 @@ export async function getPlatformSession(): Promise<PlatformSession | null> {
   };
 }
 
+export async function isLocalReviewBypassEnabled() {
+  if (process.env.ADMIN_LOCAL_REVIEW_BYPASS !== "true") {
+    return false;
+  }
+
+  const headerStore = await headers();
+  const host = headerStore.get("host") ?? "";
+  return host.startsWith("localhost:") || host.startsWith("127.0.0.1:");
+}
+
+function localReviewSession(): PlatformSession {
+  const userId = "00000000-0000-4000-8000-000000000001";
+  const email = "local-review@torrevie.test";
+
+  return {
+    accessToken: "local-review-bypass",
+    userId,
+    email,
+    timezone: "Asia/Dubai",
+    profile: {
+      firstName: "Local",
+      lastName: "Reviewer",
+      position: "Review mode",
+      mobileNumber: "+971000000000",
+      recoveryEmail: email,
+      completedAt: new Date(0).toISOString()
+    },
+    profileComplete: true,
+    mfaRequired: false
+  };
+}
+
 async function getPlatformUserProfile(userId: string): Promise<PlatformUserProfile> {
   const { data, error } = await getSupabaseAdminClient()
     .from("users")
@@ -82,7 +118,11 @@ async function getPlatformUserProfile(userId: string): Promise<PlatformUserProfi
 
 function isProfileComplete(profile: PlatformUserProfile) {
   return Boolean(
-    profile.firstName && profile.lastName && profile.position && profile.mobileNumber && profile.recoveryEmail
+    profile.firstName &&
+      profile.lastName &&
+      profile.position &&
+      profile.mobileNumber &&
+      profile.recoveryEmail
   );
 }
 

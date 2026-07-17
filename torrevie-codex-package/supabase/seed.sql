@@ -1,3 +1,9 @@
+insert into public.users (id, email, status) values
+  ('00000000-0000-4000-8000-000000000001', 'local-review@torrevie.test', 'active')
+on conflict (id) do update set
+  email = excluded.email,
+  status = excluded.status;
+
 insert into public.roles (key, label, scope) values
   ('torrevie_platform_admin', 'Torrevie Platform Admin', 'platform'),
   ('torrevie_operations_admin', 'Torrevie Operations Admin', 'platform'),

@@ -20,6 +20,7 @@ import {
 export async function assignSubscriptionAction(formData: FormData) {
   const session = await requirePlatformSession();
   const tenantId = stringValue(formData, "tenantId");
+  const section = sectionValue(formData);
 
   await assignSubscription(
     getSupabaseAdminClient(),
@@ -34,7 +35,7 @@ export async function assignSubscriptionAction(formData: FormData) {
   );
 
   revalidatePath("/subscriptions");
-  redirect(`/subscriptions?assigned=1&tenantId=${encodeURIComponent(tenantId)}`);
+  redirect(`/subscriptions?${sectionQuery(section)}assigned=1&tenantId=${encodeURIComponent(tenantId)}#subscriptions-top`);
 }
 
 export async function inviteTenantAdminAction(formData: FormData) {
@@ -43,7 +44,7 @@ export async function inviteTenantAdminAction(formData: FormData) {
 
   await sendTenantAdminInvitationEmail(getSupabaseAdminClient(), tenantId, session.userId);
   revalidatePath("/subscriptions");
-  redirect(`/subscriptions?invited=1&tenantId=${encodeURIComponent(tenantId)}`);
+  redirect(`/subscriptions?invited=1&tenantId=${encodeURIComponent(tenantId)}#subscriptions-top`);
 }
 
 export async function updateFsmTenantControlsAction(formData: FormData) {
@@ -59,7 +60,7 @@ export async function updateFsmTenantControlsAction(formData: FormData) {
   );
 
   revalidatePath("/subscriptions");
-  redirect(`/subscriptions?fsmControls=1&tenantId=${encodeURIComponent(stringValue(formData, "tenantId"))}`);
+  redirect(`/subscriptions?fsmControls=1&tenantId=${encodeURIComponent(stringValue(formData, "tenantId"))}#subscriptions-top`);
 }
 
 export async function upsertFeatureOverrideAction(formData: FormData) {
@@ -78,7 +79,7 @@ export async function upsertFeatureOverrideAction(formData: FormData) {
   );
 
   revalidatePath("/subscriptions");
-  redirect(`/subscriptions?override=1&tenantId=${encodeURIComponent(stringValue(formData, "tenantId"))}`);
+  redirect(`/subscriptions?override=1&tenantId=${encodeURIComponent(stringValue(formData, "tenantId"))}#subscriptions-top`);
 }
 
 async function requirePlatformSession() {
@@ -135,4 +136,13 @@ function optionalIntegerValue(formData: FormData, key: string) {
   }
 
   return value;
+}
+
+function sectionValue(formData: FormData) {
+  const section = stringValue(formData, "section").trim().toLowerCase();
+  return ["crm", "fsm", "tex", "cme", "lqs"].includes(section) ? section : "";
+}
+
+function sectionQuery(section: string) {
+  return section ? `section=${encodeURIComponent(section)}&` : "";
 }
