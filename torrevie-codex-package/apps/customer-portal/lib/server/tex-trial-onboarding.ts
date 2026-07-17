@@ -135,13 +135,14 @@ async function seedTrialTenant(input: {
   tenantId: string;
   userId: string;
 }) {
+  const databaseConnection = requireDatabaseConnectionString();
   const client = new Client({
-    connectionString: requireEnv("DATABASE_URL", "POSTGRES_URL", "SUPABASE_DB_URL"),
+    connectionString: databaseConnection.value,
     ssl: process.env.TORREVIE_DATABASE_SSL === "true" ? { rejectUnauthorized: false } : undefined
   });
-  await client.connect();
 
   try {
+    await client.connect();
     await client.query("begin");
     await client.query("select set_config('app.platform_service_role', 'true', true)");
     await client.query("select set_config('app.current_tenant_id', $1, true)", [input.tenantId]);
@@ -364,10 +365,20 @@ async function seedTrialTenant(input: {
     );
     await client.query("commit");
   } catch (error) {
-    await client.query("rollback");
+    await client.query("rollback").catch(() => undefined);
+    console.error(
+      JSON.stringify({
+        event: "tex.trial.seed_failed",
+        databaseEnv: databaseConnection.name,
+        sslEnabled: process.env.TORREVIE_DATABASE_SSL === "true",
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorCode: typeof error === "object" && error && "code" in error ? String(error.code) : null,
+        errorMessage: sanitizeSeedErrorMessage(error instanceof Error ? error.message : String(error))
+      })
+    );
     throw error;
   } finally {
-    await client.end();
+    await client.end().catch(() => undefined);
   }
 }
 
@@ -405,4 +416,23 @@ function requireEnv(...names: string[]) {
   }
 
   throw new Error(`Missing required environment variable: ${names.join(" or ")}`);
+}
+
+function requireDatabaseConnectionString() {
+  for (const name of ["DATABASE_URL", "POSTGRES_URL", "SUPABASE_DB_URL"]) {
+    const value = process.env[name]?.trim();
+    if (value) {
+      return { name, value };
+    }
+  }
+
+  throw new Error("Missing required environment variable: DATABASE_URL or POSTGRES_URL or SUPABASE_DB_URL");
+}
+
+function sanitizeSeedErrorMessage(message: string) {
+  return message
+    .replace(/postgres(?:ql)?:\/\/\\S+/gi, "[redacted-postgres-url]")
+    .replace(/Bearer\\s+[A-Za-z0-9._-]+/gi, "Bearer [redacted]")
+    .replace(/apikey\\s+[A-Za-z0-9._-]+/gi, "apikey [redacted]")
+    .slice(0, 500);
 }
