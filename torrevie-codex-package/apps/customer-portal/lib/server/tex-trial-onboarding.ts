@@ -354,10 +354,10 @@ async function seedTrialTenant(input: {
           $1,
           jsonb_build_object(
             'plan', 'trial',
-            'trial_days', $4,
-            'employee_limit', $5,
+            'trial_days', $4::integer,
+            'employee_limit', $5::integer,
             'source', 'app.torrevie.com/tex',
-            'country', $3
+            'country', $3::text
           )
         )
       `,
