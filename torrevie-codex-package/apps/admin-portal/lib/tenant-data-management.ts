@@ -8,6 +8,9 @@ export const tenantExportTables = [
   "user_role_assignments",
   "subscriptions",
   "subscription_entitlements",
+  "tex_plan_controls",
+  "tex_onboarding_status",
+  "tex_enterprise_requests",
   "audit_events",
   "provisioning_jobs",
   "provisioning_steps",
@@ -108,7 +111,11 @@ export async function buildTenantExport(
   };
 }
 
-export async function hardDeleteTenantData(client: SupabaseClient, tenantId: string, confirmationSlug: string) {
+export async function hardDeleteTenantData(
+  client: SupabaseClient,
+  tenantId: string,
+  confirmationSlug: string
+) {
   assertUuid(tenantId, "tenant id");
   const tenant = await getTenant(client, tenantId);
 
@@ -116,7 +123,10 @@ export async function hardDeleteTenantData(client: SupabaseClient, tenantId: str
     throw new Error(`Type the tenant slug "${tenant.slug}" to confirm permanent deletion.`);
   }
 
-  const { error: auditDeleteError } = await client.from("audit_events").delete().eq("tenant_id", tenantId);
+  const { error: auditDeleteError } = await client
+    .from("audit_events")
+    .delete()
+    .eq("tenant_id", tenantId);
 
   if (auditDeleteError) {
     throw new Error(`Unable to delete tenant audit events: ${auditDeleteError.message}`);
@@ -132,7 +142,8 @@ export async function hardDeleteTenantData(client: SupabaseClient, tenantId: str
 }
 
 export function tenantExportFilename(tenant: { slug?: unknown; id?: unknown }) {
-  const slug = typeof tenant.slug === "string" && tenant.slug ? tenant.slug : String(tenant.id ?? "tenant");
+  const slug =
+    typeof tenant.slug === "string" && tenant.slug ? tenant.slug : String(tenant.id ?? "tenant");
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   return `${slug}-tenant-export-${stamp}.json`;
 }
