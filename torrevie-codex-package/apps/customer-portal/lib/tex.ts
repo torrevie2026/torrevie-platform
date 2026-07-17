@@ -1,13 +1,47 @@
 import { randomUUID } from "node:crypto";
-import { assertPermission, roleKeys, type PermissionKey, type ProductKey, type RoleKey } from "@torrevie/permissions";
-import { withTenantContext, type ResolvedTenantContext, type TenantQueryClient } from "@torrevie/tenant-context";
+import {
+  assertPermission,
+  roleKeys,
+  type PermissionKey,
+  type ProductKey,
+  type RoleKey
+} from "@torrevie/permissions";
+import {
+  dispatchEmailNotification,
+  dispatchWhatsAppNotification,
+  type EmailDispatchResult,
+  type WhatsAppDispatchResult,
+  type WhatsAppProvider
+} from "@torrevie/notifications";
+import {
+  withTenantContext,
+  type ResolvedTenantContext,
+  type TenantQueryClient
+} from "@torrevie/tenant-context";
 import { extractReceiptWithAI, type TexReceiptExtraction } from "./tex-ai";
 
 export type TexActorContext = ResolvedTenantContext & {
   roles: readonly RoleKey[];
   entitledProducts: readonly ProductKey[];
+  texPlan: TexPlanContext;
   moduleAdminProducts?: readonly ProductKey[];
   integrationPermissions?: readonly PermissionKey[];
+};
+
+export type TexPlanKey = "trial" | "lite" | "growth" | "enterprise";
+export type TexPlanStatus = "trialing" | "active" | "expired" | "suspended" | "cancelled";
+export type TexWhatsappProviderScope = "not_configured" | "torrevie_managed" | "customer_owned";
+
+export type TexPlanContext = {
+  planKey: TexPlanKey;
+  planStatus: TexPlanStatus;
+  trialStartDate: string | null;
+  trialEndDate: string | null;
+  employeeLimit: number;
+  seatCount: number;
+  whatsappProviderScope: TexWhatsappProviderScope;
+  growthFeaturesEnabled: boolean;
+  enterpriseFeaturesEnabled: boolean;
 };
 
 export type TexExpenseStatus = "pending" | "approved" | "rejected" | "paid";
@@ -15,8 +49,22 @@ export type TexExpenseStatus = "pending" | "approved" | "rejected" | "paid";
 export type TexBootstrap = {
   categories: TexExpenseCategory[];
   employeeProfiles: TexEmployeeProfile[];
+  managerUsers: TexManagerUser[];
   teams: TexTeam[];
   integrationSettings: TexIntegrationSettings | null;
+};
+
+export type TexOnboardingStatus = {
+  companyProfileCompletedAt: string | null;
+  whatsappConnectedAt: string | null;
+  firstEmployeeInvitedAt: string | null;
+  firstReceiptReceivedAt: string | null;
+  firstExpenseApprovedAt: string | null;
+  dashboardFirstViewedAt: string | null;
+  lastActivityAt: string | null;
+  ocrPendingCount: number;
+  manualReviewCount: number;
+  progress: number;
 };
 
 export type TexExpenseCategory = {
@@ -24,6 +72,13 @@ export type TexExpenseCategory = {
   name: string;
   isActive: boolean;
   isSystem: boolean;
+  sortOrder: number;
+};
+
+export type TexExpenseCategoryInput = {
+  name: string;
+  isActive?: boolean | null;
+  sortOrder?: number | null;
 };
 
 export type TexEmployeeProfile = {
@@ -32,6 +87,11 @@ export type TexEmployeeProfile = {
   name: string;
   phoneNumber: string;
   department: string | null;
+  monthlySalary: number;
+  managerUserId: string | null;
+  managerName: string | null;
+  managerEmail: string | null;
+  submissionFrequency: "realtime" | "daily" | "weekly" | "monthly";
   isActive: boolean;
 };
 
@@ -39,13 +99,35 @@ export type TexEmployeeProfileInput = {
   name: string;
   phoneNumber: string;
   department?: string | null;
+  monthlySalary?: number | null;
+  managerUserId?: string | null;
+  submissionFrequency?: "realtime" | "daily" | "weekly" | "monthly" | null;
   isActive: boolean;
+};
+
+export type TexManagerUser = {
+  id: string;
+  email: string;
+  displayName: string | null;
+  roles: RoleKey[];
 };
 
 export type TexTeam = {
   id: string;
   name: string;
   description: string | null;
+  managerEmployeeProfileId: string | null;
+  managerName: string | null;
+  memberEmployeeProfileIds: string[];
+  memberNames: string[];
+  memberCount: number;
+};
+
+export type TexTeamInput = {
+  name: string;
+  description?: string | null;
+  managerEmployeeProfileId?: string | null;
+  memberEmployeeProfileIds?: string[] | null;
 };
 
 export type TexIntegrationSettings = {
@@ -58,6 +140,63 @@ export type TexIntegrationSettings = {
   duplicateDetectionEnabled: boolean;
   duplicateAutoRejectEnabled: boolean;
   duplicateSimilarityThreshold: number;
+};
+
+export type TexProviderProfileSummary = {
+  id: string;
+  label: string;
+  provider: "ultramsg" | "wappfly" | "meta";
+  status: "active" | "inactive";
+  isDefault: boolean;
+  webhookUrl: string | null;
+  apiKeyConfigured: boolean;
+  apiKeyLast4: string;
+};
+
+export type TexQuickConnectStatus =
+  | "idle"
+  | "qr_pending"
+  | "connected"
+  | "disconnected"
+  | "failed";
+
+export type TexQuickConnectSession = {
+  id: string;
+  status: TexQuickConnectStatus;
+  pairingCode: string | null;
+  qrCodeData: string | null;
+  qrExpiresAt: string | null;
+  connectedPhone: string | null;
+  connectedAt: string | null;
+  lastSeenAt: string | null;
+  error: string | null;
+  updatedAt: string;
+};
+
+export type TexQuickConnectEvent = {
+  id: string;
+  eventType: string;
+  direction: "inbound" | "outbound" | "system";
+  status: string | null;
+  message: string | null;
+  occurredAt: string;
+};
+
+export type TexIntegrationWorkspace = {
+  settings: TexIntegrationSettings | null;
+  providerProfiles: TexProviderProfileSummary[];
+  defaultProviderProfile: TexProviderProfileSummary | null;
+  quickConnect: {
+    available: boolean;
+    connectorActive: boolean;
+    session: TexQuickConnectSession | null;
+    events: TexQuickConnectEvent[];
+  };
+  receiptStorage: {
+    bucket: string;
+    pathPrefix: string;
+    convention: string;
+  };
 };
 
 export type TexExpenseInput = {
@@ -102,6 +241,13 @@ export type TexReceiptFileRecord = {
   url: string;
 };
 
+export type TexReceiptDownload = {
+  buffer: Buffer;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+};
+
 export type TexExpenseListItem = TexExpenseRecord & {
   employeeName: string | null;
   vendor: string | null;
@@ -109,6 +255,8 @@ export type TexExpenseListItem = TexExpenseRecord & {
   category: string | null;
   tripName: string | null;
   notes: string | null;
+  receiptFileId: string | null;
+  receiptUrl: string | null;
   createdAt: string;
   duplicateStatus: "clear" | "suspected" | "duplicate";
   duplicateReason: string | null;
@@ -217,6 +365,7 @@ export type TexTripInput = {
   origin?: string | null;
   destination?: string | null;
   budgetAmount?: number | null;
+  advanceDepositFileId?: string | null;
   startDate?: string | null;
   endDate?: string | null;
   enforceCurrency?: boolean | null;
@@ -277,6 +426,180 @@ export type TexFinancePaymentInput = {
   tripIds?: string[];
 };
 
+export type TexEmailReportInput = {
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  recipients?: string[];
+};
+
+export type TexEmailReportResult = {
+  status: EmailDispatchResult["status"];
+  provider: EmailDispatchResult["provider"];
+  recipients: string[];
+  messageId: string | null;
+  error: string | null;
+};
+
+export type TexFxRate = {
+  id: string;
+  rateDate: string;
+  fromCurrency: string;
+  toCurrency: string;
+  rate: number;
+  source: string | null;
+  isManualOverride: boolean;
+};
+
+export type TexCurrencyPeg = {
+  fromCurrency: string;
+  toCurrency: string;
+  rate: number;
+  effectiveFrom: string;
+  notes: string | null;
+};
+
+export type TexFxWorkspace = {
+  rateDate: string;
+  baseCurrency: string;
+  rates: TexFxRate[];
+  pegs: TexCurrencyPeg[];
+};
+
+export type TexFxRefreshResult = {
+  success: boolean;
+  source: "live" | "fallback" | "none";
+  updated: number;
+  skipped: number;
+  pegged: number;
+  errors: string[];
+  rateDate: string;
+};
+
+export type TexReportInput = {
+  dateFrom?: string | null;
+  dateTo?: string | null;
+};
+
+export type TexReportExpense = {
+  id: string;
+  employeeProfileId: string | null;
+  employeeName: string | null;
+  vendor: string | null;
+  expenseDate: string;
+  amount: number;
+  currency: string;
+  baseAmount: number;
+  category: string | null;
+  tripId: string | null;
+  tripName: string | null;
+  paymentMethod: string | null;
+  source: string | null;
+  status: TexExpenseStatus;
+  policyFlag: boolean;
+  taxAmount: number | null;
+  taxIdNumber: string | null;
+  approvedAt: string | null;
+  paidAt: string | null;
+  createdAt: string;
+};
+
+export type TexReportWorkspace = {
+  dateFrom: string;
+  dateTo: string;
+  previousDateFrom: string;
+  previousDateTo: string;
+  currency: string;
+  expenses: TexReportExpense[];
+  previousExpenses: TexReportExpense[];
+};
+
+export type TexDriverAdvanceInput = {
+  employeeProfileId?: string | null;
+  amount: number;
+  currency?: string | null;
+  baseAmount?: number | null;
+  advanceDate?: string | null;
+  month?: number | null;
+  year?: number | null;
+  notes?: string | null;
+};
+
+export type TexDriverAdvance = {
+  id: string;
+  employeeProfileId: string;
+  amount: number;
+  currency: string;
+  baseAmount: number;
+  advanceDate: string;
+  month: number;
+  year: number;
+  notes: string | null;
+};
+
+export type TexNotificationInput = {
+  userId?: string | null;
+  title: string;
+  body?: string | null;
+  type?: string | null;
+  relatedExpenseId?: string | null;
+  relatedTripId?: string | null;
+};
+
+export type TexNotification = {
+  id: string;
+  userId: string | null;
+  title: string;
+  body: string | null;
+  type: string | null;
+  relatedExpenseId: string | null;
+  relatedTripId: string | null;
+  isRead: boolean;
+  createdAt: string;
+};
+
+export type TexSpendPolicy = {
+  id: string | null;
+  category: string;
+  dailyLimit: number | null;
+  monthlyLimit: number | null;
+  requiresNotesAbove: number | null;
+  isBlocked: boolean;
+};
+
+export type TexSpendPolicyInput = {
+  category: string;
+  dailyLimit?: number | null;
+  monthlyLimit?: number | null;
+  requiresNotesAbove?: number | null;
+  isBlocked?: boolean | null;
+};
+
+export type TexBudget = {
+  id: string;
+  department: string;
+  month: number;
+  year: number;
+  budgetAmount: number;
+  spentAmount: number;
+  remainingAmount: number;
+};
+
+export type TexBudgetInput = {
+  department: string;
+  month: number;
+  year: number;
+  budgetAmount: number;
+};
+
+export type TexSettingsWorkspace = {
+  categories: TexExpenseCategory[];
+  policies: TexSpendPolicy[];
+  budgets: TexBudget[];
+  departments: string[];
+  month: number;
+  year: number;
+};
+
 export type TexWebhookSubmissionInput = {
   senderRaw?: string | null;
   senderPhone?: string | null;
@@ -296,12 +619,76 @@ export type TexWebhookSubmissionRecord = {
   status: "open" | "resolved" | "ignored";
 };
 
+export type TexUnregisteredWhatsappSubmission = TexWebhookSubmissionRecord & {
+  senderRaw: string | null;
+  senderPhone: string | null;
+  whatsappChatJid: string | null;
+  messageId: string | null;
+  sessionId: string | null;
+  messageText: string | null;
+  receiptFileId: string | null;
+  mediaUrl: string | null;
+  mediaMimeType: string | null;
+  messageType: "receipt" | "status" | "text";
+  ocrStatus: TexWhatsappReceiptResult["ocrStatus"];
+  ocrResult: TexReceiptExtraction | null;
+  ocrError: string | null;
+  whatsappReplyText: string | null;
+  resolvedExpenseId: string | null;
+  resolvedEmployeeProfileId: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+};
+
+export type TexUnregisteredWhatsappResolveInput = {
+  mode: "existing_employee" | "new_employee";
+  employeeProfileId?: string | null;
+  employeeName?: string | null;
+  phoneNumber?: string | null;
+  department?: string | null;
+};
+
+export type TexUnregisteredWhatsappResolveResult = {
+  submission: TexWebhookSubmissionRecord;
+  employee: TexEmployeeProfile;
+  expense: TexExpenseRecord;
+  delivery: WhatsAppDispatchResult | null;
+};
+
 export type TexWhatsappReceiptResult = {
   submission: TexWebhookSubmissionRecord;
   replyText: string;
   expense: TexExpenseRecord | null;
   ocrStatus: "pending" | "processing" | "extracted" | "failed" | "manual_review" | "not_applicable";
+  delivery: WhatsAppDispatchResult | null;
 };
+
+let texWhatsappNotificationDispatcher = dispatchWhatsAppNotification;
+let texEmailNotificationDispatcher = dispatchEmailNotification;
+
+const TEX_FX_TARGET_CURRENCIES = [
+  "EUR",
+  "GBP",
+  "EGP",
+  "KES",
+  "NGN",
+  "ZAR",
+  "MAD",
+  "CHF",
+  "SEK",
+  "NOK",
+  "DKK",
+  "PLN",
+  "CZK",
+  "HUF",
+  "TRY",
+  "INR",
+  "PKR",
+  "CAD",
+  "AUD",
+  "JPY",
+  "CNY"
+] as const;
 
 export async function resolveTexActorContext(
   client: TenantQueryClient,
@@ -332,7 +719,7 @@ export async function resolveTexActorContext(
       throw new Error("The user is deactivated.");
     }
 
-    const [roles, entitledProducts] = await Promise.all([
+    const [roles, entitledProducts, texPlan] = await Promise.all([
       client.query<TexRoleRow>(
         `
           select r.key
@@ -353,49 +740,244 @@ export async function resolveTexActorContext(
             and s.starts_at <= now()
             and (s.expires_at is null or s.expires_at > now())
         `
+      ),
+      client.query<TexPlanContextRow>(
+        `
+          select
+            coalesce(tpc.plan_key::text, plans.key, 'trial') as plan_key,
+            coalesce(
+              tpc.plan_status::text,
+              case when s.status = 'trial' then 'trialing' else s.status end,
+              'trialing'
+            ) as plan_status,
+            coalesce(tpc.trial_start_date::text, s.starts_at::date::text) as trial_start_date,
+            coalesce(tpc.trial_end_date::text, s.expires_at::date::text) as trial_end_date,
+            coalesce(tpc.employee_limit, pf.limit_value, 5)::int as employee_limit,
+            coalesce(tpc.seat_count, 0)::int as seat_count,
+            coalesce(tpc.whatsapp_provider_scope::text, 'not_configured') as whatsapp_provider_scope
+          from public.subscriptions s
+          join public.products products
+            on products.id = s.product_id
+          join public.plans plans
+            on plans.id = s.plan_id
+          left join public.tex_plan_controls tpc
+            on tpc.tenant_id = s.tenant_id
+          left join public.plan_features pf
+            on pf.plan_id = plans.id
+           and pf.feature_key = 'tex.employee_limit'
+          where s.tenant_id = public.current_tenant_id()
+            and products.key = 'tex'
+            and s.status in ('trial', 'active')
+            and s.starts_at <= now()
+            and (s.expires_at is null or s.expires_at > now())
+          order by s.created_at desc
+          limit 1
+        `
       )
     ]);
     const resolvedRoles = roles.rows.map((row) => row.key).filter(isRoleKey);
     const resolvedProducts = entitledProducts.rows.map((row) => row.key).filter(isProductKey);
+    const resolvedTexPlan = mapTexPlanContext(texPlan.rows[0]);
 
     return {
       ...context,
       roles: resolvedRoles,
       entitledProducts: resolvedProducts,
+      texPlan: resolvedTexPlan,
       moduleAdminProducts: resolvedRoles.includes("customer_module_admin") ? resolvedProducts : []
     };
   });
 }
 
-export async function listTexBootstrap(client: TenantQueryClient, actor: TexActorContext): Promise<TexBootstrap> {
+export async function listTexBootstrap(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<TexBootstrap> {
   assertTexPermission(actor, "tex.expense.read");
 
   return withTenantContext(client, actor, async () => {
-    const [categories, employeeProfiles, teams, integrationSettings] = await Promise.all([
-      client.query<TexExpenseCategoryRow>(
-        `
-          select id, name, is_active, is_system
+    const [categories, employeeProfiles, managerUsers, teams, integrationSettings] =
+      await Promise.all([
+        client.query<TexExpenseCategoryRow>(
+          `
+          select id, name, is_active, is_system, sort_order
           from public.tex_expense_categories
           where tenant_id = public.current_tenant_id()
           order by sort_order asc, name asc
         `
-      ),
-      client.query<TexEmployeeProfileRow>(
+        ),
+        client.query<TexEmployeeProfileRow>(
+          `
+          select
+            ep.id,
+            ep.user_id,
+            ep.name,
+            ep.phone_number,
+            ep.department,
+            ep.monthly_salary::float as monthly_salary,
+            ep.manager_user_id,
+            manager_profile.display_name as manager_name,
+            manager_user.email as manager_email,
+            ep.submission_frequency,
+            ep.is_active
+          from public.tex_employee_profiles ep
+          left join public.users manager_user
+            on manager_user.id = ep.manager_user_id
+          left join public.user_profiles manager_profile
+            on manager_profile.tenant_id = ep.tenant_id
+           and manager_profile.user_id = ep.manager_user_id
+          where ep.tenant_id = public.current_tenant_id()
+          order by ep.name asc
         `
-          select id, user_id, name, phone_number, department, is_active
-          from public.tex_employee_profiles
+        ),
+        client.query<TexManagerUserRow>(
+          `
+          select
+            u.id,
+            u.email,
+            up.display_name,
+            coalesce(array_agg(r.key order by r.key) filter (where r.key is not null), '{}') as roles
+          from public.tenant_memberships tm
+          join public.users u on u.id = tm.user_id
+          left join public.user_profiles up
+            on up.tenant_id = tm.tenant_id
+           and up.user_id = tm.user_id
+          left join public.user_role_assignments ura
+            on ura.tenant_id = tm.tenant_id
+           and ura.user_id = tm.user_id
+          left join public.roles r on r.id = ura.role_id
+          where tm.tenant_id = public.current_tenant_id()
+            and tm.status = 'active'
+            and u.status = 'active'
+          group by u.id, u.email, up.display_name
+          order by coalesce(up.display_name, u.email) asc
+        `
+        ),
+        client.query<TexTeamRow>(
+          `
+          select
+            t.id,
+            t.name,
+            t.description,
+            t.manager_employee_profile_id,
+            manager.name as manager_name,
+            coalesce(
+              string_agg(member.id::text, ',' order by member.name)
+                filter (where member.id is not null),
+              ''
+            ) as member_employee_profile_ids,
+            coalesce(
+              string_agg(member.name, '|' order by member.name)
+                filter (where member.id is not null),
+              ''
+            ) as member_names,
+            count(member.id)::int as member_count
+          from public.tex_teams t
+          left join public.tex_employee_profiles manager
+            on manager.tenant_id = t.tenant_id
+           and manager.id = t.manager_employee_profile_id
+          left join public.tex_team_members tm
+            on tm.tenant_id = t.tenant_id
+           and tm.team_id = t.id
+          left join public.tex_employee_profiles member
+            on member.tenant_id = tm.tenant_id
+           and member.id = tm.employee_profile_id
+          where t.tenant_id = public.current_tenant_id()
+          group by t.id, manager.name
+          order by t.name asc
+        `
+        ),
+        client.query<TexIntegrationSettingsRow>(
+          `
+          select
+            whatsapp_provider,
+            whatsapp_instance_id,
+            wappfly_session_id,
+            meta_phone_number_id,
+            meta_whatsapp_business_account_id,
+            ai_receipt_extraction_enabled,
+            duplicate_detection_enabled,
+            duplicate_auto_reject_enabled,
+            duplicate_similarity_threshold::float as duplicate_similarity_threshold
+          from public.tex_integration_settings
           where tenant_id = public.current_tenant_id()
-          order by name asc
+          limit 1
         `
-      ),
-      client.query<TexTeamRow>(
-        `
-          select id, name, description
-          from public.tex_teams
-          where tenant_id = public.current_tenant_id()
-          order by name asc
-        `
-      ),
+        )
+      ]);
+
+    return {
+      categories: categories.rows.map(mapCategory),
+      employeeProfiles: employeeProfiles.rows.map(mapEmployeeProfile),
+      managerUsers: managerUsers.rows.map(mapManagerUser),
+      teams: teams.rows.map(mapTeam),
+      integrationSettings: integrationSettings.rows[0]
+        ? mapIntegrationSettings(integrationSettings.rows[0])
+        : null
+    };
+  });
+}
+
+export async function getTexOnboardingStatus(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  options: { markDashboardViewed?: boolean } = {}
+): Promise<TexOnboardingStatus> {
+  assertTexPermission(actor, "tex.expense.read");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexOnboardingStatusRow>(
+      `
+        insert into public.tex_onboarding_status (
+          tenant_id,
+          dashboard_first_viewed_at,
+          last_activity_at,
+          created_by,
+          updated_by
+        )
+        values (
+          public.current_tenant_id(),
+          case when $2::boolean then now() else null end,
+          now(),
+          $1,
+          $1
+        )
+        on conflict (tenant_id) do update set
+          dashboard_first_viewed_at = case
+            when $2::boolean then coalesce(
+              public.tex_onboarding_status.dashboard_first_viewed_at,
+              excluded.dashboard_first_viewed_at
+            )
+            else public.tex_onboarding_status.dashboard_first_viewed_at
+          end,
+          last_activity_at = excluded.last_activity_at,
+          updated_by = excluded.updated_by
+        returning
+          company_profile_completed_at::text as company_profile_completed_at,
+          whatsapp_connected_at::text as whatsapp_connected_at,
+          first_employee_invited_at::text as first_employee_invited_at,
+          first_receipt_received_at::text as first_receipt_received_at,
+          first_expense_approved_at::text as first_expense_approved_at,
+          dashboard_first_viewed_at::text as dashboard_first_viewed_at,
+          last_activity_at::text as last_activity_at,
+          ocr_pending_count,
+          manual_review_count
+      `,
+      [actor.userId, options.markDashboardViewed === true]
+    );
+
+    return mapOnboardingStatus(requireSingleRow(result.rows, "TEX onboarding status"));
+  });
+}
+
+export async function listTexIntegrationWorkspace(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<TexIntegrationWorkspace> {
+  assertTexPermission(actor, "tex.integration.manage");
+
+  return withTenantContext(client, actor, async () => {
+    const [settings, providerProfiles, quickConnect] = await Promise.all([
       client.query<TexIntegrationSettingsRow>(
         `
           select
@@ -412,19 +994,221 @@ export async function listTexBootstrap(client: TenantQueryClient, actor: TexActo
           where tenant_id = public.current_tenant_id()
           limit 1
         `
-      )
+      ),
+      client.query<TexProviderProfileSummaryRow>(
+        `
+          select
+            id,
+            label,
+            provider,
+            status,
+            is_default,
+            webhook_url,
+            api_key_last4,
+            keys_configured
+          from public.tenant_whatsapp_provider_profiles
+          where tenant_id = public.current_tenant_id()
+          order by is_default desc, label asc
+        `
+      ),
+      listTexQuickConnectWorkspace(client)
     ]);
+    const profiles = providerProfiles.rows.map(mapProviderProfileSummary);
 
     return {
-      categories: categories.rows.map(mapCategory),
-      employeeProfiles: employeeProfiles.rows.map(mapEmployeeProfile),
-      teams: teams.rows.map(mapTeam),
-      integrationSettings: integrationSettings.rows[0] ? mapIntegrationSettings(integrationSettings.rows[0]) : null
+      settings: settings.rows[0] ? mapIntegrationSettings(settings.rows[0]) : null,
+      providerProfiles: profiles,
+      defaultProviderProfile: profiles.find((profile) => profile.isDefault) ?? null,
+      quickConnect,
+      receiptStorage: {
+        bucket: receiptBucketName(),
+        pathPrefix: `tenant/${actor.tenantId}/tex/receipts/`,
+        convention: "tenant/{tenant_id}/tex/receipts/{file_id}.{extension}"
+      }
     };
   });
 }
 
-export async function listTexExpenses(client: TenantQueryClient, actor: TexActorContext): Promise<TexExpenseListItem[]> {
+export async function startTexQuickConnectPairing(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<TexQuickConnectSession> {
+  assertTexPermission(actor, "tex.integration.manage");
+  if (!isTexQuickConnectConnectorActive()) {
+    const error = new Error("Quick Connect connector is offline.");
+    (error as Error & { statusCode?: number }).statusCode = 503;
+    throw error;
+  }
+
+  return withTenantContext(client, actor, async () => {
+    const pairingCode = randomUUID();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    const result = await client.query<TexQuickConnectSessionRow>(
+      `
+        insert into public.tex_quick_connect_sessions (
+          tenant_id,
+          status,
+          pairing_code,
+          qr_code_data,
+          qr_expires_at,
+          connected_phone,
+          connected_at,
+          last_seen_at,
+          error,
+          created_by,
+          updated_by
+        )
+        values (
+          public.current_tenant_id(),
+          'qr_pending',
+          $1,
+          null,
+          $2,
+          null,
+          null,
+          null,
+          null,
+          $3,
+          $3
+        )
+        on conflict (tenant_id)
+        do update set
+          status = 'qr_pending',
+          pairing_code = excluded.pairing_code,
+          qr_code_data = null,
+          qr_expires_at = excluded.qr_expires_at,
+          connected_phone = null,
+          connected_at = null,
+          error = null,
+          updated_by = excluded.updated_by,
+          updated_at = now()
+        returning
+          id,
+          status,
+          pairing_code,
+          qr_code_data,
+          qr_expires_at::text as qr_expires_at,
+          connected_phone,
+          connected_at::text as connected_at,
+          last_seen_at::text as last_seen_at,
+          error,
+          updated_at::text as updated_at
+      `,
+      [pairingCode, expiresAt, actor.userId]
+    );
+    const session = mapQuickConnectSession(requireSingleRow(result.rows, "Quick Connect session"));
+
+    await recordQuickConnectEvent(client, actor, session.id, {
+      eventType: "quick_connect.pairing_requested",
+      status: session.status,
+      message: "Pairing QR request queued for the WhatsApp linked-device connector.",
+      metadata: {
+        qr_expires_at: expiresAt
+      }
+    });
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.quick_connect.pairing_requested",
+      "tex_quick_connect_session",
+      session.id,
+      {
+        status: session.status,
+        qr_expires_at: expiresAt
+      }
+    );
+
+    return session;
+  });
+}
+
+export async function disconnectTexQuickConnect(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<TexQuickConnectSession> {
+  assertTexPermission(actor, "tex.integration.manage");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexQuickConnectSessionRow>(
+      `
+        insert into public.tex_quick_connect_sessions (
+          tenant_id,
+          status,
+          pairing_code,
+          qr_code_data,
+          qr_expires_at,
+          connected_phone,
+          connected_at,
+          last_seen_at,
+          error,
+          created_by,
+          updated_by
+        )
+        values (
+          public.current_tenant_id(),
+          'disconnected',
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          $1,
+          $1
+        )
+        on conflict (tenant_id)
+        do update set
+          status = 'disconnected',
+          pairing_code = null,
+          qr_code_data = null,
+          qr_expires_at = null,
+          connected_phone = null,
+          connected_at = null,
+          error = null,
+          updated_by = excluded.updated_by,
+          updated_at = now()
+        returning
+          id,
+          status,
+          pairing_code,
+          qr_code_data,
+          qr_expires_at::text as qr_expires_at,
+          connected_phone,
+          connected_at::text as connected_at,
+          last_seen_at::text as last_seen_at,
+          error,
+          updated_at::text as updated_at
+      `,
+      [actor.userId]
+    );
+    const session = mapQuickConnectSession(requireSingleRow(result.rows, "Quick Connect session"));
+
+    await recordQuickConnectEvent(client, actor, session.id, {
+      eventType: "quick_connect.disconnected",
+      status: session.status,
+      message: "Quick Connect linked-device session was disconnected from TEX.",
+      metadata: {}
+    });
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.quick_connect.disconnected",
+      "tex_quick_connect_session",
+      session.id,
+      {
+        status: session.status
+      }
+    );
+
+    return session;
+  });
+}
+
+export async function listTexExpenses(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<TexExpenseListItem[]> {
   assertTexPermission(actor, "tex.expense.read");
 
   return withTenantContext(client, actor, async () => {
@@ -440,6 +1224,7 @@ export async function listTexExpenses(client: TenantQueryClient, actor: TexActor
           e.category,
           coalesce(t.name, e.trip_name) as trip_name,
           e.notes,
+          e.receipt_file_id,
           e.status,
           e.created_at::text as created_at,
           e.duplicate_status,
@@ -462,6 +1247,86 @@ export async function listTexExpenses(client: TenantQueryClient, actor: TexActor
   });
 }
 
+export async function createTexEmployeeProfile(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexEmployeeProfileInput
+): Promise<TexEmployeeProfile> {
+  assertTexPermission(actor, "tex.people.manage");
+
+  const name = cleanRequired(input.name, "Employee name");
+  const phoneNumber = normalizePhoneDigits(input.phoneNumber);
+  const department = cleanOptional(input.department);
+  const monthlySalary = optionalNonNegative(input.monthlySalary, "monthly salary") ?? 0;
+  const managerUserId = sanitizeOptionalUuid(input.managerUserId, "manager user id");
+  const submissionFrequency = sanitizeSubmissionFrequency(input.submissionFrequency);
+
+  if (!phoneNumber) {
+    throw new Error("Employee WhatsApp phone is required.");
+  }
+
+  return withTenantContext(client, actor, async () => {
+    if (managerUserId) {
+      await assertTenantManagerUser(client, managerUserId);
+    }
+    await assertTexEmployeeLimitAvailable(client, actor, phoneNumber);
+
+    const result = await client.query<TexEmployeeProfileRow>(
+      `
+        insert into public.tex_employee_profiles (
+          tenant_id,
+          name,
+          phone_number,
+          department,
+          monthly_salary,
+          manager_user_id,
+          submission_frequency,
+          is_active,
+          created_by,
+          updated_by
+        )
+        values (public.current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, $8, $8)
+        returning
+          id,
+          user_id,
+          name,
+          phone_number,
+          department,
+          monthly_salary::float as monthly_salary,
+          manager_user_id,
+          null::text as manager_name,
+          null::text as manager_email,
+          submission_frequency,
+          is_active
+      `,
+      [
+        name,
+        phoneNumber,
+        department,
+        monthlySalary,
+        managerUserId,
+        submissionFrequency,
+        input.isActive,
+        actor.userId
+      ]
+    );
+    const employee = requireSingleRow(result.rows, "employee profile");
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.employee.created",
+      "tex_employee_profile",
+      employee.id,
+      {
+        employee_name: employee.name
+      }
+    );
+
+    return mapEmployeeProfile(employee);
+  });
+}
+
 export async function updateTexEmployeeProfile(
   client: TenantQueryClient,
   actor: TexActorContext,
@@ -474,31 +1339,69 @@ export async function updateTexEmployeeProfile(
   const name = cleanRequired(input.name, "Employee name");
   const phoneNumber = normalizePhoneDigits(input.phoneNumber);
   const department = cleanOptional(input.department);
+  const monthlySalary = optionalNonNegative(input.monthlySalary, "monthly salary") ?? 0;
+  const managerUserId = sanitizeOptionalUuid(input.managerUserId, "manager user id");
+  const submissionFrequency = sanitizeSubmissionFrequency(input.submissionFrequency);
 
   if (!phoneNumber) {
     throw new Error("Employee WhatsApp phone is required.");
   }
 
   return withTenantContext(client, actor, async () => {
+    if (managerUserId) {
+      await assertTenantManagerUser(client, managerUserId);
+    }
+
     const result = await client.query<TexEmployeeProfileRow>(
       `
         update public.tex_employee_profiles
            set name = $2,
                phone_number = $3,
                department = $4,
-               is_active = $5,
-               updated_by = $6
+               monthly_salary = $5,
+               manager_user_id = $6,
+               submission_frequency = $7,
+               is_active = $8,
+               updated_by = $9
          where tenant_id = public.current_tenant_id()
            and id = $1
-        returning id, user_id, name, phone_number, department, is_active
+        returning
+          id,
+          user_id,
+          name,
+          phone_number,
+          department,
+          monthly_salary::float as monthly_salary,
+          manager_user_id,
+          null::text as manager_name,
+          null::text as manager_email,
+          submission_frequency,
+          is_active
       `,
-      [employeeProfileId, name, phoneNumber, department, input.isActive, actor.userId]
+      [
+        employeeProfileId,
+        name,
+        phoneNumber,
+        department,
+        monthlySalary,
+        managerUserId,
+        submissionFrequency,
+        input.isActive,
+        actor.userId
+      ]
     );
     const employee = requireSingleRow(result.rows, "employee profile");
 
-    await writeTexAuditEvent(client, actor, "tex.employee.updated", "tex_employee_profile", employee.id, {
-      employee_name: employee.name
-    });
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.employee.updated",
+      "tex_employee_profile",
+      employee.id,
+      {
+        employee_name: employee.name
+      }
+    );
 
     return mapEmployeeProfile(employee);
   });
@@ -524,13 +1427,153 @@ export async function deleteTexEmployeeProfile(
     );
     const employee = requireSingleRow(result.rows, "employee profile");
 
-    await writeTexAuditEvent(client, actor, "tex.employee.deleted", "tex_employee_profile", employee.id, {
-      employee_name: employee.name
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.employee.deleted",
+      "tex_employee_profile",
+      employee.id,
+      {
+        employee_name: employee.name
+      }
+    );
+  });
+}
+
+export async function createTexTeam(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexTeamInput
+): Promise<TexTeam> {
+  assertTexPermission(actor, "tex.people.manage");
+  const sanitized = sanitizeTeamInput(input);
+
+  return withTenantContext(client, actor, async () => {
+    await assertTenantEmployeeProfiles(client, [
+      sanitized.managerEmployeeProfileId,
+      ...sanitized.memberEmployeeProfileIds
+    ]);
+
+    const result = await client.query<TexTeamRow>(
+      `
+        insert into public.tex_teams (
+          tenant_id,
+          name,
+          description,
+          manager_employee_profile_id,
+          created_by,
+          updated_by
+        )
+        values (public.current_tenant_id(), $1, $2, $3, $4, $4)
+        returning
+          id,
+          name,
+          description,
+          manager_employee_profile_id,
+          null::text as manager_name,
+          ''::text as member_employee_profile_ids,
+          ''::text as member_names,
+          0::int as member_count
+      `,
+      [sanitized.name, sanitized.description, sanitized.managerEmployeeProfileId, actor.userId]
+    );
+    const team = requireSingleRow(result.rows, "team");
+
+    await replaceTexTeamMembers(client, team.id, sanitized.memberEmployeeProfileIds, actor.userId);
+    await writeTexAuditEvent(client, actor, "tex.team.created", "tex_team", team.id, {
+      team_name: sanitized.name,
+      members: sanitized.memberEmployeeProfileIds.join(",")
+    });
+
+    return getTexTeam(client, team.id);
+  });
+}
+
+export async function updateTexTeam(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  teamId: string,
+  input: TexTeamInput
+): Promise<TexTeam> {
+  assertTexPermission(actor, "tex.people.manage");
+  assertUuid(teamId, "team id");
+  const sanitized = sanitizeTeamInput(input);
+
+  return withTenantContext(client, actor, async () => {
+    await assertTenantEmployeeProfiles(client, [
+      sanitized.managerEmployeeProfileId,
+      ...sanitized.memberEmployeeProfileIds
+    ]);
+
+    const result = await client.query<{ id: string; name: string }>(
+      `
+        update public.tex_teams
+           set name = $2,
+               description = $3,
+               manager_employee_profile_id = $4,
+               updated_by = $5
+         where tenant_id = public.current_tenant_id()
+           and id = $1
+        returning id, name
+      `,
+      [
+        teamId,
+        sanitized.name,
+        sanitized.description,
+        sanitized.managerEmployeeProfileId,
+        actor.userId
+      ]
+    );
+    const team = requireSingleRow(result.rows, "team");
+
+    await replaceTexTeamMembers(client, team.id, sanitized.memberEmployeeProfileIds, actor.userId);
+    await writeTexAuditEvent(client, actor, "tex.team.updated", "tex_team", team.id, {
+      team_name: team.name,
+      members: sanitized.memberEmployeeProfileIds.join(",")
+    });
+
+    return getTexTeam(client, team.id);
+  });
+}
+
+export async function deleteTexTeam(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  teamId: string
+): Promise<void> {
+  assertTexPermission(actor, "tex.people.manage");
+  assertUuid(teamId, "team id");
+
+  await withTenantContext(client, actor, async () => {
+    await client.query(
+      `
+        delete from public.tex_team_members
+         where tenant_id = public.current_tenant_id()
+           and team_id = $1
+      `,
+      [teamId]
+    );
+    const result = await client.query<{ id: string; name: string }>(
+      `
+        delete from public.tex_teams
+         where tenant_id = public.current_tenant_id()
+           and id = $1
+        returning id, name
+      `,
+      [teamId]
+    );
+    const team = requireSingleRow(result.rows, "team");
+
+    await writeTexAuditEvent(client, actor, "tex.team.deleted", "tex_team", team.id, {
+      team_name: team.name
     });
   });
 }
 
-export async function listTexTrips(client: TenantQueryClient, actor: TexActorContext): Promise<TexTripListItem[]> {
+export async function listTexTrips(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<TexTripListItem[]> {
   assertTexPermission(actor, "tex.expense.read");
 
   return withTenantContext(client, actor, async () => {
@@ -607,6 +1650,7 @@ export async function createTexTrip(
           origin,
           destination,
           budget_amount,
+          advance_deposit_file_id,
           start_date,
           end_date,
           enforce_currency,
@@ -640,8 +1684,8 @@ export async function createTexTrip(
           $15,
           $16,
           $17,
-          $18,
-          $18
+          $19,
+          $19
         )
         returning
           id,
@@ -701,20 +1745,21 @@ export async function updateTexTrip(
                origin = $4,
                destination = $5,
                budget_amount = $6,
-               start_date = $7,
-               end_date = $8,
-               enforce_currency = $9,
-               enforced_currency = $10,
-               team_id = $11,
-               container_number = $12,
-               driver_employee_profile_id = $13,
-               driver_trip_amount = $14,
-               subcontractor_driver_name = $15,
-               subcontractor_amount = $16,
-               subcontractor_notes = $17,
-               updated_by = $18
+               advance_deposit_file_id = $7,
+               start_date = $8,
+               end_date = $9,
+               enforce_currency = $10,
+               enforced_currency = $11,
+               team_id = $12,
+               container_number = $13,
+               driver_employee_profile_id = $14,
+               driver_trip_amount = $15,
+               subcontractor_driver_name = $16,
+               subcontractor_amount = $17,
+               subcontractor_notes = $18,
+               updated_by = $19
          where tenant_id = public.current_tenant_id()
-           and id = $19
+           and id = $20
         returning
           id,
           name,
@@ -1137,6 +2182,302 @@ export async function listTexFinanceReview(
   });
 }
 
+export async function listTexReportWorkspace(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexReportInput = {}
+): Promise<TexReportWorkspace> {
+  assertTexPermission(actor, "tex.expense.read");
+  const period = sanitizeReportPeriod(input.dateFrom, input.dateTo);
+
+  return withTenantContext(client, actor, async () => {
+    const [expenses, previousExpenses] = await Promise.all([
+      queryTexReportExpenses(client, period.dateFrom, period.dateTo),
+      queryTexReportExpenses(client, period.previousDateFrom, period.previousDateTo)
+    ]);
+
+    return {
+      ...period,
+      currency: "AED",
+      expenses: expenses.rows.map(mapReportExpense),
+      previousExpenses: previousExpenses.rows.map(mapReportExpense)
+    };
+  });
+}
+
+export async function sendTexEmailReport(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexEmailReportInput = {}
+): Promise<TexEmailReportResult> {
+  assertTexPermission(actor, "tex.finance.review");
+
+  return withTenantContext(client, actor, async () => {
+    const settings = await getTexEmailNotificationSettings(client);
+    const recipients = sanitizeEmailRecipients(
+      input.recipients?.length ? input.recipients : (settings?.email_report_recipients ?? [])
+    );
+
+    if (!settings?.email_notifications_enabled || settings.email_report_frequency === "off") {
+      const result: TexEmailReportResult = {
+        status: "skipped",
+        provider: null,
+        recipients,
+        messageId: null,
+        error: "TEX email notifications are disabled for this tenant."
+      };
+      await writeTexAuditEvent(
+        client,
+        actor,
+        "tex.email_report.skipped",
+        "tex_integration_settings",
+        actor.tenantId,
+        {
+          reason: "disabled"
+        }
+      );
+      return result;
+    }
+
+    if (!recipients.length) {
+      const result: TexEmailReportResult = {
+        status: "skipped",
+        provider: null,
+        recipients,
+        messageId: null,
+        error: "No TEX email report recipients are configured."
+      };
+      await writeTexAuditEvent(
+        client,
+        actor,
+        "tex.email_report.skipped",
+        "tex_integration_settings",
+        actor.tenantId,
+        {
+          reason: "no_recipients"
+        }
+      );
+      return result;
+    }
+
+    const report = await listTexReportWorkspace(client, actor, input);
+    const metrics = summarizeEmailReport(report);
+    const dispatch = await texEmailNotificationDispatcher({
+      provider: "postmark",
+      to: recipients,
+      subject: `Torrevie TEX report: ${report.dateFrom} to ${report.dateTo}`,
+      text: [
+        `Torrevie TEX report for ${report.dateFrom} to ${report.dateTo}`,
+        `Total spend: ${formatMoney(metrics.totalSpend, report.currency)}`,
+        `Expenses: ${metrics.expenseCount}`,
+        `Pending: ${metrics.pendingCount}`,
+        `Approved: ${metrics.approvedCount}`,
+        `Paid: ${metrics.paidCount}`,
+        `Flagged: ${metrics.flaggedCount}`
+      ].join("\n"),
+      html: [
+        `<p>Torrevie TEX report for <strong>${escapeHtml(report.dateFrom)} to ${escapeHtml(report.dateTo)}</strong></p>`,
+        "<ul>",
+        `<li>Total spend: ${escapeHtml(formatMoney(metrics.totalSpend, report.currency))}</li>`,
+        `<li>Expenses: ${metrics.expenseCount}</li>`,
+        `<li>Pending: ${metrics.pendingCount}</li>`,
+        `<li>Approved: ${metrics.approvedCount}</li>`,
+        `<li>Paid: ${metrics.paidCount}</li>`,
+        `<li>Flagged: ${metrics.flaggedCount}</li>`,
+        "</ul>"
+      ].join("")
+    });
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      `tex.email_report.${dispatch.status}`,
+      "tex_integration_settings",
+      actor.tenantId,
+      {
+        recipients: String(recipients.length),
+        message_id: dispatch.messageId ?? "",
+        error: dispatch.error ?? ""
+      }
+    );
+
+    return {
+      status: dispatch.status,
+      provider: dispatch.provider,
+      recipients,
+      messageId: dispatch.messageId,
+      error: dispatch.error
+    };
+  });
+}
+
+export async function listTexFxWorkspace(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<TexFxWorkspace> {
+  assertTexPermission(actor, "tex.finance.review");
+  const rateDate = toIsoDate(new Date());
+
+  return withTenantContext(client, actor, async () => {
+    const [rates, pegs] = await Promise.all([
+      client.query<TexFxRateRow>(
+        `
+          select
+            id,
+            rate_date::text as rate_date,
+            from_currency,
+            to_currency,
+            rate::float as rate,
+            source,
+            is_manual_override
+          from public.tex_fx_rates
+          where rate_date = $1::date
+          order by from_currency asc
+        `,
+        [rateDate]
+      ),
+      client.query<TexCurrencyPegRow>(
+        `
+          select
+            from_currency,
+            to_currency,
+            rate::float as rate,
+            effective_from::text as effective_from,
+            notes
+          from public.tex_currency_pegs
+          order by from_currency asc, effective_from desc
+        `
+      )
+    ]);
+
+    return {
+      rateDate,
+      baseCurrency: "AED",
+      rates: rates.rows.map(mapFxRate),
+      pegs: pegs.rows.map(mapCurrencyPeg)
+    };
+  });
+}
+
+export async function refreshTexFxRates(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  fetcher: typeof fetch = globalThis.fetch.bind(globalThis)
+): Promise<TexFxRefreshResult> {
+  assertTexPermission(actor, "tex.integration.manage");
+  const rateDate = toIsoDate(new Date());
+
+  return withTenantContext(client, actor, async () => {
+    const pegs = await client.query<TexCurrencyPegRow>(
+      `
+        select
+          from_currency,
+          to_currency,
+          rate::float as rate,
+          effective_from::text as effective_from,
+          notes
+        from public.tex_currency_pegs
+        order by from_currency asc, effective_from desc
+      `
+    );
+    const peggedCurrencies = new Set(pegs.rows.map((peg) => peg.from_currency));
+    const targetCurrencies = TEX_FX_TARGET_CURRENCIES.filter(
+      (currency) => !peggedCurrencies.has(currency)
+    );
+    const errors: string[] = [];
+    let source: TexFxRefreshResult["source"] = "none";
+    let updated = 0;
+    let skipped = 0;
+    let pegged = 0;
+    const rates = await fetchTexFxRates(targetCurrencies, fetcher, errors);
+
+    source = rates.source;
+
+    await client.query("select set_config('app.platform_service_role', 'true', true)");
+    try {
+      for (const [currency, rate] of Object.entries(rates.values)) {
+        const result = await client.query<{ id: string }>(
+          `
+            insert into public.tex_fx_rates (
+              rate_date,
+              from_currency,
+              to_currency,
+              rate,
+              source,
+              is_manual_override
+            )
+            values ($1::date, $2, 'USD', $3, $4, false)
+            on conflict (rate_date, from_currency, to_currency)
+            do update set
+              rate = excluded.rate,
+              source = excluded.source,
+              is_manual_override = false,
+              updated_at = now()
+            where public.tex_fx_rates.is_manual_override = false
+            returning id
+          `,
+          [rateDate, currency, rate, source]
+        );
+
+        if (result.rows.length) {
+          updated += 1;
+        } else {
+          skipped += 1;
+        }
+      }
+
+      for (const peg of pegs.rows) {
+        const result = await client.query<{ id: string }>(
+          `
+            insert into public.tex_fx_rates (
+              rate_date,
+              from_currency,
+              to_currency,
+              rate,
+              source,
+              is_manual_override
+            )
+            values ($1::date, $2, $3, $4, 'peg', false)
+            on conflict (rate_date, from_currency, to_currency) do nothing
+            returning id
+          `,
+          [rateDate, peg.from_currency, peg.to_currency, peg.rate]
+        );
+        pegged += result.rows.length;
+      }
+    } finally {
+      await client.query("select set_config('app.platform_service_role', 'false', true)");
+    }
+
+    const result: TexFxRefreshResult = {
+      success: errors.length === 0,
+      source,
+      updated,
+      skipped,
+      pegged,
+      errors,
+      rateDate
+    };
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.fx_rates.refreshed",
+      "tex_fx_rates",
+      actor.tenantId,
+      {
+        source,
+        updated: String(updated),
+        skipped: String(skipped),
+        pegged: String(pegged),
+        errors: errors.join("; ")
+      }
+    );
+
+    return result;
+  });
+}
+
 export async function payTexFinanceItems(
   client: TenantQueryClient,
   actor: TexActorContext,
@@ -1198,14 +2539,659 @@ export async function payTexFinanceItems(
       paidTrips = result.rows.length;
 
       for (const row of result.rows) {
-        await writeTexAuditEvent(client, actor, "tex.finance.trip_payout_paid", "tex_trip", row.id, {
-          status: "paid"
-        });
+        await writeTexAuditEvent(
+          client,
+          actor,
+          "tex.finance.trip_payout_paid",
+          "tex_trip",
+          row.id,
+          {
+            status: "paid"
+          }
+        );
       }
     }
 
     return { paidExpenses, paidTrips };
   });
+}
+
+export async function createTexDriverAdvance(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexDriverAdvanceInput
+): Promise<TexDriverAdvance> {
+  assertTexPermission(actor, "tex.finance.review");
+  const advance = sanitizeDriverAdvance(input);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexDriverAdvanceRow>(
+      `
+        insert into public.tex_driver_advances (
+          tenant_id,
+          employee_profile_id,
+          amount,
+          currency,
+          base_amount,
+          advance_date,
+          month,
+          year,
+          notes,
+          created_by,
+          updated_by
+        )
+        values (
+          public.current_tenant_id(),
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          $9
+        )
+        returning
+          id,
+          employee_profile_id,
+          amount::float as amount,
+          currency,
+          base_amount::float as base_amount,
+          advance_date::text as advance_date,
+          month,
+          year,
+          notes
+      `,
+      [
+        advance.employeeProfileId,
+        advance.amount,
+        advance.currency,
+        advance.baseAmount,
+        advance.advanceDate,
+        advance.month,
+        advance.year,
+        advance.notes,
+        actor.userId
+      ]
+    );
+    const row = requireSingleRow(result.rows, "driver advance");
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.finance.driver_advance_created",
+      "tex_driver_advance",
+      row.id,
+      {
+        employee_profile_id: row.employee_profile_id
+      }
+    );
+
+    return mapDriverAdvance(row);
+  });
+}
+
+export async function deleteTexDriverAdvance(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  advanceId: string
+): Promise<void> {
+  assertTexPermission(actor, "tex.finance.review");
+  assertUuid(advanceId, "driver advance id");
+
+  await withTenantContext(client, actor, async () => {
+    const result = await client.query<{ id: string; employee_profile_id: string }>(
+      `
+        delete from public.tex_driver_advances
+        where tenant_id = public.current_tenant_id()
+          and id = $1
+        returning id, employee_profile_id
+      `,
+      [advanceId]
+    );
+    const row = requireSingleRow(result.rows, "driver advance");
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.finance.driver_advance_deleted",
+      "tex_driver_advance",
+      row.id,
+      {
+        employee_profile_id: row.employee_profile_id
+      }
+    );
+  });
+}
+
+export async function listTexNotifications(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<TexNotification[]> {
+  assertTexPermission(actor, "tex.expense.read");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexNotificationRow>(
+      `
+        select
+          id,
+          user_id,
+          title,
+          body,
+          type,
+          related_expense_id,
+          related_trip_id,
+          is_read,
+          created_at::text as created_at
+        from public.tex_notifications
+        where tenant_id = public.current_tenant_id()
+          and (user_id = $1 or ($2::boolean and user_id is null))
+        order by created_at desc
+        limit 100
+      `,
+      [actor.userId, canReadBroadcastTexNotifications(actor)]
+    );
+
+    return result.rows.map(mapNotification);
+  });
+}
+
+export async function createTexNotification(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexNotificationInput
+): Promise<TexNotification> {
+  assertTexPermission(actor, "tex.expense.manage");
+  const notification = sanitizeNotification(input);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexNotificationRow>(
+      `
+        insert into public.tex_notifications (
+          tenant_id,
+          user_id,
+          title,
+          body,
+          type,
+          related_expense_id,
+          related_trip_id,
+          created_by,
+          updated_by
+        )
+        values (
+          public.current_tenant_id(),
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $7
+        )
+        returning
+          id,
+          user_id,
+          title,
+          body,
+          type,
+          related_expense_id,
+          related_trip_id,
+          is_read,
+          created_at::text as created_at
+      `,
+      [
+        notification.userId,
+        notification.title,
+        notification.body,
+        notification.type,
+        notification.relatedExpenseId,
+        notification.relatedTripId,
+        actor.userId
+      ]
+    );
+    const row = requireSingleRow(result.rows, "notification");
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.notification.created",
+      "tex_notification",
+      row.id,
+      {
+        target_user_id: row.user_id ?? "broadcast"
+      }
+    );
+
+    return mapNotification(row);
+  });
+}
+
+export async function markTexNotificationRead(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  notificationId: string
+): Promise<TexNotification> {
+  assertTexPermission(actor, "tex.expense.read");
+  assertUuid(notificationId, "notification id");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexNotificationRow>(
+      `
+        update public.tex_notifications
+           set is_read = true,
+               updated_by = $1
+         where tenant_id = public.current_tenant_id()
+           and id = $2
+           and (user_id = $1 or ($3::boolean and user_id is null))
+        returning
+          id,
+          user_id,
+          title,
+          body,
+          type,
+          related_expense_id,
+          related_trip_id,
+          is_read,
+          created_at::text as created_at
+      `,
+      [actor.userId, notificationId, canReadBroadcastTexNotifications(actor)]
+    );
+    const row = requireSingleRow(result.rows, "notification");
+
+    await writeTexAuditEvent(client, actor, "tex.notification.read", "tex_notification", row.id, {
+      target_user_id: row.user_id ?? "broadcast"
+    });
+
+    return mapNotification(row);
+  });
+}
+
+export async function markAllTexNotificationsRead(
+  client: TenantQueryClient,
+  actor: TexActorContext
+): Promise<{ updated: number }> {
+  assertTexPermission(actor, "tex.expense.read");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<{ id: string }>(
+      `
+        update public.tex_notifications
+           set is_read = true,
+               updated_by = $1
+         where tenant_id = public.current_tenant_id()
+           and is_read = false
+           and (user_id = $1 or ($2::boolean and user_id is null))
+        returning id
+      `,
+      [actor.userId, canReadBroadcastTexNotifications(actor)]
+    );
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.notification.read_all",
+      "tex_notification",
+      actor.userId,
+      {
+        updated: String(result.rows.length)
+      }
+    );
+
+    return { updated: result.rows.length };
+  });
+}
+
+export async function listTexSettingsWorkspace(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  month = new Date().getUTCMonth() + 1,
+  year = new Date().getUTCFullYear()
+): Promise<TexSettingsWorkspace> {
+  assertTexPermission(actor, "tex.expense.read");
+  const normalizedMonth = sanitizeMonth(month);
+  const normalizedYear = sanitizeYear(year);
+
+  return withTenantContext(client, actor, async () => {
+    const [categoriesResult, policiesResult, budgetsResult, departmentsResult] = await Promise.all([
+      client.query<TexExpenseCategoryRow>(
+        `
+          select id, name, is_active, is_system, sort_order
+          from public.tex_expense_categories
+          where tenant_id = public.current_tenant_id()
+          order by sort_order asc, name asc
+        `
+      ),
+      client.query<TexSpendPolicyRow>(
+        `
+          select
+            id,
+            category,
+            daily_limit::float as daily_limit,
+            monthly_limit::float as monthly_limit,
+            requires_notes_above::float as requires_notes_above,
+            is_blocked
+          from public.tex_spend_policies
+          where tenant_id = public.current_tenant_id()
+          order by category asc
+        `
+      ),
+      client.query<TexBudgetRow>(
+        `
+          select
+            b.id,
+            b.department,
+            b.month,
+            b.year,
+            b.budget_amount::float as budget_amount,
+            coalesce(spent.spent_amount, 0)::float as spent_amount
+          from public.tex_budgets b
+          left join lateral (
+            select coalesce(sum(coalesce(e.base_amount, e.amount)), 0) as spent_amount
+            from public.tex_expenses e
+            left join public.tex_employee_profiles ep
+              on ep.tenant_id = e.tenant_id
+             and ep.id = e.employee_profile_id
+            where e.tenant_id = public.current_tenant_id()
+              and e.status <> 'rejected'
+              and extract(month from e.expense_date)::int = b.month
+              and extract(year from e.expense_date)::int = b.year
+              and coalesce(ep.department, '') = b.department
+          ) spent on true
+          where b.tenant_id = public.current_tenant_id()
+            and b.month = $1
+            and b.year = $2
+          order by b.department asc
+        `,
+        [normalizedMonth, normalizedYear]
+      ),
+      client.query<{ department: string }>(
+        `
+          select distinct department
+          from public.tex_employee_profiles
+          where tenant_id = public.current_tenant_id()
+            and department is not null
+            and trim(department) <> ''
+          order by department asc
+        `
+      )
+    ]);
+
+    return {
+      categories: categoriesResult.rows.map(mapCategory),
+      policies: mergePoliciesWithCategories(categoriesResult.rows, policiesResult.rows),
+      budgets: budgetsResult.rows.map(mapBudget),
+      departments: departmentsResult.rows.map((row) => row.department),
+      month: normalizedMonth,
+      year: normalizedYear
+    };
+  });
+}
+
+export async function createTexExpenseCategory(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexExpenseCategoryInput
+): Promise<TexExpenseCategory> {
+  assertTexPermission(actor, "tex.policy.manage");
+  const category = sanitizeExpenseCategoryInput(input);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexExpenseCategoryRow>(
+      `
+        insert into public.tex_expense_categories (
+          tenant_id,
+          name,
+          is_active,
+          is_system,
+          sort_order,
+          created_by,
+          updated_by
+        )
+        values (public.current_tenant_id(), $1, $2, false, $3, $4, $4)
+        returning id, name, is_active, is_system, sort_order
+      `,
+      [category.name, category.isActive, category.sortOrder, actor.userId]
+    );
+    const row = requireSingleRow(result.rows, "expense category");
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.category.created",
+      "tex_expense_category",
+      row.id,
+      {
+        name: row.name
+      }
+    );
+
+    return mapCategory(row);
+  });
+}
+
+export async function updateTexExpenseCategory(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  categoryId: string,
+  input: TexExpenseCategoryInput
+): Promise<TexExpenseCategory> {
+  assertTexPermission(actor, "tex.policy.manage");
+  assertUuid(categoryId, "expense category id");
+  const category = sanitizeExpenseCategoryInput(input);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexExpenseCategoryRow>(
+      `
+        update public.tex_expense_categories
+           set name = $1,
+               is_active = $2,
+               sort_order = $3,
+               updated_by = $4
+         where tenant_id = public.current_tenant_id()
+           and id = $5
+        returning id, name, is_active, is_system, sort_order
+      `,
+      [category.name, category.isActive, category.sortOrder, actor.userId, categoryId]
+    );
+    const row = requireSingleRow(result.rows, "expense category");
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.category.updated",
+      "tex_expense_category",
+      row.id,
+      {
+        name: row.name
+      }
+    );
+
+    return mapCategory(row);
+  });
+}
+
+export async function deleteTexExpenseCategory(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  categoryId: string
+): Promise<{ deleted: string }> {
+  assertTexPermission(actor, "tex.policy.manage");
+  assertUuid(categoryId, "expense category id");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<{ id: string; name: string }>(
+      `
+        delete from public.tex_expense_categories
+        where tenant_id = public.current_tenant_id()
+          and id = $1
+          and is_system = false
+        returning id, name
+      `,
+      [categoryId]
+    );
+    const row = requireSingleRow(result.rows, "expense category");
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.category.deleted",
+      "tex_expense_category",
+      row.id,
+      {
+        name: row.name
+      }
+    );
+
+    return { deleted: row.id };
+  });
+}
+
+export async function upsertTexSpendPolicy(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexSpendPolicyInput
+): Promise<TexSpendPolicy> {
+  assertTexPermission(actor, "tex.policy.manage");
+  const policy = sanitizeSpendPolicyInput(input);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexSpendPolicyRow>(
+      `
+        insert into public.tex_spend_policies (
+          tenant_id,
+          category,
+          daily_limit,
+          monthly_limit,
+          requires_notes_above,
+          is_blocked,
+          created_by,
+          updated_by
+        )
+        values (public.current_tenant_id(), $1, $2, $3, $4, $5, $6, $6)
+        on conflict (tenant_id, category)
+        do update set
+          daily_limit = excluded.daily_limit,
+          monthly_limit = excluded.monthly_limit,
+          requires_notes_above = excluded.requires_notes_above,
+          is_blocked = excluded.is_blocked,
+          updated_by = excluded.updated_by,
+          updated_at = now()
+        returning
+          id,
+          category,
+          daily_limit::float as daily_limit,
+          monthly_limit::float as monthly_limit,
+          requires_notes_above::float as requires_notes_above,
+          is_blocked
+      `,
+      [
+        policy.category,
+        policy.dailyLimit,
+        policy.monthlyLimit,
+        policy.requiresNotesAbove,
+        policy.isBlocked,
+        actor.userId
+      ]
+    );
+    const row = requireSingleRow(result.rows, "spend policy");
+
+    await writeTexAuditEvent(client, actor, "tex.policy.updated", "tex_spend_policy", row.id, {
+      category: row.category
+    });
+
+    return mapSpendPolicy(row);
+  });
+}
+
+export async function upsertTexBudget(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexBudgetInput
+): Promise<TexBudget> {
+  assertTexPermission(actor, "tex.policy.manage");
+  const budget = sanitizeBudgetInput(input);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexBudgetRow>(
+      `
+        insert into public.tex_budgets (
+          tenant_id,
+          department,
+          month,
+          year,
+          budget_amount,
+          created_by,
+          updated_by
+        )
+        values (public.current_tenant_id(), $1, $2, $3, $4, $5, $5)
+        on conflict (tenant_id, department, month, year)
+        do update set
+          budget_amount = excluded.budget_amount,
+          updated_by = excluded.updated_by,
+          updated_at = now()
+        returning
+          id,
+          department,
+          month,
+          year,
+          budget_amount::float as budget_amount,
+          0::float as spent_amount
+      `,
+      [budget.department, budget.month, budget.year, budget.budgetAmount, actor.userId]
+    );
+    const row = requireSingleRow(result.rows, "budget");
+
+    await writeTexAuditEvent(client, actor, "tex.budget.updated", "tex_budget", row.id, {
+      department: row.department,
+      month: String(row.month),
+      year: String(row.year)
+    });
+
+    return mapBudget(row);
+  });
+}
+
+export async function deleteTexBudget(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  budgetId: string
+): Promise<{ deleted: string }> {
+  assertTexPermission(actor, "tex.policy.manage");
+  assertUuid(budgetId, "budget id");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<{ id: string; department: string }>(
+      `
+        delete from public.tex_budgets
+        where tenant_id = public.current_tenant_id()
+          and id = $1
+        returning id, department
+      `,
+      [budgetId]
+    );
+    const row = requireSingleRow(result.rows, "budget");
+
+    await writeTexAuditEvent(client, actor, "tex.budget.deleted", "tex_budget", row.id, {
+      department: row.department
+    });
+
+    return { deleted: row.id };
+  });
+}
+
+export function setTexWhatsappNotificationDispatcherForTest(
+  dispatcher: typeof dispatchWhatsAppNotification | null
+) {
+  texWhatsappNotificationDispatcher = dispatcher ?? dispatchWhatsAppNotification;
+}
+
+export function setTexEmailNotificationDispatcherForTest(
+  dispatcher: typeof dispatchEmailNotification | null
+) {
+  texEmailNotificationDispatcher = dispatcher ?? dispatchEmailNotification;
 }
 
 export async function uploadTexReceiptFile(
@@ -1254,7 +3240,14 @@ export async function uploadTexReceiptFile(
         )
         returning id, storage_path, filename, content_type, size_bytes::int as size_bytes
       `,
-      [fileId, storagePath, receipt.fileName, receipt.contentType, receipt.buffer.length, actor.userId]
+      [
+        fileId,
+        storagePath,
+        receipt.fileName,
+        receipt.contentType,
+        receipt.buffer.length,
+        actor.userId
+      ]
     );
     const row = requireSingleRow(result.rows, "receipt file");
 
@@ -1274,7 +3267,45 @@ export async function uploadTexReceiptFile(
   });
 }
 
-export async function parseTexReceiptUpload(input: Pick<TexReceiptUploadInput, "contentType" | "dataBase64">): Promise<TexReceiptExtraction> {
+export async function getTexReceiptDownload(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  receiptId: string
+): Promise<TexReceiptDownload> {
+  assertTexPermission(actor, "tex.expense.read");
+  assertUuid(receiptId, "receipt id");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<{
+      storage_path: string;
+      filename: string;
+      content_type: string;
+      size_bytes: number;
+    }>(
+      `
+        select storage_path, filename, content_type, size_bytes::int as size_bytes
+        from public.files
+        where tenant_id = public.current_tenant_id()
+          and id = $1
+        limit 1
+      `,
+      [receiptId]
+    );
+    const row = requireSingleRow(result.rows, "receipt file");
+    const buffer = await downloadReceiptObject(row.storage_path);
+
+    return {
+      buffer,
+      filename: row.filename,
+      contentType: row.content_type,
+      sizeBytes: row.size_bytes
+    };
+  });
+}
+
+export async function parseTexReceiptUpload(
+  input: Pick<TexReceiptUploadInput, "contentType" | "dataBase64">
+): Promise<TexReceiptExtraction> {
   const contentType = cleanContentType(input.contentType);
   if (!contentType.startsWith("image/")) {
     throw new Error("OCR currently supports image receipts only.");
@@ -1500,10 +3531,17 @@ export async function recordTexWebhookSubmission(
       ]
     );
     const row = requireSingleRow(result.rows, "webhook submission");
-    await writeTexAuditEvent(client, actor, "tex.webhook.submission_recorded", "tex_unregistered_whatsapp_submission", row.id, {
-      provider: "whatsapp",
-      message_id: submission.messageId ?? ""
-    });
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.webhook.submission_recorded",
+      "tex_unregistered_whatsapp_submission",
+      row.id,
+      {
+        provider: "whatsapp",
+        message_id: submission.messageId ?? ""
+      }
+    );
 
     return {
       id: row.id,
@@ -1530,8 +3568,9 @@ export async function processTexWhatsappSubmission(
         ocrResult: {},
         replyText
       });
+      const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
 
-      return { submission: row, replyText, expense: null, ocrStatus: "not_applicable" };
+      return { submission: row, replyText, expense: null, ocrStatus: "not_applicable", delivery };
     });
   }
 
@@ -1560,43 +3599,63 @@ export async function processTexWhatsappSubmission(
         ocrError: extractionError,
         replyText
       });
+      const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
 
-      return { submission: row, replyText, expense: null, ocrStatus: "manual_review" };
+      return { submission: row, replyText, expense: null, ocrStatus: "manual_review", delivery };
     }
 
     if (!settings.ai_receipt_extraction_enabled) {
-      const replyText = "Receipt received. AI extraction is disabled for your company, so the finance team will review it manually.";
+      const replyText =
+        "Receipt received. AI extraction is disabled for your company, so the finance team will review it manually.";
       const row = await insertWhatsappSubmission(client, actor, submission, {
         messageType,
         ocrStatus: "manual_review",
         ocrResult: extraction ?? {},
         ocrError: extractionError,
-        replyText
+        replyText,
+        resolvedEmployeeProfileId: employee.id
       });
+      const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
 
-      return { submission: row, replyText, expense: null, ocrStatus: "manual_review" };
+      return { submission: row, replyText, expense: null, ocrStatus: "manual_review", delivery };
     }
 
-    if (!extraction || !extraction.expenseDate || !extraction.amount || !extraction.currency) {
-      const replyText = "Receipt received, but TEX could not read the key fields. It has been sent for manual review.";
+    const extractionForProcessing = defaultReceiptCurrency(extraction);
+
+    if (
+      !extractionForProcessing ||
+      !extractionForProcessing.expenseDate ||
+      !extractionForProcessing.amount ||
+      !extractionForProcessing.currency
+    ) {
+      const replyText =
+        "Receipt received, but TEX could not read the key fields. It has been sent for manual review.";
       const row = await insertWhatsappSubmission(client, actor, submission, {
         messageType,
         ocrStatus: extractionError ? "failed" : "manual_review",
-        ocrResult: extraction ?? {},
+        ocrResult: extractionForProcessing ?? extraction ?? {},
         ocrError: extractionError,
-        replyText
+        replyText,
+        resolvedEmployeeProfileId: employee.id
       });
+      const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
 
-      return { submission: row, replyText, expense: null, ocrStatus: extractionError ? "failed" : "manual_review" };
+      return {
+        submission: row,
+        replyText,
+        expense: null,
+        ocrStatus: extractionError ? "failed" : "manual_review",
+        delivery
+      };
     }
 
     const duplicate = settings.duplicate_detection_enabled
-      ? await findDuplicateExpense(client, employee.id, extraction)
+      ? await findDuplicateExpense(client, employee.id, extractionForProcessing)
       : null;
     const shouldAutoReject = Boolean(duplicate && settings.duplicate_auto_reject_enabled);
     const expense = await createExpenseFromWhatsappReceipt(client, actor, {
       employee,
-      extraction,
+      extraction: extractionForProcessing,
       submission,
       duplicate,
       shouldAutoReject
@@ -1605,21 +3664,242 @@ export async function processTexWhatsappSubmission(
       ? `Receipt received but auto-rejected as a likely duplicate of ${duplicate?.vendor ?? "an existing expense"}.`
       : duplicate
         ? "Receipt received and flagged as a possible duplicate for manager review."
-        : `Receipt received and submitted for ${formatMoney(extraction.amount, extraction.currency)}.`;
+        : `Receipt received and submitted for ${formatMoney(extractionForProcessing.amount, extractionForProcessing.currency)}.`;
     const row = await insertWhatsappSubmission(client, actor, submission, {
       messageType,
       ocrStatus: "extracted",
-      ocrResult: extraction,
+      ocrResult: extractionForProcessing,
       replyText,
       resolvedExpenseId: expense.id,
       resolvedEmployeeProfileId: employee.id
     });
+    const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
 
-    await writeTexAuditEvent(client, actor, "tex.whatsapp.receipt_processed", "tex_expense", expense.id, {
-      duplicate_status: duplicate ? (shouldAutoReject ? "duplicate" : "suspected") : "clear"
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.whatsapp.receipt_processed",
+      "tex_expense",
+      expense.id,
+      {
+        duplicate_status: duplicate ? (shouldAutoReject ? "duplicate" : "suspected") : "clear"
+      }
+    );
+
+    return { submission: row, replyText, expense, ocrStatus: "extracted", delivery };
+  });
+}
+
+export async function listTexUnregisteredWhatsappSubmissions(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  status: "open" | "resolved" | "ignored" | "all" = "open"
+): Promise<TexUnregisteredWhatsappSubmission[]> {
+  assertTexPermission(actor, "tex.receipt.review");
+  const normalizedStatus = sanitizeSubmissionStatusFilter(status);
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexUnregisteredWhatsappSubmissionRow>(
+      `
+        select
+          id,
+          sender_raw,
+          sender_phone,
+          whatsapp_chat_jid,
+          message_id,
+          session_id,
+          message_text,
+          receipt_file_id,
+          media_url,
+          media_mime_type,
+          message_type,
+          ocr_status,
+          ocr_result,
+          ocr_error,
+          whatsapp_reply_text,
+          status,
+          resolved_expense_id,
+          resolved_employee_profile_id,
+          resolved_at::text as resolved_at,
+          created_at::text as created_at
+        from public.tex_unregistered_whatsapp_submissions
+        where tenant_id = public.current_tenant_id()
+          and ($1::text is null or status = $1)
+        order by created_at desc
+        limit 100
+      `,
+      [normalizedStatus === "all" ? null : normalizedStatus]
+    );
+
+    return result.rows.map(mapUnregisteredWhatsappSubmission);
+  });
+}
+
+export async function ignoreTexUnregisteredWhatsappSubmission(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  submissionId: string,
+  reason?: string | null
+): Promise<TexWebhookSubmissionRecord> {
+  assertTexPermission(actor, "tex.receipt.review");
+  assertUuid(submissionId, "WhatsApp submission id");
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexWebhookSubmissionRow>(
+      `
+        update public.tex_unregistered_whatsapp_submissions
+           set status = 'ignored',
+               resolved_by = $1,
+               resolved_at = now(),
+               updated_by = $1
+         where tenant_id = public.current_tenant_id()
+           and id = $2
+           and status = 'open'
+        returning id, status
+      `,
+      [actor.userId, submissionId]
+    );
+    const row = requireSingleRow(result.rows, "WhatsApp submission");
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.whatsapp_submission.ignored",
+      "tex_unregistered_whatsapp_submission",
+      row.id,
+      {
+        reason: cleanOptional(reason) ?? ""
+      }
+    );
+
+    return {
+      id: row.id,
+      status: row.status
+    };
+  });
+}
+
+export async function resolveTexUnregisteredWhatsappSubmission(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  submissionId: string,
+  input: TexUnregisteredWhatsappResolveInput
+): Promise<TexUnregisteredWhatsappResolveResult> {
+  assertTexPermission(actor, "tex.receipt.review");
+  assertUuid(submissionId, "WhatsApp submission id");
+
+  return withTenantContext(client, actor, async () => {
+    const submission = requireSingleRow(
+      (
+        await client.query<TexUnregisteredWhatsappSubmissionRow>(
+          `
+            select
+              id,
+              sender_raw,
+              sender_phone,
+              whatsapp_chat_jid,
+              message_id,
+              session_id,
+              message_text,
+              receipt_file_id,
+              media_url,
+              media_mime_type,
+              message_type,
+              ocr_status,
+              ocr_result,
+              ocr_error,
+              whatsapp_reply_text,
+              status,
+              resolved_expense_id,
+              resolved_employee_profile_id,
+              resolved_at::text as resolved_at,
+              created_at::text as created_at
+            from public.tex_unregistered_whatsapp_submissions
+            where tenant_id = public.current_tenant_id()
+              and id = $1
+            limit 1
+          `,
+          [submissionId]
+        )
+      ).rows,
+      "WhatsApp submission"
+    );
+
+    if (submission.status !== "open") {
+      throw new Error("This WhatsApp submission has already been resolved.");
+    }
+
+    const employee =
+      input.mode === "existing_employee"
+        ? await getTexEmployeeProfile(
+            client,
+            cleanRequired(input.employeeProfileId, "Employee profile")
+          )
+        : await createTexEmployeeProfileFromWhatsapp(client, actor, {
+            name: cleanRequired(input.employeeName, "Employee name"),
+            phoneNumber:
+              input.phoneNumber ?? submission.sender_phone ?? submission.sender_raw ?? "",
+            department: input.department
+          });
+    const extraction = parseSubmissionExtraction(submission.ocr_result);
+    const resolved = resolveWhatsappExpenseFields(submission, extraction);
+    const expense = await insertResolvedWhatsappExpense(client, actor, {
+      submission,
+      employee,
+      extraction,
+      ...resolved
     });
+    const updated = requireSingleRow(
+      (
+        await client.query<TexWebhookSubmissionRow>(
+          `
+            update public.tex_unregistered_whatsapp_submissions
+               set status = 'resolved',
+                   resolved_expense_id = $1,
+                   resolved_employee_profile_id = $2,
+                   resolved_by = $3,
+                   resolved_at = now(),
+                   updated_by = $3
+             where tenant_id = public.current_tenant_id()
+               and id = $4
+            returning id, status
+          `,
+          [expense.id, employee.id, actor.userId, submission.id]
+        )
+      ).rows,
+      "WhatsApp submission"
+    );
 
-    return { submission: row, replyText, expense, ocrStatus: "extracted" };
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.whatsapp_submission.resolved",
+      "tex_unregistered_whatsapp_submission",
+      submission.id,
+      {
+        expense_id: expense.id,
+        employee_profile_id: employee.id
+      }
+    );
+    const replyText = `Receipt reviewed and linked to ${employee.name}. It is now pending finance review.`;
+    const delivery = await deliverTexWhatsappReply(
+      client,
+      actor,
+      {
+        senderRaw: submission.sender_raw,
+        senderPhone: submission.sender_phone,
+        whatsappChatJid: submission.whatsapp_chat_jid
+      },
+      replyText,
+      submission.id
+    );
+
+    return {
+      submission: updated,
+      employee,
+      expense,
+      delivery
+    };
   });
 }
 
@@ -1651,6 +3931,127 @@ async function writeTexAuditEvent(
       values (public.current_tenant_id(), $1, $2, $3, $4, $5::jsonb)
     `,
     [actor.userId, action, targetType, targetId, JSON.stringify(metadata)]
+  );
+}
+
+async function listTexQuickConnectWorkspace(
+  client: TenantQueryClient
+): Promise<TexIntegrationWorkspace["quickConnect"]> {
+  try {
+    const [sessionResult, eventResult] = await Promise.all([
+      client.query<TexQuickConnectSessionRow>(
+        `
+          select
+            id,
+            status,
+            pairing_code,
+            qr_code_data,
+            qr_expires_at::text as qr_expires_at,
+            connected_phone,
+            connected_at::text as connected_at,
+            last_seen_at::text as last_seen_at,
+            error,
+            updated_at::text as updated_at
+          from public.tex_quick_connect_sessions
+          where tenant_id = public.current_tenant_id()
+          limit 1
+        `
+      ),
+      client.query<TexQuickConnectEventRow>(
+        `
+          select
+            id,
+            event_type,
+            direction,
+            status,
+            message,
+            occurred_at::text as occurred_at
+          from public.tex_quick_connect_events
+          where tenant_id = public.current_tenant_id()
+            and event_type <> 'quick_connect.connector_heartbeat'
+          order by occurred_at desc
+          limit 8
+        `
+      )
+    ]);
+
+    return {
+      available: true,
+      connectorActive: isTexQuickConnectConnectorActive(),
+      session: sessionResult.rows[0] ? mapQuickConnectSession(sessionResult.rows[0]) : null,
+      events: eventResult.rows.map(mapQuickConnectEvent)
+    };
+  } catch (error) {
+    if (isMissingQuickConnectSchemaError(error)) {
+      return {
+        available: false,
+        connectorActive: false,
+        session: null,
+        events: []
+      };
+    }
+
+    throw error;
+  }
+}
+
+function isTexQuickConnectConnectorActive() {
+  return process.env.TEX_QUICK_CONNECT_CONNECTOR_ACTIVE === "true";
+}
+
+async function recordQuickConnectEvent(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  sessionId: string,
+  event: {
+    eventType: string;
+    status: string | null;
+    message: string;
+    metadata: Record<string, string>;
+  }
+) {
+  await client.query(
+    `
+      insert into public.tex_quick_connect_events (
+        tenant_id,
+        session_id,
+        event_type,
+        direction,
+        status,
+        message,
+        metadata,
+        created_by
+      )
+      values (
+        public.current_tenant_id(),
+        $1,
+        $2,
+        'system',
+        $3,
+        $4,
+        $5::jsonb,
+        $6
+      )
+    `,
+    [
+      sessionId,
+      event.eventType,
+      event.status,
+      event.message,
+      JSON.stringify(event.metadata),
+      actor.userId
+    ]
+  );
+}
+
+function isMissingQuickConnectSchemaError(error: unknown) {
+  const record = error as { code?: unknown; message?: unknown };
+  const message = typeof record.message === "string" ? record.message : "";
+
+  return (
+    record.code === "42P01" ||
+    message.includes("tex_quick_connect_sessions") ||
+    message.includes("tex_quick_connect_events")
   );
 }
 
@@ -1764,10 +4165,17 @@ async function insertWhatsappSubmission(
   );
   const row = requireSingleRow(result.rows, "webhook submission");
 
-  await writeTexAuditEvent(client, actor, "tex.webhook.submission_recorded", "tex_unregistered_whatsapp_submission", row.id, {
-    provider: "whatsapp",
-    message_id: submission.messageId ?? ""
-  });
+  await writeTexAuditEvent(
+    client,
+    actor,
+    "tex.webhook.submission_recorded",
+    "tex_unregistered_whatsapp_submission",
+    row.id,
+    {
+      provider: "whatsapp",
+      message_id: submission.messageId ?? ""
+    }
+  );
 
   return {
     id: row.id,
@@ -1775,7 +4183,85 @@ async function insertWhatsappSubmission(
   };
 }
 
-async function getTexIntegrationSettingsForProcessing(client: TenantQueryClient): Promise<TexProcessingSettingsRow> {
+async function deliverTexWhatsappReply(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  submission: Pick<TexWebhookSubmissionInput, "senderPhone" | "senderRaw" | "whatsappChatJid">,
+  replyText: string,
+  submissionId: string
+): Promise<WhatsAppDispatchResult | null> {
+  const to = submission.senderPhone ?? submission.senderRaw ?? submission.whatsappChatJid ?? null;
+
+  if (!to || !replyText.trim()) {
+    return null;
+  }
+
+  const settings = await getTexWhatsappNotificationSettings(client);
+  const result = settings
+    ? await texWhatsappNotificationDispatcher({
+        provider: settings.whatsapp_provider,
+        to,
+        message: replyText,
+        apiKey: settings.api_key,
+        instanceId: settings.whatsapp_instance_id,
+        wappflySessionId: settings.wappfly_session_id,
+        metaPhoneNumberId: settings.meta_phone_number_id
+      })
+    : {
+        ok: false,
+        provider: "ultramsg" as const,
+        status: "skipped" as const,
+        messageId: null,
+        error: "TEX WhatsApp integration is not configured.",
+        httpStatus: null
+      };
+
+  await writeTexAuditEvent(
+    client,
+    actor,
+    `tex.notification.whatsapp_reply_${result.status}`,
+    "tex_unregistered_whatsapp_submission",
+    submissionId,
+    {
+      provider: result.provider,
+      message_id: result.messageId ?? "",
+      error: result.error ?? "",
+      http_status: result.httpStatus === null ? "" : String(result.httpStatus)
+    }
+  );
+
+  return result;
+}
+
+async function getTexWhatsappNotificationSettings(
+  client: TenantQueryClient
+): Promise<TexWhatsappNotificationSettingsRow | null> {
+  const result = await client.query<TexWhatsappNotificationSettingsRow>(
+    `
+      select
+        tis.whatsapp_provider,
+        tis.whatsapp_instance_id,
+        tis.wappfly_session_id,
+        tis.meta_phone_number_id,
+        api_secret.secret_value as api_key
+      from public.tex_integration_settings tis
+      left join public.tenant_integration_secrets api_secret
+        on api_secret.tenant_id = tis.tenant_id
+       and api_secret.product_key = 'tex'
+       and api_secret.integration_key = 'whatsapp'
+       and api_secret.secret_name = 'api_key'
+       and api_secret.profile_id is null
+      where tis.tenant_id = public.current_tenant_id()
+      limit 1
+    `
+  );
+
+  return result.rows[0] ?? null;
+}
+
+async function getTexIntegrationSettingsForProcessing(
+  client: TenantQueryClient
+): Promise<TexProcessingSettingsRow> {
   const result = await client.query<TexProcessingSettingsRow>(
     `
       select
@@ -1799,6 +4285,94 @@ async function getTexIntegrationSettingsForProcessing(client: TenantQueryClient)
   );
 }
 
+async function getTexEmailNotificationSettings(
+  client: TenantQueryClient
+): Promise<TexEmailNotificationSettingsRow | null> {
+  const result = await client.query<TexEmailNotificationSettingsRow>(
+    `
+      select
+        email_notifications_enabled,
+        email_report_frequency,
+        email_report_recipients
+      from public.tex_integration_settings
+      where tenant_id = public.current_tenant_id()
+      limit 1
+    `
+  );
+
+  return result.rows[0] ?? null;
+}
+
+async function fetchTexFxRates(
+  currencies: readonly string[],
+  fetcher: typeof fetch,
+  errors: string[]
+): Promise<{ source: TexFxRefreshResult["source"]; values: Record<string, number> }> {
+  const primaryKey = process.env.FX_API_KEY?.trim();
+
+  if (primaryKey) {
+    try {
+      const response = await fetcher(
+        `https://v6.exchangerate-api.com/v6/${encodeURIComponent(primaryKey)}/latest/USD`
+      );
+      const body = (await response.json().catch(() => ({}))) as {
+        result?: string;
+        conversion_rates?: Record<string, number>;
+      };
+
+      if (!response.ok || body.result !== "success" || !body.conversion_rates) {
+        throw new Error(`Primary FX API returned ${response.status}`);
+      }
+
+      return {
+        source: "live",
+        values: pickFxRates(currencies, body.conversion_rates)
+      };
+    } catch (error) {
+      errors.push(`Primary FX API failed: ${errorMessage(error)}`);
+    }
+  } else {
+    errors.push("FX_API_KEY is not configured.");
+  }
+
+  try {
+    const response = await fetcher(
+      "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json"
+    );
+    const body = (await response.json().catch(() => ({}))) as { usd?: Record<string, number> };
+
+    if (!response.ok || !body.usd) {
+      throw new Error(`Fallback FX API returned ${response.status}`);
+    }
+
+    return {
+      source: "fallback",
+      values: pickFxRates(
+        currencies,
+        Object.fromEntries(
+          Object.entries(body.usd).map(([key, value]) => [key.toUpperCase(), value])
+        )
+      )
+    };
+  } catch (error) {
+    errors.push(`Fallback FX API failed: ${errorMessage(error)}`);
+  }
+
+  return { source: "none", values: {} };
+}
+
+function pickFxRates(currencies: readonly string[], rates: Record<string, number>) {
+  return Object.fromEntries(
+    currencies
+      .map((currency) => [currency, rates[currency]] as const)
+      .filter((entry): entry is readonly [string, number] => Number.isFinite(entry[1]))
+  );
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function findEmployeeByPhone(client: TenantQueryClient, phone: string | null) {
   const digits = normalizePhoneDigits(phone);
 
@@ -1806,19 +4380,104 @@ async function findEmployeeByPhone(client: TenantQueryClient, phone: string | nu
     return null;
   }
 
-  const result = await client.query<TexEmployeeProfileRow>(
+  const result = await client.query<TexEmployeeProfileRow & { phone_digits: string | null }>(
     `
-      select id, user_id, name, phone_number, department, is_active
-      from public.tex_employee_profiles
-      where tenant_id = public.current_tenant_id()
-        and is_active = true
-        and regexp_replace(phone_number, '[^0-9]', '', 'g') = $1
-      limit 1
+      select
+        ep.id,
+        ep.user_id,
+        ep.name,
+        ep.phone_number,
+        ep.department,
+        ep.monthly_salary::float as monthly_salary,
+        ep.manager_user_id,
+        null::text as manager_name,
+        null::text as manager_email,
+        ep.submission_frequency,
+        ep.is_active,
+        regexp_replace(ep.phone_number, '[^0-9]', '', 'g') as phone_digits
+      from public.tex_employee_profiles ep
+      where ep.tenant_id = public.current_tenant_id()
+        and ep.is_active = true
     `,
-    [digits]
+    []
   );
 
-  return result.rows[0] ?? null;
+  const exactMatches = result.rows.filter((row) => row.phone_digits === digits);
+
+  if (exactMatches.length === 1) {
+    return exactMatches[0];
+  }
+
+  if (exactMatches.length > 1) {
+    return null;
+  }
+
+  const suffixMatches = result.rows.filter((row) => isSamePhoneBySafeSuffix(row.phone_digits, digits));
+
+  return suffixMatches.length === 1 ? suffixMatches[0] : null;
+}
+
+function isSamePhoneBySafeSuffix(left: string | null, right: string | null) {
+  if (!left || !right || left.length < 7 || right.length < 7) {
+    return false;
+  }
+
+  return left.endsWith(right) || right.endsWith(left);
+}
+
+function defaultReceiptCurrency(extraction: TexReceiptExtraction | null) {
+  if (!extraction || extraction.currency?.trim()) {
+    return extraction;
+  }
+
+  return {
+    ...extraction,
+    currency: "AED",
+    notes: [extraction.notes, "Currency defaulted to AED because the receipt did not state a currency."]
+      .filter(Boolean)
+      .join(" ")
+  };
+}
+
+function queryTexReportExpenses(client: TenantQueryClient, dateFrom: string, dateTo: string) {
+  return client.query<TexReportExpenseRow>(
+    `
+      select
+        e.id,
+        e.employee_profile_id,
+        coalesce(ep.name, e.employee_name) as employee_name,
+        e.vendor,
+        e.expense_date::text as expense_date,
+        e.amount::float as amount,
+        e.currency,
+        coalesce(e.base_amount, e.amount)::float as base_amount,
+        e.category,
+        e.trip_id,
+        coalesce(t.name, e.trip_name) as trip_name,
+        e.payment_method,
+        e.source,
+        e.status,
+        e.policy_flag,
+        e.tax_amount::float as tax_amount,
+        e.tax_id_number,
+        e.approved_at::text as approved_at,
+        e.paid_at::text as paid_at,
+        e.created_at::text as created_at
+      from public.tex_expenses e
+      left join public.tex_employee_profiles ep
+        on ep.tenant_id = e.tenant_id
+       and ep.id = e.employee_profile_id
+      left join public.tex_trips t
+        on t.tenant_id = e.tenant_id
+       and t.id = e.trip_id
+      where e.tenant_id = public.current_tenant_id()
+        and e.expense_date >= $1::date
+        and e.expense_date <= $2::date
+      order by e.expense_date desc, e.created_at desc
+      limit 1000
+    `,
+    [dateFrom, dateTo]
+  );
 }
 
 async function buildWhatsappStatusReply(client: TenantQueryClient, phone: string | null) {
@@ -1892,7 +4551,11 @@ async function createExpenseFromWhatsappReceipt(
     shouldAutoReject: boolean;
   }
 ): Promise<TexExpenseRecord> {
-  const duplicateStatus = input.duplicate ? (input.shouldAutoReject ? "duplicate" : "suspected") : "clear";
+  const duplicateStatus = input.duplicate
+    ? input.shouldAutoReject
+      ? "duplicate"
+      : "suspected"
+    : "clear";
   const duplicateReason = input.duplicate
     ? `Matched ${input.duplicate.vendor ?? "existing receipt"} on employee, date, amount, and currency.`
     : null;
@@ -2038,7 +4701,12 @@ function sanitizeExpense(input: TexExpenseInput): Required<TexExpenseInput> {
     receiptFileId: cleanOptional(input.receiptFileId),
     extractionSource: sanitizeExtractionSource(input.extractionSource),
     extractionConfidence: sanitizeExtractionConfidence(input.extractionConfidence),
-    extractionPayload: input.extractionPayload && typeof input.extractionPayload === "object" && !Array.isArray(input.extractionPayload) ? input.extractionPayload : {},
+    extractionPayload:
+      input.extractionPayload &&
+      typeof input.extractionPayload === "object" &&
+      !Array.isArray(input.extractionPayload)
+        ? input.extractionPayload
+        : {},
     source: cleanOptional(input.source) ?? "web"
   };
 }
@@ -2062,12 +4730,23 @@ function cleanContentType(value: string) {
 }
 
 function sanitizeFileName(value: string) {
-  const name = value.trim().replace(/[^\w.\- ()]/g, "_").slice(0, 160);
+  const name = value
+    .trim()
+    .replace(/[^\w.\- ()]/g, "_")
+    .slice(0, 160);
   return name || "receipt";
 }
 
 function isAllowedReceiptType(contentType: string) {
-  return ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"].includes(contentType);
+  return [
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+    "application/pdf"
+  ].includes(contentType);
 }
 
 function receiptBufferFromBase64(value: string) {
@@ -2090,7 +4769,7 @@ function receiptBufferFromBase64(value: string) {
 
 function stripDataUrl(value: string) {
   const trimmed = value.trim();
-  return trimmed.includes(",") ? trimmed.split(",").pop()?.trim() ?? "" : trimmed;
+  return trimmed.includes(",") ? (trimmed.split(",").pop()?.trim() ?? "") : trimmed;
 }
 
 function extensionForContentType(contentType: string) {
@@ -2118,7 +4797,9 @@ function supabaseProjectUrl() {
 function supabaseServiceRoleKey() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!key) {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY is not configured on the customer portal Vercel project.");
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY is not configured on the customer portal Vercel project."
+    );
   }
 
   return key;
@@ -2128,20 +4809,42 @@ async function uploadReceiptObject(storagePath: string, contentType: string, buf
   const bucket = receiptBucketName();
   const encodedPath = storagePath.split("/").map(encodeURIComponent).join("/");
   const serviceKey = supabaseServiceRoleKey();
-  const response = await fetch(`${supabaseProjectUrl()}/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`, {
-    method: "POST",
-    headers: {
-      ...supabaseServiceHeaders(serviceKey),
-      "Content-Type": contentType,
-      "x-upsert": "false"
-    },
-    body: buffer
-  });
+  const response = await fetch(
+    `${supabaseProjectUrl()}/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`,
+    {
+      method: "POST",
+      headers: {
+        ...supabaseServiceHeaders(serviceKey),
+        "Content-Type": contentType,
+        "x-upsert": "false"
+      },
+      body: buffer
+    }
+  );
 
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`Receipt storage upload failed: ${response.status} ${text.slice(0, 240)}`);
   }
+}
+
+async function downloadReceiptObject(storagePath: string) {
+  const bucket = receiptBucketName();
+  const encodedPath = storagePath.split("/").map(encodeURIComponent).join("/");
+  const serviceKey = supabaseServiceRoleKey();
+  const response = await fetch(
+    `${supabaseProjectUrl()}/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`,
+    {
+      headers: supabaseServiceHeaders(serviceKey)
+    }
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Receipt storage download failed: ${response.status} ${text.slice(0, 240)}`);
+  }
+
+  return Buffer.from(await response.arrayBuffer());
 }
 
 function supabaseServiceHeaders(key: string) {
@@ -2156,7 +4859,9 @@ function supabaseServiceHeaders(key: string) {
   return headers;
 }
 
-function sanitizeExtractionSource(value: TexExpenseInput["extractionSource"]): "manual" | "web_ai" | "whatsapp_ai" {
+function sanitizeExtractionSource(
+  value: TexExpenseInput["extractionSource"]
+): "manual" | "web_ai" | "whatsapp_ai" {
   if (value === "web_ai" || value === "whatsapp_ai") {
     return value;
   }
@@ -2177,7 +4882,9 @@ function sanitizeExtractionConfidence(value: unknown) {
   return Math.min(Math.max(parsed, 0), 1);
 }
 
-function sanitizeWebhookSubmission(input: TexWebhookSubmissionInput): Required<TexWebhookSubmissionInput> {
+function sanitizeWebhookSubmission(
+  input: TexWebhookSubmissionInput
+): Required<TexWebhookSubmissionInput> {
   return {
     senderRaw: cleanOptional(input.senderRaw),
     senderPhone: cleanOptional(input.senderPhone),
@@ -2203,7 +4910,8 @@ function sanitizeTrip(input: TexTripInput): Required<TexTripInput> {
   const tripType = input.tripType === "logistics" ? "logistics" : "general";
   const budgetAmount = optionalNonNegative(input.budgetAmount, "budget amount");
   const driverTripAmount = optionalNonNegative(input.driverTripAmount, "driver trip amount") ?? 0;
-  const subcontractorAmount = optionalNonNegative(input.subcontractorAmount, "subcontractor amount") ?? 0;
+  const subcontractorAmount =
+    optionalNonNegative(input.subcontractorAmount, "subcontractor amount") ?? 0;
   const enforceCurrency = Boolean(input.enforceCurrency);
   const enforcedCurrency = cleanOptional(input.enforcedCurrency)?.toUpperCase() ?? null;
 
@@ -2218,6 +4926,7 @@ function sanitizeTrip(input: TexTripInput): Required<TexTripInput> {
     origin: cleanOptional(input.origin),
     destination: cleanOptional(input.destination),
     budgetAmount,
+    advanceDepositFileId: cleanOptional(input.advanceDepositFileId),
     startDate: input.startDate ? parseIsoDate(input.startDate, "start date") : null,
     endDate: input.endDate ? parseIsoDate(input.endDate, "end date") : null,
     enforceCurrency,
@@ -2236,7 +4945,10 @@ function sanitizeTripLegs(input: TexTripLegInput[]): Required<TexTripLegInput>[]
   return input.map((leg, index) => sanitizeTripLeg(leg, index + 1));
 }
 
-function sanitizeTripLeg(input: TexTripLegInput, fallbackSequence: number): Required<TexTripLegInput> {
+function sanitizeTripLeg(
+  input: TexTripLegInput,
+  fallbackSequence: number
+): Required<TexTripLegInput> {
   const origin = input.origin.trim();
   const destination = input.destination.trim();
 
@@ -2256,7 +4968,11 @@ function sanitizeTripLeg(input: TexTripLegInput, fallbackSequence: number): Requ
   const returnDistanceKm = optionalNonNegative(input.returnDistanceKm, "leg return distance");
   const totalDistanceKm =
     optionalNonNegative(input.totalDistanceKm, "leg total distance") ??
-    (distanceKm === null ? null : input.isReturnTrip ? distanceKm + (returnDistanceKm ?? distanceKm) : distanceKm);
+    (distanceKm === null
+      ? null
+      : input.isReturnTrip
+        ? distanceKm + (returnDistanceKm ?? distanceKm)
+        : distanceKm);
 
   return {
     id: cleanOptional(input.id),
@@ -2273,14 +4989,22 @@ function sanitizeTripLeg(input: TexTripLegInput, fallbackSequence: number): Requ
     destinationCountry: cleanOptional(input.destinationCountry),
     mode,
     status,
-    plannedStart: input.plannedStart ? parseIsoDate(input.plannedStart.slice(0, 10), "planned start") : null,
-    plannedEnd: input.plannedEnd ? parseIsoDate(input.plannedEnd.slice(0, 10), "planned end") : null,
-    actualStart: input.actualStart ? parseIsoDate(input.actualStart.slice(0, 10), "actual start") : null,
+    plannedStart: input.plannedStart
+      ? parseIsoDate(input.plannedStart.slice(0, 10), "planned start")
+      : null,
+    plannedEnd: input.plannedEnd
+      ? parseIsoDate(input.plannedEnd.slice(0, 10), "planned end")
+      : null,
+    actualStart: input.actualStart
+      ? parseIsoDate(input.actualStart.slice(0, 10), "actual start")
+      : null,
     actualEnd: input.actualEnd ? parseIsoDate(input.actualEnd.slice(0, 10), "actual end") : null,
     distanceKm,
     isReturnTrip: Boolean(input.isReturnTrip),
     returnDistanceKm: input.isReturnTrip ? returnDistanceKm : null,
-    returnDurationSeconds: input.isReturnTrip ? optionalInteger(input.returnDurationSeconds, "return duration") : null,
+    returnDurationSeconds: input.isReturnTrip
+      ? optionalInteger(input.returnDurationSeconds, "return duration")
+      : null,
     totalDistanceKm,
     durationSeconds: optionalInteger(input.durationSeconds, "duration"),
     distanceSource: cleanOptional(input.distanceSource),
@@ -2341,7 +5065,12 @@ function sanitizeTripLegStatus(value: string | null | undefined): TexTripLegStat
     return "planned";
   }
 
-  if (value === "planned" || value === "in_transit" || value === "completed" || value === "cancelled") {
+  if (
+    value === "planned" ||
+    value === "in_transit" ||
+    value === "completed" ||
+    value === "cancelled"
+  ) {
     return value;
   }
 
@@ -2398,6 +5127,7 @@ function tripValues(trip: Required<TexTripInput>, userId: string) {
     trip.origin,
     trip.destination,
     trip.budgetAmount,
+    trip.advanceDepositFileId,
     trip.startDate,
     trip.endDate,
     trip.enforceCurrency,
@@ -2426,6 +5156,619 @@ function sanitizeFinancePeriod(month: number, year: number) {
   }
 
   return { month: parsedMonth, year: parsedYear };
+}
+
+function sanitizeReportPeriod(dateFrom?: string | null, dateTo?: string | null) {
+  const now = new Date();
+  const defaultFrom = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const defaultTo = toIsoDate(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)));
+  const from = sanitizeIsoDate(dateFrom, "report start date") ?? defaultFrom;
+  const to = sanitizeIsoDate(dateTo, "report end date") ?? defaultTo;
+
+  if (from > to) {
+    throw new Error("Report start date must be before the end date.");
+  }
+
+  const fromDate = parseReportIsoDate(from);
+  const toDate = parseReportIsoDate(to);
+  const dayCount = Math.max(1, Math.round((toDate.getTime() - fromDate.getTime()) / 86400000) + 1);
+  const previousTo = new Date(fromDate.getTime() - 86400000);
+  const previousFrom = new Date(previousTo.getTime() - (dayCount - 1) * 86400000);
+
+  return {
+    dateFrom: from,
+    dateTo: to,
+    previousDateFrom: toIsoDate(previousFrom),
+    previousDateTo: toIsoDate(previousTo)
+  };
+}
+
+function sanitizeSubmissionFrequency(
+  value: TexEmployeeProfileInput["submissionFrequency"]
+): TexEmployeeProfile["submissionFrequency"] {
+  if (value === "daily" || value === "weekly" || value === "monthly" || value === "realtime") {
+    return value;
+  }
+
+  return "realtime";
+}
+
+function sanitizeTeamInput(input: TexTeamInput): {
+  name: string;
+  description: string | null;
+  managerEmployeeProfileId: string | null;
+  memberEmployeeProfileIds: string[];
+} {
+  const name = cleanRequired(input.name, "Team name");
+  const description = cleanOptional(input.description);
+  const managerEmployeeProfileId = sanitizeOptionalUuid(
+    input.managerEmployeeProfileId,
+    "team manager employee profile id"
+  );
+  const memberEmployeeProfileIds = Array.from(
+    new Set(
+      (input.memberEmployeeProfileIds ?? [])
+        .map((id) => sanitizeOptionalUuid(id, "team member employee profile id"))
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+
+  return {
+    name,
+    description,
+    managerEmployeeProfileId,
+    memberEmployeeProfileIds
+  };
+}
+
+function sanitizeEmailRecipients(values: readonly string[]) {
+  return values
+    .flatMap((value) => String(value).split(/[,\n;]/))
+    .map((value) => value.trim().toLowerCase())
+    .filter((value, index, all) => isEmailAddress(value) && all.indexOf(value) === index);
+}
+
+function isEmailAddress(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function summarizeEmailReport(report: TexReportWorkspace) {
+  const expenses = report.expenses.filter((expense) => expense.status !== "rejected");
+
+  return {
+    totalSpend: sum(expenses.map((expense) => expense.baseAmount)),
+    expenseCount: report.expenses.length,
+    pendingCount: report.expenses.filter((expense) => expense.status === "pending").length,
+    approvedCount: report.expenses.filter((expense) => expense.status === "approved").length,
+    paidCount: report.expenses.filter((expense) => expense.status === "paid").length,
+    flaggedCount: report.expenses.filter((expense) => expense.policyFlag).length
+  };
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => {
+    switch (character) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      default:
+        return "&#39;";
+    }
+  });
+}
+
+function sanitizeIsoDate(value: string | null | undefined, label: string) {
+  if (!value) {
+    return null;
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error(`Invalid ${label}.`);
+  }
+
+  return toIsoDate(parseReportIsoDate(value));
+}
+
+function parseReportIsoDate(value: string) {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+
+  if (Number.isNaN(parsed.getTime()) || toIsoDate(parsed) !== value) {
+    throw new Error("Invalid report date.");
+  }
+
+  return parsed;
+}
+
+function toIsoDate(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function sanitizeDriverAdvance(input: TexDriverAdvanceInput): Required<TexDriverAdvanceInput> {
+  const employeeProfileId = cleanRequired(input.employeeProfileId, "Driver employee profile");
+  assertUuid(employeeProfileId, "driver employee profile id");
+
+  const amount = Number(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Driver advance amount must be greater than zero.");
+  }
+
+  const currency = cleanOptional(input.currency)?.toUpperCase() ?? "AED";
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new Error("Driver advance currency must be a three-letter ISO code.");
+  }
+
+  const now = new Date();
+  const advanceDate = input.advanceDate
+    ? parseIsoDate(input.advanceDate, "driver advance date")
+    : now.toISOString().slice(0, 10);
+  const month = input.month ?? Number(advanceDate.slice(5, 7));
+  const year = input.year ?? Number(advanceDate.slice(0, 4));
+  const period = sanitizeFinancePeriod(month, year);
+
+  return {
+    employeeProfileId,
+    amount,
+    currency,
+    baseAmount: optionalNonNegative(input.baseAmount, "driver advance base amount") ?? amount,
+    advanceDate,
+    month: period.month,
+    year: period.year,
+    notes: cleanOptional(input.notes)
+  };
+}
+
+function sanitizeNotification(input: TexNotificationInput): Required<TexNotificationInput> {
+  const userId = cleanOptional(input.userId);
+  const relatedExpenseId = cleanOptional(input.relatedExpenseId);
+  const relatedTripId = cleanOptional(input.relatedTripId);
+
+  if (userId) {
+    assertUuid(userId, "notification user id");
+  }
+
+  if (relatedExpenseId) {
+    assertUuid(relatedExpenseId, "related expense id");
+  }
+
+  if (relatedTripId) {
+    assertUuid(relatedTripId, "related trip id");
+  }
+
+  return {
+    userId,
+    title: cleanRequired(input.title, "Notification title"),
+    body: cleanOptional(input.body),
+    type: cleanOptional(input.type),
+    relatedExpenseId,
+    relatedTripId
+  };
+}
+
+function canReadBroadcastTexNotifications(actor: TexActorContext) {
+  return actor.roles.some((role) =>
+    [
+      "customer_admin",
+      "customer_module_admin",
+      "customer_manager",
+      "torrevie_platform_admin"
+    ].includes(role)
+  );
+}
+
+function sanitizeSubmissionStatusFilter(value: "open" | "resolved" | "ignored" | "all") {
+  if (value === "open" || value === "resolved" || value === "ignored" || value === "all") {
+    return value;
+  }
+
+  throw new Error(`Unsupported WhatsApp submission status: ${String(value)}`);
+}
+
+async function getTexEmployeeProfile(
+  client: TenantQueryClient,
+  employeeProfileId: string
+): Promise<TexEmployeeProfile> {
+  assertUuid(employeeProfileId, "employee profile id");
+  const result = await client.query<TexEmployeeProfileRow>(
+    `
+      select
+        ep.id,
+        ep.user_id,
+        ep.name,
+        ep.phone_number,
+        ep.department,
+        ep.monthly_salary::float as monthly_salary,
+        ep.manager_user_id,
+        manager_profile.display_name as manager_name,
+        manager_user.email as manager_email,
+        ep.submission_frequency,
+        ep.is_active
+      from public.tex_employee_profiles ep
+      left join public.users manager_user
+        on manager_user.id = ep.manager_user_id
+      left join public.user_profiles manager_profile
+        on manager_profile.tenant_id = ep.tenant_id
+       and manager_profile.user_id = ep.manager_user_id
+      where ep.tenant_id = public.current_tenant_id()
+        and ep.id = $1
+        and ep.is_active = true
+      limit 1
+    `,
+    [employeeProfileId]
+  );
+
+  return mapEmployeeProfile(requireSingleRow(result.rows, "employee profile"));
+}
+
+async function createTexEmployeeProfileFromWhatsapp(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: Pick<TexEmployeeProfileInput, "name" | "phoneNumber" | "department">
+): Promise<TexEmployeeProfile> {
+  const name = cleanRequired(input.name, "Employee name");
+  const phoneNumber = normalizePhoneDigits(input.phoneNumber);
+  const department = cleanOptional(input.department);
+
+  if (!phoneNumber) {
+    throw new Error("Employee WhatsApp phone is required.");
+  }
+
+  await assertTexEmployeeLimitAvailable(client, actor, phoneNumber);
+
+  const result = await client.query<TexEmployeeProfileRow>(
+    `
+      insert into public.tex_employee_profiles (
+        tenant_id,
+        name,
+        phone_number,
+        department,
+        is_active,
+        created_by,
+        updated_by
+      )
+      values (
+        public.current_tenant_id(),
+        $1,
+        $2,
+        $3,
+        true,
+        $4,
+        $4
+      )
+      on conflict (tenant_id, phone_number)
+      do update set
+        name = excluded.name,
+        department = coalesce(excluded.department, public.tex_employee_profiles.department),
+        is_active = true,
+        updated_by = excluded.updated_by,
+        updated_at = now()
+      returning
+        id,
+        user_id,
+        name,
+        phone_number,
+        department,
+        monthly_salary::float as monthly_salary,
+        manager_user_id,
+        null::text as manager_name,
+        null::text as manager_email,
+        submission_frequency,
+        is_active
+    `,
+    [name, phoneNumber, department, actor.userId]
+  );
+  const employee = mapEmployeeProfile(requireSingleRow(result.rows, "employee profile"));
+
+  await writeTexAuditEvent(
+    client,
+    actor,
+    "tex.people.employee_created_from_whatsapp",
+    "tex_employee_profile",
+    employee.id,
+    {
+      phone_number: employee.phoneNumber
+    }
+  );
+
+  return employee;
+}
+
+async function assertTexEmployeeLimitAvailable(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  phoneNumber: string
+) {
+  if (actor.texPlan.employeeLimit <= 0) {
+    return;
+  }
+
+  const result = await client.query<TexEmployeeLimitRow>(
+    `
+      select
+        count(*) filter (where is_active = true)::int as active_count,
+        coalesce(bool_or(phone_number = $1), false) as existing_phone
+      from public.tex_employee_profiles
+      where tenant_id = public.current_tenant_id()
+    `,
+    [phoneNumber]
+  );
+  const row = result.rows[0];
+  const activeCount = Number(row?.active_count ?? 0);
+  const existingPhone = Boolean(row?.existing_phone);
+
+  if (!existingPhone && activeCount >= actor.texPlan.employeeLimit) {
+    throw new Error(`TEX ${actor.texPlan.planKey} plan employee limit reached.`);
+  }
+}
+
+async function assertTenantManagerUser(client: TenantQueryClient, managerUserId: string) {
+  const result = await client.query<{ id: string }>(
+    `
+      select u.id
+      from public.tenant_memberships tm
+      join public.users u on u.id = tm.user_id
+      where tm.tenant_id = public.current_tenant_id()
+        and tm.user_id = $1
+        and tm.status = 'active'
+        and u.status = 'active'
+      limit 1
+    `,
+    [managerUserId]
+  );
+
+  requireSingleRow(result.rows, "manager user");
+}
+
+async function assertTenantEmployeeProfiles(
+  client: TenantQueryClient,
+  employeeProfileIds: Array<string | null>
+) {
+  for (const employeeProfileId of employeeProfileIds) {
+    if (!employeeProfileId) {
+      continue;
+    }
+
+    const result = await client.query<{ id: string }>(
+      `
+        select id
+        from public.tex_employee_profiles
+        where tenant_id = public.current_tenant_id()
+          and id = $1
+          and is_active = true
+        limit 1
+      `,
+      [employeeProfileId]
+    );
+
+    requireSingleRow(result.rows, "employee profile");
+  }
+}
+
+async function replaceTexTeamMembers(
+  client: TenantQueryClient,
+  teamId: string,
+  employeeProfileIds: readonly string[],
+  actorUserId: string
+) {
+  await client.query(
+    `
+      delete from public.tex_team_members
+       where tenant_id = public.current_tenant_id()
+         and team_id = $1
+    `,
+    [teamId]
+  );
+
+  for (const employeeProfileId of employeeProfileIds) {
+    await client.query(
+      `
+        insert into public.tex_team_members (
+          tenant_id,
+          team_id,
+          employee_profile_id,
+          created_by,
+          updated_by
+        )
+        values (public.current_tenant_id(), $1, $2, $3, $3)
+        on conflict (team_id, employee_profile_id) do nothing
+      `,
+      [teamId, employeeProfileId, actorUserId]
+    );
+  }
+}
+
+async function getTexTeam(client: TenantQueryClient, teamId: string): Promise<TexTeam> {
+  const result = await client.query<TexTeamRow>(
+    `
+      select
+        t.id,
+        t.name,
+        t.description,
+        t.manager_employee_profile_id,
+        manager.name as manager_name,
+        coalesce(
+          string_agg(member.id::text, ',' order by member.name)
+            filter (where member.id is not null),
+          ''
+        ) as member_employee_profile_ids,
+        coalesce(
+          string_agg(member.name, '|' order by member.name)
+            filter (where member.id is not null),
+          ''
+        ) as member_names,
+        count(member.id)::int as member_count
+      from public.tex_teams t
+      left join public.tex_employee_profiles manager
+        on manager.tenant_id = t.tenant_id
+       and manager.id = t.manager_employee_profile_id
+      left join public.tex_team_members tm
+        on tm.tenant_id = t.tenant_id
+       and tm.team_id = t.id
+      left join public.tex_employee_profiles member
+        on member.tenant_id = tm.tenant_id
+       and member.id = tm.employee_profile_id
+      where t.tenant_id = public.current_tenant_id()
+        and t.id = $1
+      group by t.id, manager.name
+      limit 1
+    `,
+    [teamId]
+  );
+
+  return mapTeam(requireSingleRow(result.rows, "team"));
+}
+
+function parseSubmissionExtraction(value: unknown): TexReceiptExtraction | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Partial<TexReceiptExtraction>;
+  if (!record.expenseDate && !record.amount && !record.vendor) {
+    return null;
+  }
+
+  return {
+    vendor: typeof record.vendor === "string" ? record.vendor : null,
+    expenseDate: typeof record.expenseDate === "string" ? record.expenseDate : null,
+    amount: typeof record.amount === "number" ? record.amount : null,
+    currency: typeof record.currency === "string" ? record.currency : null,
+    category: typeof record.category === "string" ? record.category : null,
+    taxAmount: typeof record.taxAmount === "number" ? record.taxAmount : null,
+    taxIdNumber: typeof record.taxIdNumber === "string" ? record.taxIdNumber : null,
+    confidence: typeof record.confidence === "number" ? record.confidence : 0,
+    notes: typeof record.notes === "string" ? record.notes : null
+  };
+}
+
+function resolveWhatsappExpenseFields(
+  submission: TexUnregisteredWhatsappSubmissionRow,
+  extraction: TexReceiptExtraction | null
+) {
+  const amount = extraction?.amount && extraction.amount > 0 ? extraction.amount : 0.01;
+  const currency = extraction?.currency?.trim().toUpperCase() || "AED";
+  const expenseDate = extraction?.expenseDate ?? new Date().toISOString().slice(0, 10);
+  const notes = [
+    extraction?.notes,
+    submission.message_text,
+    `Originally received from unregistered WhatsApp sender ${submission.sender_phone ?? submission.sender_raw ?? "unknown"}.`,
+    amount === 0.01 ? "Receipt requires manual amount review." : null
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    vendor: extraction?.vendor ?? null,
+    expenseDate,
+    amount,
+    currency,
+    notes
+  };
+}
+
+async function insertResolvedWhatsappExpense(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: {
+    submission: TexUnregisteredWhatsappSubmissionRow;
+    employee: TexEmployeeProfile;
+    extraction: TexReceiptExtraction | null;
+    vendor: string | null;
+    expenseDate: string;
+    amount: number;
+    currency: string;
+    notes: string;
+  }
+): Promise<TexExpenseRecord> {
+  const result = await client.query<TexExpenseRow>(
+    `
+      insert into public.tex_expenses (
+        tenant_id,
+        submitter_user_id,
+        employee_profile_id,
+        employee_name,
+        employee_phone,
+        whatsapp_chat_jid,
+        vendor,
+        expense_date,
+        amount,
+        currency,
+        base_amount,
+        category,
+        payment_method,
+        notes,
+        tax_id_number,
+        tax_amount,
+        receipt_file_id,
+        status,
+        source,
+        extraction_source,
+        extraction_confidence,
+        extraction_payload,
+        policy_flag,
+        policy_flag_reason,
+        manager_review_required,
+        created_by,
+        updated_by
+      )
+      values (
+        public.current_tenant_id(),
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $8,
+        $10,
+        $11,
+        $12,
+        $13,
+        $14,
+        $15,
+        'pending',
+        'whatsapp',
+        'whatsapp_ai',
+        $16,
+        $17::jsonb,
+        true,
+        $18,
+        true,
+        $1,
+        $1
+      )
+      returning id, status, amount::float as amount, currency
+    `,
+    [
+      actor.userId,
+      input.employee.id,
+      input.employee.name,
+      input.employee.phoneNumber,
+      input.submission.whatsapp_chat_jid,
+      input.vendor,
+      parseIsoDate(input.expenseDate, "expense date"),
+      input.amount,
+      input.currency,
+      input.extraction?.category ?? "Receipt",
+      null,
+      input.notes,
+      input.extraction?.taxIdNumber ?? null,
+      input.extraction?.taxAmount ?? null,
+      input.submission.receipt_file_id,
+      input.extraction?.confidence ?? null,
+      JSON.stringify(input.extraction ?? {}),
+      "Receipt came from an unregistered WhatsApp number and was assigned by a reviewer."
+    ]
+  );
+
+  return mapExpense(requireSingleRow(result.rows, "expense"));
 }
 
 function uniqueUuids(values: string[], label: string) {
@@ -2458,7 +5801,9 @@ function parseIsoDate(value: string, label: string) {
   return trimmed;
 }
 
-function assertExpenseStatus(status: string): asserts status is Exclude<TexExpenseStatus, "pending"> {
+function assertExpenseStatus(
+  status: string
+): asserts status is Exclude<TexExpenseStatus, "pending"> {
   if (status !== "approved" && status !== "rejected" && status !== "paid") {
     throw new Error(`Unsupported TEX expense status: ${status}`);
   }
@@ -2468,6 +5813,17 @@ function assertUuid(value: string, label: string) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
     throw new Error(`Invalid ${label}.`);
   }
+}
+
+function sanitizeOptionalUuid(value: string | null | undefined, label: string) {
+  const clean = cleanOptional(value);
+
+  if (!clean) {
+    return null;
+  }
+
+  assertUuid(clean, label);
+  return clean;
 }
 
 function cleanOptional(value: string | null | undefined) {
@@ -2485,7 +5841,84 @@ function cleanRequired(value: string | null | undefined, label: string) {
   return clean;
 }
 
-function classifyWhatsappMessage(submission: Required<TexWebhookSubmissionInput>): "receipt" | "status" | "text" {
+function sanitizeExpenseCategoryInput(input: TexExpenseCategoryInput) {
+  return {
+    name: cleanRequired(input.name, "Category name"),
+    isActive: input.isActive ?? true,
+    sortOrder: sanitizeInteger(input.sortOrder, "Sort order", 0)
+  };
+}
+
+function sanitizeSpendPolicyInput(input: TexSpendPolicyInput): Required<TexSpendPolicyInput> {
+  return {
+    category: cleanRequired(input.category, "Policy category"),
+    dailyLimit: sanitizeOptionalAmount(input.dailyLimit, "Daily limit"),
+    monthlyLimit: sanitizeOptionalAmount(input.monthlyLimit, "Monthly limit"),
+    requiresNotesAbove: sanitizeOptionalAmount(input.requiresNotesAbove, "Notes threshold"),
+    isBlocked: input.isBlocked ?? false
+  };
+}
+
+function sanitizeBudgetInput(input: TexBudgetInput) {
+  return {
+    department: cleanRequired(input.department, "Department"),
+    month: sanitizeMonth(input.month),
+    year: sanitizeYear(input.year),
+    budgetAmount: sanitizeRequiredAmount(input.budgetAmount, "Budget amount")
+  };
+}
+
+function sanitizeMonth(value: number) {
+  const month = sanitizeInteger(value, "Month", 1);
+
+  if (month < 1 || month > 12) {
+    throw new Error("Month must be between 1 and 12.");
+  }
+
+  return month;
+}
+
+function sanitizeYear(value: number) {
+  const year = sanitizeInteger(value, "Year", new Date().getUTCFullYear());
+
+  if (year < 2000 || year > 2200) {
+    throw new Error("Year must be between 2000 and 2200.");
+  }
+
+  return year;
+}
+
+function sanitizeInteger(value: number | null | undefined, label: string, fallback: number) {
+  const numberValue = value === null || value === undefined ? fallback : Number(value);
+
+  if (!Number.isInteger(numberValue)) {
+    throw new Error(`${label} must be a whole number.`);
+  }
+
+  return numberValue;
+}
+
+function sanitizeOptionalAmount(value: number | null | undefined, label: string) {
+  if (value === null || value === undefined || value === 0) {
+    return null;
+  }
+
+  return sanitizeRequiredAmount(value, label);
+}
+
+function sanitizeRequiredAmount(value: number, label: string) {
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error(`${label} must be a positive amount.`);
+  }
+
+  return Math.round(amount * 100) / 100;
+}
+
+function classifyWhatsappMessage(
+  submission: Required<TexWebhookSubmissionInput>
+): "receipt" | "status" | "text" {
   if (submission.messageText?.trim().toUpperCase() === "STATUS") {
     return "status";
   }
@@ -2517,7 +5950,58 @@ function mapCategory(row: TexExpenseCategoryRow): TexExpenseCategory {
     id: row.id,
     name: row.name,
     isActive: row.is_active,
-    isSystem: row.is_system
+    isSystem: row.is_system,
+    sortOrder: row.sort_order
+  };
+}
+
+function mergePoliciesWithCategories(
+  categories: readonly TexExpenseCategoryRow[],
+  policies: readonly TexSpendPolicyRow[]
+) {
+  const policyByCategory = new Map(policies.map((policy) => [policy.category, policy]));
+  const merged = categories.map((category) => {
+    const policy = policyByCategory.get(category.name);
+    return policy
+      ? mapSpendPolicy(policy)
+      : {
+          id: null,
+          category: category.name,
+          dailyLimit: null,
+          monthlyLimit: null,
+          requiresNotesAbove: null,
+          isBlocked: false
+        };
+  });
+  const categoryNames = new Set(categories.map((category) => category.name));
+  const customPolicies = policies
+    .filter((policy) => !categoryNames.has(policy.category))
+    .map(mapSpendPolicy);
+
+  return [...merged, ...customPolicies];
+}
+
+function mapSpendPolicy(row: TexSpendPolicyRow): TexSpendPolicy {
+  return {
+    id: row.id,
+    category: row.category,
+    dailyLimit: row.daily_limit,
+    monthlyLimit: row.monthly_limit,
+    requiresNotesAbove: row.requires_notes_above,
+    isBlocked: row.is_blocked
+  };
+}
+
+function mapBudget(row: TexBudgetRow): TexBudget {
+  const spentAmount = row.spent_amount ?? 0;
+  return {
+    id: row.id,
+    department: row.department,
+    month: row.month,
+    year: row.year,
+    budgetAmount: row.budget_amount,
+    spentAmount,
+    remainingAmount: row.budget_amount - spentAmount
   };
 }
 
@@ -2528,7 +6012,21 @@ function mapEmployeeProfile(row: TexEmployeeProfileRow): TexEmployeeProfile {
     name: row.name,
     phoneNumber: row.phone_number,
     department: row.department,
+    monthlySalary: row.monthly_salary,
+    managerUserId: row.manager_user_id,
+    managerName: row.manager_name,
+    managerEmail: row.manager_email,
+    submissionFrequency: row.submission_frequency,
     isActive: row.is_active
+  };
+}
+
+function mapManagerUser(row: TexManagerUserRow): TexManagerUser {
+  return {
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    roles: row.roles.filter(isRoleKey)
   };
 }
 
@@ -2536,7 +6034,12 @@ function mapTeam(row: TexTeamRow): TexTeam {
   return {
     id: row.id,
     name: row.name,
-    description: row.description
+    description: row.description,
+    managerEmployeeProfileId: row.manager_employee_profile_id,
+    managerName: row.manager_name,
+    memberEmployeeProfileIds: splitDelimited(row.member_employee_profile_ids, ","),
+    memberNames: splitDelimited(row.member_names, "|"),
+    memberCount: row.member_count
   };
 }
 
@@ -2551,6 +6054,45 @@ function mapIntegrationSettings(row: TexIntegrationSettingsRow): TexIntegrationS
     duplicateDetectionEnabled: row.duplicate_detection_enabled,
     duplicateAutoRejectEnabled: row.duplicate_auto_reject_enabled,
     duplicateSimilarityThreshold: row.duplicate_similarity_threshold
+  };
+}
+
+function mapProviderProfileSummary(row: TexProviderProfileSummaryRow): TexProviderProfileSummary {
+  return {
+    id: row.id,
+    label: row.label,
+    provider: row.provider,
+    status: row.status,
+    isDefault: row.is_default,
+    webhookUrl: row.webhook_url,
+    apiKeyConfigured: row.keys_configured,
+    apiKeyLast4: row.api_key_last4 ?? ""
+  };
+}
+
+function mapQuickConnectSession(row: TexQuickConnectSessionRow): TexQuickConnectSession {
+  return {
+    id: row.id,
+    status: row.status,
+    pairingCode: row.pairing_code,
+    qrCodeData: row.qr_code_data,
+    qrExpiresAt: row.qr_expires_at,
+    connectedPhone: row.connected_phone,
+    connectedAt: row.connected_at,
+    lastSeenAt: row.last_seen_at,
+    error: row.error,
+    updatedAt: row.updated_at
+  };
+}
+
+function mapQuickConnectEvent(row: TexQuickConnectEventRow): TexQuickConnectEvent {
+  return {
+    id: row.id,
+    eventType: row.event_type,
+    direction: row.direction,
+    status: row.status,
+    message: row.message,
+    occurredAt: row.occurred_at
   };
 }
 
@@ -2575,6 +6117,8 @@ function mapExpenseListItem(row: TexExpenseListRow): TexExpenseListItem {
     category: row.category,
     tripName: row.trip_name,
     notes: row.notes,
+    receiptFileId: row.receipt_file_id,
+    receiptUrl: row.receipt_file_id ? `/api/tex/receipts/${row.receipt_file_id}` : null,
     createdAt: row.created_at,
     duplicateStatus: row.duplicate_status,
     duplicateReason: row.duplicate_reason,
@@ -2679,11 +6223,136 @@ function mapFinanceTripPayout(row: TexFinanceTripPayoutRow): TexFinanceTripPayou
   };
 }
 
+function mapReportExpense(row: TexReportExpenseRow): TexReportExpense {
+  return {
+    id: row.id,
+    employeeProfileId: row.employee_profile_id,
+    employeeName: row.employee_name,
+    vendor: row.vendor,
+    expenseDate: row.expense_date,
+    amount: row.amount,
+    currency: row.currency,
+    baseAmount: row.base_amount,
+    category: row.category,
+    tripId: row.trip_id,
+    tripName: row.trip_name,
+    paymentMethod: row.payment_method,
+    source: row.source,
+    status: row.status,
+    policyFlag: row.policy_flag,
+    taxAmount: row.tax_amount,
+    taxIdNumber: row.tax_id_number,
+    approvedAt: row.approved_at,
+    paidAt: row.paid_at,
+    createdAt: row.created_at
+  };
+}
+
+function mapDriverAdvance(row: TexDriverAdvanceRow): TexDriverAdvance {
+  return {
+    id: row.id,
+    employeeProfileId: row.employee_profile_id,
+    amount: row.amount,
+    currency: row.currency,
+    baseAmount: row.base_amount,
+    advanceDate: row.advance_date,
+    month: row.month,
+    year: row.year,
+    notes: row.notes
+  };
+}
+
+function mapFxRate(row: TexFxRateRow): TexFxRate {
+  return {
+    id: row.id,
+    rateDate: row.rate_date,
+    fromCurrency: row.from_currency,
+    toCurrency: row.to_currency,
+    rate: row.rate,
+    source: row.source,
+    isManualOverride: row.is_manual_override
+  };
+}
+
+function mapCurrencyPeg(row: TexCurrencyPegRow): TexCurrencyPeg {
+  return {
+    fromCurrency: row.from_currency,
+    toCurrency: row.to_currency,
+    rate: row.rate,
+    effectiveFrom: row.effective_from,
+    notes: row.notes
+  };
+}
+
+function splitDelimited(value: string | null, delimiter: string) {
+  return value ? value.split(delimiter).filter(Boolean) : [];
+}
+
+function mapNotification(row: TexNotificationRow): TexNotification {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    title: row.title,
+    body: row.body,
+    type: row.type,
+    relatedExpenseId: row.related_expense_id,
+    relatedTripId: row.related_trip_id,
+    isRead: row.is_read,
+    createdAt: row.created_at
+  };
+}
+
+function mapUnregisteredWhatsappSubmission(
+  row: TexUnregisteredWhatsappSubmissionRow
+): TexUnregisteredWhatsappSubmission {
+  return {
+    id: row.id,
+    status: row.status,
+    senderRaw: row.sender_raw,
+    senderPhone: row.sender_phone,
+    whatsappChatJid: row.whatsapp_chat_jid,
+    messageId: row.message_id,
+    sessionId: row.session_id,
+    messageText: row.message_text,
+    receiptFileId: row.receipt_file_id,
+    mediaUrl: row.media_url,
+    mediaMimeType: row.media_mime_type,
+    messageType: row.message_type,
+    ocrStatus: row.ocr_status,
+    ocrResult: parseSubmissionExtraction(row.ocr_result),
+    ocrError: row.ocr_error,
+    whatsappReplyText: row.whatsapp_reply_text,
+    resolvedExpenseId: row.resolved_expense_id,
+    resolvedEmployeeProfileId: row.resolved_employee_profile_id,
+    resolvedAt: row.resolved_at,
+    createdAt: row.created_at
+  };
+}
+
 type TexExpenseCategoryRow = {
   id: string;
   name: string;
   is_active: boolean;
   is_system: boolean;
+  sort_order: number;
+};
+
+type TexSpendPolicyRow = {
+  id: string;
+  category: string;
+  daily_limit: number | null;
+  monthly_limit: number | null;
+  requires_notes_above: number | null;
+  is_blocked: boolean;
+};
+
+type TexBudgetRow = {
+  id: string;
+  department: string;
+  month: number;
+  year: number;
+  budget_amount: number;
+  spent_amount: number | null;
 };
 
 type TexEmployeeProfileRow = {
@@ -2692,13 +6361,30 @@ type TexEmployeeProfileRow = {
   name: string;
   phone_number: string;
   department: string | null;
+  monthly_salary: number;
+  manager_user_id: string | null;
+  manager_name: string | null;
+  manager_email: string | null;
+  submission_frequency: "realtime" | "daily" | "weekly" | "monthly";
   is_active: boolean;
+};
+
+type TexManagerUserRow = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  roles: string[];
 };
 
 type TexTeamRow = {
   id: string;
   name: string;
   description: string | null;
+  manager_employee_profile_id: string | null;
+  manager_name: string | null;
+  member_employee_profile_ids: string;
+  member_names: string;
+  member_count: number;
 };
 
 type TexIntegrationSettingsRow = {
@@ -2711,6 +6397,45 @@ type TexIntegrationSettingsRow = {
   duplicate_detection_enabled: boolean;
   duplicate_auto_reject_enabled: boolean;
   duplicate_similarity_threshold: number;
+};
+
+type TexEmailNotificationSettingsRow = {
+  email_notifications_enabled: boolean;
+  email_report_frequency: "off" | "daily" | "weekly" | "monthly";
+  email_report_recipients: string[] | null;
+};
+
+type TexProviderProfileSummaryRow = {
+  id: string;
+  label: string;
+  provider: "ultramsg" | "wappfly" | "meta";
+  status: "active" | "inactive";
+  is_default: boolean;
+  webhook_url: string | null;
+  api_key_last4: string | null;
+  keys_configured: boolean;
+};
+
+type TexQuickConnectSessionRow = {
+  id: string;
+  status: TexQuickConnectStatus;
+  pairing_code: string | null;
+  qr_code_data: string | null;
+  qr_expires_at: string | null;
+  connected_phone: string | null;
+  connected_at: string | null;
+  last_seen_at: string | null;
+  error: string | null;
+  updated_at: string;
+};
+
+type TexQuickConnectEventRow = {
+  id: string;
+  event_type: string;
+  direction: "inbound" | "outbound" | "system";
+  status: string | null;
+  message: string | null;
+  occurred_at: string;
 };
 
 type TexExpenseRow = {
@@ -2727,6 +6452,7 @@ type TexExpenseListRow = TexExpenseRow & {
   category: string | null;
   trip_name: string | null;
   notes: string | null;
+  receipt_file_id: string | null;
   created_at: string;
   duplicate_status: "clear" | "suspected" | "duplicate";
   duplicate_reason: string | null;
@@ -2822,9 +6548,105 @@ type TexFinanceTripPayoutRow = {
   total_amount: number;
 };
 
+type TexReportExpenseRow = {
+  id: string;
+  employee_profile_id: string | null;
+  employee_name: string | null;
+  vendor: string | null;
+  expense_date: string;
+  amount: number;
+  currency: string;
+  base_amount: number;
+  category: string | null;
+  trip_id: string | null;
+  trip_name: string | null;
+  payment_method: string | null;
+  source: string | null;
+  status: TexExpenseStatus;
+  policy_flag: boolean;
+  tax_amount: number | null;
+  tax_id_number: string | null;
+  approved_at: string | null;
+  paid_at: string | null;
+  created_at: string;
+};
+
+type TexFxRateRow = {
+  id: string;
+  rate_date: string;
+  from_currency: string;
+  to_currency: string;
+  rate: number;
+  source: string | null;
+  is_manual_override: boolean;
+};
+
+type TexCurrencyPegRow = {
+  from_currency: string;
+  to_currency: string;
+  rate: number;
+  effective_from: string;
+  notes: string | null;
+};
+
+type TexDriverAdvanceRow = {
+  id: string;
+  employee_profile_id: string;
+  amount: number;
+  currency: string;
+  base_amount: number;
+  advance_date: string;
+  month: number;
+  year: number;
+  notes: string | null;
+};
+
+type TexNotificationRow = {
+  id: string;
+  user_id: string | null;
+  title: string;
+  body: string | null;
+  type: string | null;
+  related_expense_id: string | null;
+  related_trip_id: string | null;
+  is_read: boolean;
+  created_at: string;
+};
+
 type TexWebhookSubmissionRow = {
   id: string;
   status: "open" | "resolved" | "ignored";
+};
+
+type TexWhatsappNotificationSettingsRow = {
+  whatsapp_provider: WhatsAppProvider;
+  whatsapp_instance_id: string | null;
+  wappfly_session_id: string | null;
+  meta_phone_number_id: string | null;
+  api_key: string | null;
+};
+
+type TexUnregisteredWhatsappSubmissionRow = {
+  id: string;
+  sender_raw: string | null;
+  sender_phone: string | null;
+  whatsapp_chat_jid: string | null;
+  message_id: string | null;
+  session_id: string | null;
+  message_text: string | null;
+  receipt_file_id: string | null;
+  media_url: string | null;
+  media_mime_type: string | null;
+  message_type: "receipt" | "status" | "text";
+  ocr_status: TexWhatsappReceiptResult["ocrStatus"];
+  ocr_result: unknown;
+  ocr_error: string | null;
+  whatsapp_reply_text: string | null;
+  status: "open" | "resolved" | "ignored";
+  resolved_expense_id: string | null;
+  resolved_employee_profile_id: string | null;
+  resolved_at: string | null;
+  created_at: string;
 };
 
 type TexProcessingSettingsRow = {
@@ -2855,10 +6677,125 @@ type TexProductRow = {
   key: string;
 };
 
+type TexOnboardingStatusRow = {
+  company_profile_completed_at: string | null;
+  whatsapp_connected_at: string | null;
+  first_employee_invited_at: string | null;
+  first_receipt_received_at: string | null;
+  first_expense_approved_at: string | null;
+  dashboard_first_viewed_at: string | null;
+  last_activity_at: string | null;
+  ocr_pending_count: number;
+  manual_review_count: number;
+};
+
+type TexEmployeeLimitRow = {
+  active_count: number;
+  existing_phone: boolean;
+};
+
+type TexPlanContextRow = {
+  plan_key: string;
+  plan_status: string;
+  trial_start_date: string | null;
+  trial_end_date: string | null;
+  employee_limit: number | string | null;
+  seat_count: number | string | null;
+  whatsapp_provider_scope: string | null;
+};
+
+export function defaultTexPlanContext(): TexPlanContext {
+  return {
+    planKey: "trial",
+    planStatus: "trialing",
+    trialStartDate: null,
+    trialEndDate: null,
+    employeeLimit: 5,
+    seatCount: 0,
+    whatsappProviderScope: "not_configured",
+    growthFeaturesEnabled: false,
+    enterpriseFeaturesEnabled: false
+  };
+}
+
+function mapTexPlanContext(row: TexPlanContextRow | undefined): TexPlanContext {
+  const fallback = defaultTexPlanContext();
+  const planKey = isTexPlanKey(row?.plan_key) ? row.plan_key : fallback.planKey;
+  const planStatus = isTexPlanStatus(row?.plan_status) ? row.plan_status : fallback.planStatus;
+  const employeeLimit = positiveInteger(row?.employee_limit, fallback.employeeLimit);
+  const seatCount = positiveInteger(row?.seat_count, fallback.seatCount);
+  const whatsappProviderScope = isTexWhatsappProviderScope(row?.whatsapp_provider_scope)
+    ? row.whatsapp_provider_scope
+    : fallback.whatsappProviderScope;
+
+  return {
+    planKey,
+    planStatus,
+    trialStartDate: row?.trial_start_date ?? null,
+    trialEndDate: row?.trial_end_date ?? null,
+    employeeLimit,
+    seatCount,
+    whatsappProviderScope,
+    growthFeaturesEnabled: planKey === "growth" || planKey === "enterprise",
+    enterpriseFeaturesEnabled: planKey === "enterprise"
+  };
+}
+
+function mapOnboardingStatus(row: TexOnboardingStatusRow): TexOnboardingStatus {
+  const completedSteps = [
+    row.company_profile_completed_at,
+    row.whatsapp_connected_at,
+    row.first_employee_invited_at,
+    row.first_receipt_received_at,
+    row.first_expense_approved_at,
+    row.dashboard_first_viewed_at
+  ].filter(Boolean).length;
+
+  return {
+    companyProfileCompletedAt: row.company_profile_completed_at,
+    whatsappConnectedAt: row.whatsapp_connected_at,
+    firstEmployeeInvitedAt: row.first_employee_invited_at,
+    firstReceiptReceivedAt: row.first_receipt_received_at,
+    firstExpenseApprovedAt: row.first_expense_approved_at,
+    dashboardFirstViewedAt: row.dashboard_first_viewed_at,
+    lastActivityAt: row.last_activity_at,
+    ocrPendingCount: Number(row.ocr_pending_count ?? 0),
+    manualReviewCount: Number(row.manual_review_count ?? 0),
+    progress: Math.round((completedSteps / 6) * 100)
+  };
+}
+
+function positiveInteger(value: number | string | null | undefined, fallback: number) {
+  const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function isTexPlanKey(value: string | undefined): value is TexPlanKey {
+  return value === "trial" || value === "lite" || value === "growth" || value === "enterprise";
+}
+
+function isTexPlanStatus(value: string | undefined): value is TexPlanStatus {
+  return (
+    value === "trialing" ||
+    value === "active" ||
+    value === "expired" ||
+    value === "suspended" ||
+    value === "cancelled"
+  );
+}
+
+function isTexWhatsappProviderScope(
+  value: string | null | undefined
+): value is TexWhatsappProviderScope {
+  return value === "not_configured" || value === "torrevie_managed" || value === "customer_owned";
+}
+
 function isRoleKey(value: string): value is RoleKey {
   return (roleKeys as readonly string[]).includes(value);
 }
 
 function isProductKey(value: string): value is ProductKey {
-  return value === "crm" || value === "fsm" || value === "tex" || value === "cme" || value === "lqs";
+  return (
+    value === "crm" || value === "fsm" || value === "tex" || value === "cme" || value === "lqs"
+  );
 }

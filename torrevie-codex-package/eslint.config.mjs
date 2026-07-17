@@ -8,6 +8,7 @@ export default tseslint.config(
       "coverage/**",
       "dist/**",
       "node_modules/**",
+      "**/_migration-source/**",
       "pnpm-lock.yaml",
       "reference/**"
     ]

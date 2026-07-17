@@ -248,7 +248,7 @@ function errorMessage(error: unknown) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(`${value}T00:00:00Z`));
+  return new Intl.DateTimeFormat("en-GB").format(new Date(`${value}T00:00:00Z`));
 }
 
 function formatMoney(value: number, currency: string) {

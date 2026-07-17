@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type RefObject,
+  type SetStateAction
+} from "react";
 import type { TexBootstrap, TexTripInput, TexTripLeg, TexTripLegInput, TexTripListItem } from "../../../lib/tex";
 
 type TexTripsClientProps = {
@@ -19,6 +27,8 @@ type TripFormState = {
   destination: string;
   destinationPlaceId: string;
   budgetAmount: string;
+  advanceDepositFileId: string;
+  advanceDepositFileName: string;
   startDate: string;
   endDate: string;
   enforceCurrency: boolean;
@@ -62,15 +72,11 @@ type PlaceSuggestion = {
   text: string;
 };
 
-type GoogleRouteEstimate = {
-  distanceKm: number;
-  durationSeconds: number | null;
-  routePolyline: string | null;
-  source: string;
-  isReturnTrip: boolean;
-  returnDistanceKm: number | null;
-  returnDurationSeconds: number | null;
-  totalDistanceKm: number;
+type ReceiptUploadResponse = {
+  receipt: {
+    id: string;
+    filename: string;
+  };
 };
 
 const blankTripForm = (): TripFormState => ({
@@ -83,6 +89,8 @@ const blankTripForm = (): TripFormState => ({
   destination: "",
   destinationPlaceId: "",
   budgetAmount: "",
+  advanceDepositFileId: "",
+  advanceDepositFileName: "",
   startDate: "",
   endDate: "",
   enforceCurrency: false,
@@ -124,6 +132,7 @@ const blankLeg = (sequence: number): LegFormState => ({
 export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClientProps) {
   const [trips, setTrips] = useState(initialTrips);
   const [form, setForm] = useState<TripFormState>(blankTripForm);
+  const tripEndDateRef = useRef<HTMLInputElement>(null);
   const [legsTrip, setLegsTrip] = useState<TexTripListItem | null>(null);
   const [legs, setLegs] = useState<LegFormState[]>([]);
   const [legsLoading, setLegsLoading] = useState(false);
@@ -139,6 +148,16 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
   const [legsError, setLegsError] = useState<string | null>(null);
   const openTrips = useMemo(() => trips.filter((trip) => trip.status === "open"), [trips]);
   const closedTrips = useMemo(() => trips.filter((trip) => trip.status !== "open"), [trips]);
+  const selectedTeam = teams.find((team) => team.id === form.teamId);
+  const driverOptions = useMemo(() => {
+    if (!selectedTeam) {
+      return employees.filter((employee) => employee.isActive);
+    }
+
+    const memberIds = new Set(selectedTeam.memberEmployeeProfileIds);
+    return employees.filter((employee) => employee.isActive && memberIds.has(employee.id));
+  }, [employees, selectedTeam]);
+  const isInternalDriver = Boolean(form.driverEmployeeProfileId);
 
   async function refreshTrips() {
     const response = await texFetch<{ trips: TexTripListItem[] }>("/trips");
@@ -156,6 +175,8 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
       destination: trip.destination ?? "",
       destinationPlaceId: "",
       budgetAmount: trip.budgetAmount === null ? "" : String(trip.budgetAmount),
+      advanceDepositFileId: "",
+      advanceDepositFileName: "",
       startDate: trip.startDate ?? "",
       endDate: trip.endDate ?? "",
       enforceCurrency: trip.enforceCurrency,
@@ -198,27 +219,41 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
         origin: form.origin || null,
         destination: form.destination || null,
         budgetAmount: readOptionalNumber(form.budgetAmount),
+        advanceDepositFileId: form.advanceDepositFileId || null,
         startDate: form.startDate || null,
         endDate: form.endDate || null,
-        enforceCurrency: form.enforceCurrency,
-        enforcedCurrency: form.enforceCurrency ? form.enforcedCurrency : null,
+        enforceCurrency: false,
+        enforcedCurrency: null,
         teamId: form.teamId || null,
         containerNumber: form.containerNumber || null,
         driverEmployeeProfileId: form.driverEmployeeProfileId || null,
         driverTripAmount: readOptionalNumber(form.driverTripAmount),
-        subcontractorDriverName: form.subcontractorDriverName || null,
-        subcontractorAmount: readOptionalNumber(form.subcontractorAmount),
-        subcontractorNotes: form.subcontractorNotes || null
+        subcontractorDriverName: form.driverEmployeeProfileId ? null : form.subcontractorDriverName || null,
+        subcontractorAmount: form.driverEmployeeProfileId ? null : readOptionalNumber(form.subcontractorAmount),
+        subcontractorNotes: form.driverEmployeeProfileId ? null : form.subcontractorNotes || null
       };
       const response = await texFetch<{ trip: TexTripListItem }>(form.id ? `/trips/${form.id}` : "/trips", {
         method: form.id ? "PATCH" : "POST",
         body: JSON.stringify(payload)
       });
-      const legNotice = form.id ? "" : await createInitialTripLeg(response.trip.id);
-      setTripNotice(form.id ? "Trip updated." : ["Trip created.", legNotice].filter(Boolean).join(" "));
+      setTrips((current) =>
+        form.id
+          ? current.map((trip) => (trip.id === response.trip.id ? response.trip : trip))
+          : [response.trip, ...current]
+      );
+      if (!form.id) {
+        void createInitialTripLeg(response.trip.id).then((legNotice) => {
+          if (legNotice) {
+            setTripNotice(legNotice);
+          }
+          void refreshTrips();
+        });
+      } else {
+        void refreshTrips();
+      }
+      setTripNotice(form.id ? "Trip updated." : "Trip created. Initial leg is being prepared.");
       setForm(blankTripForm());
       setIsTripDrawerOpen(false);
-      await refreshTrips();
     } catch (caught) {
       setTripError(errorMessage(caught));
     } finally {
@@ -318,7 +353,7 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
       return "";
     }
 
-    let leg: TexTripLegInput = {
+    const leg: TexTripLegInput = {
       sequence: 1,
       origin: form.origin,
       originPlaceId: form.originPlaceId || null,
@@ -332,41 +367,36 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
       containerRef: form.containerNumber || null,
       notes: "Created from trip origin and destination"
     };
-    let notice = "Initial road leg created.";
-
-    try {
-      const route = await texFetch<{ estimate: GoogleRouteEstimate }>(`/trips/${tripId}/legs/estimate`, {
-        method: "POST",
-        body: JSON.stringify({
-          origin: form.origin,
-          originPlaceId: form.originPlaceId || null,
-          destination: form.destination,
-          destinationPlaceId: form.destinationPlaceId || null,
-          returnToOrigin: false
-        })
-      });
-
-      leg = {
-        ...leg,
-        distanceKm: route.estimate.distanceKm,
-        durationSeconds: route.estimate.durationSeconds,
-        distanceSource: route.estimate.source,
-        routePolyline: route.estimate.routePolyline,
-        totalDistanceKm: route.estimate.totalDistanceKm
-      };
-      notice = "Initial road leg created with Google Maps distance.";
-    } catch (caught) {
-      notice = `Initial road leg created without Google distance: ${errorMessage(caught)}`;
-    }
 
     try {
       await texFetch(`/trips/${tripId}/legs`, {
         method: "PUT",
         body: JSON.stringify({ legs: [leg] })
       });
-      return notice;
+      return "Initial road leg created. Use Estimate on the legs screen when Google distance is needed.";
     } catch (caught) {
       return `Trip saved, but the initial leg could not be created: ${errorMessage(caught)}`;
+    }
+  }
+
+  async function uploadAdvanceDeposit(file: File) {
+    setTripError(null);
+    try {
+      const upload = await texFetch<ReceiptUploadResponse>("/receipts", {
+        method: "POST",
+        body: JSON.stringify({
+          fileName: file.name,
+          contentType: file.type || "application/octet-stream",
+          dataBase64: await fileToDataUrl(file)
+        })
+      });
+      setForm((current) => ({
+        ...current,
+        advanceDepositFileId: upload.receipt.id,
+        advanceDepositFileName: upload.receipt.filename || file.name
+      }));
+    } catch (caught) {
+      setTripError(errorMessage(caught));
     }
   }
 
@@ -485,27 +515,53 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
               </div>
               <label>
                 Start
-                <input type="date" value={form.startDate} onChange={(event) => setFormValue(setForm, "startDate", event.target.value)} />
-              </label>
-              <label>
-                End
-                <input type="date" value={form.endDate} onChange={(event) => setFormValue(setForm, "endDate", event.target.value)} />
-              </label>
-              <label>
-                Budget
-                <input inputMode="decimal" value={form.budgetAmount} onChange={(event) => setFormValue(setForm, "budgetAmount", event.target.value)} />
-              </label>
-              <label>
-                Trip currency
                 <input
-                  value={form.enforcedCurrency}
-                  maxLength={3}
-                  onChange={(event) => setFormValue(setForm, "enforcedCurrency", event.target.value.toUpperCase())}
+                  lang="en-GB"
+                  type="date"
+                  value={form.startDate}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setForm((current) => ({
+                      ...current,
+                      startDate: value,
+                      endDate: current.endDate || value
+                    }));
+                    focusDateInput(tripEndDateRef);
+                  }}
                 />
               </label>
               <label>
+                End
+                <input
+                  lang="en-GB"
+                  ref={tripEndDateRef}
+                  type="date"
+                  value={form.endDate}
+                  onChange={(event) => setFormValue(setForm, "endDate", event.target.value)}
+                />
+              </label>
+              <label>
+                Driver advance / budget
+                <input inputMode="decimal" value={form.budgetAmount} onChange={(event) => setFormValue(setForm, "budgetAmount", event.target.value)} />
+              </label>
+              <label>
                 Team
-                <select value={form.teamId} onChange={(event) => setFormValue(setForm, "teamId", event.target.value)}>
+                <select
+                  value={form.teamId}
+                  onChange={(event) => {
+                    const teamId = event.target.value;
+                    const nextTeam = teams.find((team) => team.id === teamId);
+                    setForm((current) => {
+                      if (!nextTeam || !current.driverEmployeeProfileId) {
+                        return { ...current, teamId };
+                      }
+
+                      return nextTeam.memberEmployeeProfileIds.includes(current.driverEmployeeProfileId)
+                        ? { ...current, teamId }
+                        : { ...current, teamId, driverEmployeeProfileId: "" };
+                    });
+                  }}
+                >
                   <option value="">No team</option>
                   {teams.map((team) => (
                     <option key={team.id} value={team.id}>
@@ -518,10 +574,19 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
                 Driver
                 <select
                   value={form.driverEmployeeProfileId}
-                  onChange={(event) => setFormValue(setForm, "driverEmployeeProfileId", event.target.value)}
+                  onChange={(event) => {
+                    const driverEmployeeProfileId = event.target.value;
+                    setForm((current) => ({
+                      ...current,
+                      driverEmployeeProfileId,
+                      subcontractorDriverName: driverEmployeeProfileId ? "" : current.subcontractorDriverName,
+                      subcontractorAmount: driverEmployeeProfileId ? "" : current.subcontractorAmount,
+                      subcontractorNotes: driverEmployeeProfileId ? "" : current.subcontractorNotes
+                    }));
+                  }}
                 >
-                  <option value="">No driver</option>
-                  {employees.map((employee) => (
+                  <option value="">External driver</option>
+                  {driverOptions.map((employee) => (
                     <option key={employee.id} value={employee.id}>
                       {employee.name}
                     </option>
@@ -544,23 +609,64 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
                 External driver amount
                 <input
                   inputMode="decimal"
+                  disabled={isInternalDriver}
                   value={form.subcontractorAmount}
                   onChange={(event) => setFormValue(setForm, "subcontractorAmount", event.target.value)}
                 />
               </label>
+              <label>
+                External driver name
+                <input
+                  disabled={isInternalDriver}
+                  value={form.subcontractorDriverName}
+                  onChange={(event) => setFormValue(setForm, "subcontractorDriverName", event.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="tex-receipt-upload">
+              <div>
+                <strong>Advance receipt</strong>
+                <p>Attach the driver advance/deposit receipt linked to this trip budget.</p>
+              </div>
+              {form.advanceDepositFileName ? (
+                <div className="tex-receipt-file">
+                  <span>{form.advanceDepositFileName}</span>
+                  <button
+                    type="button"
+                    className="tex-secondary-button"
+                    onClick={() =>
+                      setForm((current) => ({
+                        ...current,
+                        advanceDepositFileId: "",
+                        advanceDepositFileName: ""
+                      }))
+                    }
+                  >
+                    Clear
+                  </button>
+                </div>
+              ) : (
+                <label className="tex-receipt-drop">
+                  <input
+                    type="file"
+                    accept=".jpeg,.jpg,.png,.webp,.heic,.heif,.pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) {
+                        void uploadAdvanceDeposit(file);
+                      }
+                    }}
+                  />
+                  <span>Attach advance receipt</span>
+                  <small>JPEG, PNG, WEBP, HEIC, or PDF</small>
+                </label>
+              )}
             </div>
 
             <label className="tex-wide-label">
               Description
               <input value={form.description} onChange={(event) => setFormValue(setForm, "description", event.target.value)} />
-            </label>
-            <label className="tex-checkbox-row">
-              <input
-                type="checkbox"
-                checked={form.enforceCurrency}
-                onChange={(event) => setForm((current) => ({ ...current, enforceCurrency: event.target.checked }))}
-              />
-              Lock all trip expenses to {form.enforcedCurrency || "this currency"}
             </label>
             <button type="button" className="tex-primary-button" disabled={isSaving || !form.name.trim()} onClick={saveTrip}>
               {isSaving ? "Saving..." : form.id ? "Update trip" : "Create trip"}
@@ -637,7 +743,7 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
             {!legsLoading && legs.length === 0 ? <p>No legs yet. Add the first route leg below.</p> : null}
             <div className="tex-trip-list">
               {legs.map((leg, index) => (
-                <article key={leg.id ?? `new-${index}`} className="tex-trip-card">
+                <article key={leg.id ?? `new-${index}`} className="tex-trip-card tex-leg-card">
                   <header>
                     <div>
                       <span className={`tex-status tex-status-${leg.status}`}>Leg {index + 1}</span>
@@ -682,19 +788,56 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
                     </label>
                     <label>
                       Planned start
-                      <input type="date" value={leg.plannedStart} onChange={(event) => updateLeg(setLegs, index, { plannedStart: event.target.value })} />
+                      <input
+                        id={`tex-leg-${index}-planned-end-source`}
+                        lang="en-GB"
+                        type="date"
+                        value={leg.plannedStart}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          updateLeg(setLegs, index, {
+                            plannedStart: value,
+                            plannedEnd: leg.plannedEnd || value
+                          });
+                          focusElement(`tex-leg-${index}-planned-end`);
+                        }}
+                      />
                     </label>
                     <label>
                       Planned end
-                      <input type="date" value={leg.plannedEnd} onChange={(event) => updateLeg(setLegs, index, { plannedEnd: event.target.value })} />
+                      <input
+                        id={`tex-leg-${index}-planned-end`}
+                        lang="en-GB"
+                        type="date"
+                        value={leg.plannedEnd}
+                        onChange={(event) => updateLeg(setLegs, index, { plannedEnd: event.target.value })}
+                      />
                     </label>
                     <label>
                       Actual start
-                      <input type="date" value={leg.actualStart} onChange={(event) => updateLeg(setLegs, index, { actualStart: event.target.value })} />
+                      <input
+                        lang="en-GB"
+                        type="date"
+                        value={leg.actualStart}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          updateLeg(setLegs, index, {
+                            actualStart: value,
+                            actualEnd: leg.actualEnd || value
+                          });
+                          focusElement(`tex-leg-${index}-actual-end`);
+                        }}
+                      />
                     </label>
                     <label>
                       Actual end
-                      <input type="date" value={leg.actualEnd} onChange={(event) => updateLeg(setLegs, index, { actualEnd: event.target.value })} />
+                      <input
+                        id={`tex-leg-${index}-actual-end`}
+                        lang="en-GB"
+                        type="date"
+                        value={leg.actualEnd}
+                        onChange={(event) => updateLeg(setLegs, index, { actualEnd: event.target.value })}
+                      />
                     </label>
                     <label>
                       Outbound distance km
@@ -730,34 +873,36 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
                       <input value={leg.distanceSource} disabled placeholder="Manual or Google Maps" />
                     </label>
                   </div>
-                  <button
-                    type="button"
-                    className="tex-secondary-button tex-inline-button"
-                    disabled={estimatingLegIndex === index || !leg.origin.trim() || !leg.destination.trim()}
-                    onClick={() => estimateLeg(index)}
-                  >
-                    {estimatingLegIndex === index ? "Estimating..." : "Estimate with Google Maps"}
-                  </button>
-                  <label className="tex-checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={leg.isReturnTrip}
-                      onChange={(event) => updateLegReturnToggle(setLegs, index, event.target.checked)}
-                    />
-                    Return to origin
-                  </label>
+                  <div className="tex-action-bar">
+                    <button
+                      type="button"
+                      className="tex-secondary-button"
+                      disabled={estimatingLegIndex === index || !leg.origin.trim() || !leg.destination.trim()}
+                      onClick={() => estimateLeg(index)}
+                    >
+                      {estimatingLegIndex === index ? "Estimating..." : "Estimate"}
+                    </button>
+                    <label className="tex-checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={leg.isReturnTrip}
+                        onChange={(event) => updateLegReturnToggle(setLegs, index, event.target.checked)}
+                      />
+                      Return to origin
+                    </label>
+                  </div>
                   <label className="tex-wide-label">
                     Notes
                     <input value={leg.notes} onChange={(event) => updateLeg(setLegs, index, { notes: event.target.value })} />
                   </label>
-                  <footer>
-                    <button type="button" disabled={index === 0} onClick={() => moveLeg(index, -1)}>
+                  <footer className="tex-action-bar">
+                    <button className="tex-secondary-button" type="button" disabled={index === 0} onClick={() => moveLeg(index, -1)}>
                       Move up
                     </button>
-                    <button type="button" disabled={index === legs.length - 1} onClick={() => moveLeg(index, 1)}>
+                    <button className="tex-secondary-button" type="button" disabled={index === legs.length - 1} onClick={() => moveLeg(index, 1)}>
                       Move down
                     </button>
-                    <button type="button" onClick={() => removeLeg(index)}>
+                    <button className="tex-secondary-button" type="button" onClick={() => removeLeg(index)}>
                       Remove
                     </button>
                   </footer>
@@ -836,7 +981,7 @@ function LegPlaceInput({
         if (!cancelled) {
           setSuggestions(places);
           setIsOpen(places.length > 0);
-          setSearchError(null);
+          setSearchError(places.length === 0 ? "No Google Places matches found." : null);
         }
       } catch (caught) {
         if (!cancelled) {
@@ -1127,10 +1272,27 @@ async function loadPlaceSuggestions(value: string) {
   const response = await texFetch<{ configured?: boolean; places: PlaceSuggestion[] }>(`/places?input=${encodeURIComponent(value)}`);
 
   if (response.configured === false) {
-    return [];
+    throw new Error("Google Places is not configured for this deployment.");
   }
 
   return response.places;
+}
+
+function focusDateInput(ref: RefObject<HTMLInputElement | null>) {
+  window.setTimeout(() => ref.current?.focus(), 0);
+}
+
+function focusElement(id: string) {
+  window.setTimeout(() => document.getElementById(id)?.focus(), 0);
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Could not read file."));
+    reader.readAsDataURL(file);
+  });
 }
 
 function readOptionalNumber(value: string) {

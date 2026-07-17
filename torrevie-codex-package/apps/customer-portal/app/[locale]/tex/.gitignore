@@ -1,0 +1,8 @@
+_migration-source/.codex-remote-attachments/
+_migration-source/.lovable/
+_migration-source/.vercel/
+_migration-source/node_modules/
+_migration-source/dist/
+_migration-source/.env
+_migration-source/.env.*
+!_migration-source/.env.example

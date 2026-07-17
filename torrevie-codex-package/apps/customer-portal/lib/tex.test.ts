@@ -2,33 +2,64 @@ import { strict as assert } from "node:assert";
 import type { QueryResult, QueryValue, TenantQueryClient } from "@torrevie/tenant-context";
 import {
   createTexExpense,
+  createTexEmployeeProfile,
+  createTexTeam,
   closeTexTrip,
   createTexTrip,
   deleteTexEmployeeProfile,
+  deleteTexTeam,
   deleteTexTripLeg,
   listTexTripLegs,
   listTexExpenses,
   listTexFinanceReview,
+  listTexFxWorkspace,
+  listTexIntegrationWorkspace,
+  listTexReportWorkspace,
   listTexTrips,
   listTexBootstrap,
   payTexFinanceItems,
   processTexWhatsappSubmission,
   recordTexWebhookSubmission,
+  refreshTexFxRates,
   replaceTexTripLegs,
   resolveTexActorContext,
+  sendTexEmailReport,
+  setTexEmailNotificationDispatcherForTest,
+  setTexWhatsappNotificationDispatcherForTest,
   updateTexTrip,
   updateTexEmployeeProfile,
+  updateTexTeam,
   updateTexExpenseStatus,
   uploadTexReceiptFile,
+  defaultTexPlanContext,
   type TexActorContext
 } from "./tex";
+
+setTexWhatsappNotificationDispatcherForTest(async (input) => ({
+  ok: true,
+  provider: input.provider,
+  status: "sent",
+  messageId: "test-whatsapp-message",
+  error: null,
+  httpStatus: 200
+}));
+
+setTexEmailNotificationDispatcherForTest(async () => ({
+  ok: false,
+  provider: "postmark",
+  status: "skipped",
+  messageId: null,
+  error: "Postmark server token is not configured.",
+  httpStatus: null
+}));
 
 const actor: TexActorContext = {
   tenantId: "00000000-0000-4000-8000-000000001001",
   userId: "00000000-0000-4000-8000-000000002001",
   roleScope: "customer",
   roles: ["customer_admin"],
-  entitledProducts: ["tex"]
+  entitledProducts: ["tex"],
+  texPlan: defaultTexPlanContext()
 };
 
 const standardActor: TexActorContext = {
@@ -60,7 +91,8 @@ class RecordingTexClient implements TenantQueryClient {
             id: "00000000-0000-4000-8000-000000003001",
             name: "Meals",
             is_active: true,
-            is_system: true
+            is_system: true,
+            sort_order: 10
           }
         ] as Row[]
       };
@@ -75,7 +107,13 @@ class RecordingTexClient implements TenantQueryClient {
             name: "Maya Haddad",
             phone_number: "+971500000001",
             department: "Operations",
-            is_active: true
+            monthly_salary: 12000,
+            manager_user_id: "00000000-0000-4000-8000-000000002002",
+            manager_name: "Omar Faris",
+            manager_email: "omar@example.test",
+            submission_frequency: "weekly",
+            is_active: true,
+            phone_digits: "971500000001"
           }
         ] as Row[]
       };
@@ -90,7 +128,32 @@ class RecordingTexClient implements TenantQueryClient {
             name: values[1],
             phone_number: values[2],
             department: values[3],
-            is_active: values[4]
+            monthly_salary: values[4],
+            manager_user_id: values[5],
+            manager_name: null,
+            manager_email: null,
+            submission_frequency: values[6],
+            is_active: values[7]
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_employee_profiles")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000004002",
+            user_id: null,
+            name: values[0],
+            phone_number: values[1],
+            department: values[2],
+            monthly_salary: values[3],
+            manager_user_id: values[4],
+            manager_name: null,
+            manager_email: null,
+            submission_frequency: values[5],
+            is_active: values[6]
           }
         ] as Row[]
       };
@@ -107,13 +170,133 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("insert into public.tex_teams")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000005002",
+            name: values[0],
+            description: values[1],
+            manager_employee_profile_id: values[2],
+            manager_name: null,
+            member_employee_profile_ids: "",
+            member_names: "",
+            member_count: 0
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("update public.tex_teams")) {
+      return {
+        rows: [
+          {
+            id: values[0],
+            name: values[1]
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("delete from public.tex_teams")) {
+      return {
+        rows: [
+          {
+            id: values[0],
+            name: "Ops"
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("from public.tex_teams")) {
       return {
         rows: [
           {
             id: "00000000-0000-4000-8000-000000005001",
             name: "Ops",
-            description: "Operations"
+            description: "Operations",
+            manager_employee_profile_id: "00000000-0000-4000-8000-000000004001",
+            manager_name: "Maya Haddad",
+            member_employee_profile_ids: "00000000-0000-4000-8000-000000004001",
+            member_names: "Maya Haddad",
+            member_count: 1
+          }
+        ] as Row[]
+      };
+    }
+
+    if (
+      sql.includes("from public.tex_employee_profiles") &&
+      sql.includes("and id = $1") &&
+      sql.includes("limit 1")
+    ) {
+      return {
+        rows: [{ id: values[0] }] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_team_members")) {
+      return { rows: [] };
+    }
+
+    if (sql.includes("from public.tex_fx_rates")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000017001",
+            rate_date: "2026-07-14",
+            from_currency: "EUR",
+            to_currency: "USD",
+            rate: 0.91,
+            source: "live",
+            is_manual_override: false
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("from public.tex_currency_pegs")) {
+      return {
+        rows: [
+          {
+            from_currency: "AED",
+            to_currency: "USD",
+            rate: 0.272294,
+            effective_from: "1997-11-01",
+            notes: "UAE dirham fixed peg"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("insert into public.tex_fx_rates")) {
+      return {
+        rows: [{ id: "00000000-0000-4000-8000-000000017002" }] as Row[]
+      };
+    }
+
+    if (sql.includes("api_secret.secret_value as api_key")) {
+      return {
+        rows: [
+          {
+            whatsapp_provider: "wappfly",
+            whatsapp_instance_id: null,
+            wappfly_session_id: "session-a",
+            meta_phone_number_id: null,
+            api_key: "test-api-key"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("email_notifications_enabled") && sql.includes("email_report_recipients")) {
+      return {
+        rows: [
+          {
+            email_notifications_enabled: true,
+            email_report_frequency: "weekly",
+            email_report_recipients: ["finance@example.test", " Ops@Example.test "]
           }
         ] as Row[]
       };
@@ -134,6 +317,51 @@ class RecordingTexClient implements TenantQueryClient {
             duplicate_similarity_threshold: 0.92
           }
         ] as Row[]
+      };
+    }
+
+    if (sql.includes("from public.tenant_whatsapp_provider_profiles")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000015001",
+            label: "Primary Wappfly",
+            provider: "wappfly",
+            status: "active",
+            is_default: true,
+            webhook_url: "https://app.torrevie.com/api/tex/webhooks/wappfly",
+            api_key_last4: "1234",
+            keys_configured: true
+          }
+        ] as Row[]
+      };
+    }
+
+    if (
+      sql.includes("from public.tenant_memberships tm") &&
+      sql.includes("join public.users u") &&
+      sql.includes("array_agg")
+    ) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000002002",
+            email: "omar@example.test",
+            display_name: "Omar Faris",
+            roles: ["customer_manager"]
+          }
+        ] as Row[]
+      };
+    }
+
+    if (
+      sql.includes("from public.tenant_memberships tm") &&
+      sql.includes("join public.users u") &&
+      sql.includes("select u.id") &&
+      sql.includes("tm.user_id = $1")
+    ) {
+      return {
+        rows: [{ id: values[0] }] as Row[]
       };
     }
 
@@ -218,6 +446,35 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("from public.tex_expenses e") && sql.includes("e.expense_date >= $1::date")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000006001",
+            employee_profile_id: "00000000-0000-4000-8000-000000004001",
+            employee_name: "Maya Haddad",
+            vendor: "Airport Cafe",
+            expense_date: values[0],
+            amount: 120,
+            currency: "AED",
+            base_amount: 120,
+            category: "Meals",
+            trip_id: "00000000-0000-4000-8000-000000008001",
+            trip_name: "Dubai run",
+            payment_method: "personal",
+            source: "web",
+            status: "approved",
+            policy_flag: false,
+            tax_amount: 5,
+            tax_id_number: "TRN123",
+            approved_at: "2026-07-12T10:00:00.000Z",
+            paid_at: null,
+            created_at: "2026-07-12T09:00:00.000Z"
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("from public.tex_expenses e") && sql.includes("order by e.created_at desc")) {
       return {
         rows: [
@@ -262,7 +519,10 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
-    if (sql.includes("from public.tex_trips t") && sql.includes("driver_payout_status = 'unpaid'")) {
+    if (
+      sql.includes("from public.tex_trips t") &&
+      sql.includes("driver_payout_status = 'unpaid'")
+    ) {
       return {
         rows: [
           {
@@ -354,7 +614,9 @@ class RecordingTexClient implements TenantQueryClient {
       return {
         rows: [
           {
-            id: sql.includes("insert into public.tex_trips") ? "00000000-0000-4000-8000-000000008001" : values[18],
+            id: sql.includes("insert into public.tex_trips")
+              ? "00000000-0000-4000-8000-000000008001"
+              : values[18],
             name: values[0] ?? "Dubai run",
             description: values[1] ?? null,
             trip_type: values[2] ?? "general",
@@ -484,7 +746,10 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
-    if (sql.includes("insert into public.tex_trip_legs") || sql.includes("update public.tex_trip_legs")) {
+    if (
+      sql.includes("insert into public.tex_trip_legs") ||
+      sql.includes("update public.tex_trip_legs")
+    ) {
       return {
         rows: [
           {
@@ -526,7 +791,11 @@ async function main() {
     const bootstrap = await listTexBootstrap(client, actor);
     assert.equal(bootstrap.categories[0]?.name, "Meals");
     assert.equal(bootstrap.employeeProfiles[0]?.name, "Maya Haddad");
+    assert.equal(bootstrap.employeeProfiles[0]?.managerName, "Omar Faris");
+    assert.equal(bootstrap.managerUsers[0]?.email, "omar@example.test");
     assert.equal(bootstrap.teams[0]?.name, "Ops");
+    assert.equal(bootstrap.teams[0]?.managerName, "Maya Haddad");
+    assert.equal(bootstrap.teams[0]?.memberCount, 1);
     assert.equal(bootstrap.integrationSettings?.whatsappProvider, "wappfly");
     assert.equal(client.hasSql("public.tex_expense_categories"), true);
     assert.equal(client.hasSql("app.current_tenant_id"), true);
@@ -534,14 +803,50 @@ async function main() {
 
   {
     const client = new RecordingTexClient();
-    const employee = await updateTexEmployeeProfile(client, actor, "00000000-0000-4000-8000-000000004001", {
-      name: "Maya Haddad Updated",
-      phoneNumber: "+971 50 000 0001",
-      department: "Finance",
-      isActive: false
+    const integrations = await listTexIntegrationWorkspace(client, {
+      ...actor,
+      roles: ["customer_admin"]
     });
+    assert.equal(integrations.defaultProviderProfile?.label, "Primary Wappfly");
+    assert.equal(integrations.receiptStorage.bucket, "receipts");
+    assert.equal(integrations.receiptStorage.pathPrefix, `tenant/${actor.tenantId}/tex/receipts/`);
+    assert.equal(client.hasSql("from public.tenant_whatsapp_provider_profiles"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const employee = await createTexEmployeeProfile(client, actor, {
+      name: "Omar Faris",
+      phoneNumber: "+971 50 000 0002",
+      department: "Logistics",
+      managerUserId: "00000000-0000-4000-8000-000000002002",
+      isActive: true
+    });
+    assert.equal(employee.name, "Omar Faris");
+    assert.equal(employee.phoneNumber, "971500000002");
+    assert.equal(employee.managerUserId, "00000000-0000-4000-8000-000000002002");
+    assert.equal(client.hasSql("tm.user_id = $1"), true);
+    assert.equal(client.hasSql("insert into public.tex_employee_profiles"), true);
+    assert.equal(client.valuesContain("tex.employee.created"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const employee = await updateTexEmployeeProfile(
+      client,
+      actor,
+      "00000000-0000-4000-8000-000000004001",
+      {
+        name: "Maya Haddad Updated",
+        phoneNumber: "+971 50 000 0001",
+        department: "Finance",
+        managerUserId: "00000000-0000-4000-8000-000000002002",
+        isActive: false
+      }
+    );
     assert.equal(employee.name, "Maya Haddad Updated");
     assert.equal(employee.phoneNumber, "971500000001");
+    assert.equal(employee.managerUserId, "00000000-0000-4000-8000-000000002002");
     assert.equal(employee.isActive, false);
     assert.equal(client.hasSql("update public.tex_employee_profiles"), true);
     assert.equal(client.valuesContain("tex.employee.updated"), true);
@@ -556,11 +861,105 @@ async function main() {
 
   {
     const client = new RecordingTexClient();
+    const team = await createTexTeam(client, actor, {
+      name: "Field Ops",
+      description: "Field operations",
+      managerEmployeeProfileId: "00000000-0000-4000-8000-000000004001",
+      memberEmployeeProfileIds: ["00000000-0000-4000-8000-000000004001"]
+    });
+    assert.equal(team.name, "Ops");
+    assert.equal(client.hasSql("insert into public.tex_teams"), true);
+    assert.equal(client.hasSql("insert into public.tex_team_members"), true);
+    assert.equal(client.valuesContain("tex.team.created"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const team = await updateTexTeam(client, actor, "00000000-0000-4000-8000-000000005001", {
+      name: "Ops Updated",
+      description: "Operations",
+      memberEmployeeProfileIds: ["00000000-0000-4000-8000-000000004001"]
+    });
+    assert.equal(team.memberCount, 1);
+    assert.equal(client.hasSql("update public.tex_teams"), true);
+    assert.equal(client.hasSql("delete from public.tex_team_members"), true);
+    assert.equal(client.valuesContain("tex.team.updated"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    await deleteTexTeam(client, actor, "00000000-0000-4000-8000-000000005001");
+    assert.equal(client.hasSql("delete from public.tex_teams"), true);
+    assert.equal(client.valuesContain("tex.team.deleted"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
     const expenses = await listTexExpenses(client, actor);
     assert.equal(expenses[0]?.employeeName, "Maya Haddad");
     assert.equal(expenses[0]?.tripName, "Dubai run");
     assert.equal(expenses[0]?.status, "pending");
     assert.equal(client.hasSql("from public.tex_expenses e"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const report = await listTexReportWorkspace(client, actor, {
+      dateFrom: "2026-07-01",
+      dateTo: "2026-07-31"
+    });
+    assert.equal(report.dateFrom, "2026-07-01");
+    assert.equal(report.previousDateFrom, "2026-05-31");
+    assert.equal(report.expenses[0]?.employeeName, "Maya Haddad");
+    assert.equal(report.expenses[0]?.baseAmount, 120);
+    assert.equal(client.hasSql("e.expense_date >= $1::date"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const result = await sendTexEmailReport(client, actor, {
+      dateFrom: "2026-07-01",
+      dateTo: "2026-07-31"
+    });
+    assert.equal(result.status, "skipped");
+    assert.equal(result.provider, "postmark");
+    assert.deepEqual(result.recipients, ["finance@example.test", "ops@example.test"]);
+    assert.equal(client.hasSql("email_report_recipients"), true);
+    assert.equal(client.hasSql("e.expense_date >= $1::date"), true);
+    assert.equal(client.valuesContain("tex.email_report.skipped"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const workspace = await listTexFxWorkspace(client, actor);
+    assert.equal(workspace.baseCurrency, "AED");
+    assert.equal(workspace.rates[0]?.fromCurrency, "EUR");
+    assert.equal(workspace.pegs[0]?.fromCurrency, "AED");
+    assert.equal(client.hasSql("from public.tex_fx_rates"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const previousKey = process.env.FX_API_KEY;
+    try {
+      process.env.FX_API_KEY = "fx-test";
+      const result = await refreshTexFxRates(client, actor, async () =>
+        Response.json({ result: "success", conversion_rates: { EUR: 0.91, GBP: 0.78 } })
+      );
+
+      assert.equal(result.success, true);
+      assert.equal(result.source, "live");
+      assert.equal(result.updated >= 2, true);
+      assert.equal(client.hasSql("app.platform_service_role"), true);
+      assert.equal(client.hasSql("insert into public.tex_fx_rates"), true);
+      assert.equal(client.valuesContain("tex.fx_rates.refreshed"), true);
+    } finally {
+      if (previousKey === undefined) {
+        delete process.env.FX_API_KEY;
+      } else {
+        process.env.FX_API_KEY = previousKey;
+      }
+    }
   }
 
   {
@@ -627,7 +1026,12 @@ async function main() {
 
   {
     const client = new RecordingTexClient();
-    await deleteTexTripLeg(client, actor, "00000000-0000-4000-8000-000000008001", "00000000-0000-4000-8000-000000009001");
+    await deleteTexTripLeg(
+      client,
+      actor,
+      "00000000-0000-4000-8000-000000008001",
+      "00000000-0000-4000-8000-000000009001"
+    );
     assert.equal(client.valuesContain("tex.trip.leg_deleted"), true);
   }
 
@@ -736,7 +1140,21 @@ async function main() {
     });
     assert.equal(result.ocrStatus, "not_applicable");
     assert.match(result.replyText, /Pending: 2/);
+    assert.equal(result.delivery?.status, "sent");
     assert.equal(client.valuesContain("status"), true);
+    assert.equal(client.valuesContain("tex.notification.whatsapp_reply_sent"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const result = await processTexWhatsappSubmission(client, integrationActor, {
+      senderPhone: "500000001",
+      messageId: "wamid.status.local",
+      messageText: "STATUS",
+      payload: { provider: "meta" }
+    });
+    assert.equal(result.ocrStatus, "not_applicable");
+    assert.match(result.replyText, /Pending: 2/);
   }
 
   {
@@ -749,7 +1167,7 @@ async function main() {
         vendor: "Airport Cafe",
         expenseDate: "2026-07-12",
         amount: 120,
-        currency: "AED",
+        currency: null,
         category: "Meals",
         taxAmount: 0,
         taxIdNumber: null,
@@ -760,6 +1178,8 @@ async function main() {
     });
     assert.equal(result.ocrStatus, "extracted");
     assert.match(result.replyText, /possible duplicate/);
+    assert.equal(result.delivery?.messageId, "test-whatsapp-message");
+    assert.equal(result.expense?.currency, "AED");
     assert.equal(client.valuesContain("suspected"), true);
     assert.equal(client.valuesContain(true), true);
   }
@@ -791,6 +1211,10 @@ async function main() {
       assert.equal(headers.apikey, "sb_secret_test");
       assert.equal("Authorization" in headers, false);
       assert.equal(receipt.filename, "receipt.png");
+      assert.match(
+        receipt.storagePath,
+        new RegExp(`^tenant/${actor.tenantId}/tex/receipts/[0-9a-f-]+\\.png$`)
+      );
       assert.equal(client.valuesContain("tex.receipt.uploaded"), true);
     } finally {
       globalThis.fetch = previousFetch;

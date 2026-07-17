@@ -1,0 +1,38 @@
+services:
+  - type: worker
+    name: torrevie-tex-quick-connect
+    runtime: node
+    plan: starter
+    region: frankfurt
+    branch: main
+    rootDir: torrevie-codex-package
+    buildCommand: pnpm install --frozen-lockfile
+    startCommand: pnpm tex:quick-connect:connector
+    autoDeploy: false
+    disk:
+      name: tex-quick-connect-sessions
+      mountPath: /var/lib/torrevie/tex-quick-connect-sessions
+      sizeGB: 1
+    envVars:
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        value: https://rhntonxblbhxsvdpmius.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: TORREVIE_DATABASE_SSL
+        value: "true"
+      - key: TORREVIE_DATABASE_SSL_REJECT_UNAUTHORIZED
+        value: "false"
+      - key: TEX_QUICK_CONNECT_SESSION_DIR
+        value: /var/lib/torrevie/tex-quick-connect-sessions
+      - key: TEX_QUICK_CONNECT_INSTANCE_ID
+        value: tex-qc-render-prod-01
+      - key: TEX_QUICK_CONNECT_POLL_MS
+        value: "5000"
+      - key: TEX_QUICK_CONNECT_MAX_SESSIONS
+        value: "5"
+      - key: TEX_QUICK_CONNECT_HEARTBEAT_MS
+        value: "30000"
+      - key: TEX_QUICK_CONNECT_HEALTH_WINDOW_SECONDS
+        value: "120"
+      - key: TEX_QUICK_CONNECT_LOG_LEVEL
+        value: info
