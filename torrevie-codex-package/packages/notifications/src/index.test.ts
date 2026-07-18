@@ -69,13 +69,15 @@ async function main() {
   {
     const previousEnv = {
       EMAIL_PROVIDER: process.env.EMAIL_PROVIDER,
-      POSTMARK_SERVER_TOKEN: process.env.POSTMARK_SERVER_TOKEN
+      POSTMARK_SERVER_TOKEN: process.env.POSTMARK_SERVER_TOKEN,
+      RESEND_API_KEY: process.env.RESEND_API_KEY
     };
     let result: Awaited<ReturnType<typeof dispatchEmailNotification>> | null = null;
 
     try {
       delete process.env.EMAIL_PROVIDER;
       delete process.env.POSTMARK_SERVER_TOKEN;
+      delete process.env.RESEND_API_KEY;
       result = await dispatchEmailNotification({
         to: "finance@example.test",
         subject: "TEX summary",
@@ -93,6 +95,56 @@ async function main() {
 
     assert.equal(result?.status, "skipped");
     assert.match(result?.error ?? "", /provider/);
+  }
+
+  {
+    const previousEnv = {
+      EMAIL_PROVIDER: process.env.EMAIL_PROVIDER,
+      RESEND_API_KEY: process.env.RESEND_API_KEY,
+      RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL
+    };
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    let result: Awaited<ReturnType<typeof dispatchEmailNotification>> | null = null;
+
+    try {
+      delete process.env.EMAIL_PROVIDER;
+      process.env.RESEND_API_KEY = "re-secret";
+      process.env.RESEND_FROM_EMAIL = "Torrevie <noreply@torrevie.com>";
+      result = await dispatchEmailNotification(
+        {
+          to: ["finance@example.test", "ops@example.test"],
+          subject: "TEX summary",
+          text: "Summary",
+          html: "<p>Summary</p>"
+        },
+        async (url: Parameters<NotificationFetch>[0], init?: RequestInit) => {
+          calls.push({ url: String(url), init });
+          return Response.json({ id: "resend-1" });
+        }
+      );
+    } finally {
+      for (const [key, value] of Object.entries(previousEnv)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    }
+
+    const body = JSON.parse(String(calls[0]?.init?.body ?? "{}")) as {
+      from?: string;
+      to?: string[];
+    };
+    const headers = new Headers(calls[0]?.init?.headers);
+
+    assert.equal(result?.ok, true);
+    assert.equal(result?.provider, "resend");
+    assert.equal(result?.messageId, "resend-1");
+    assert.equal(calls[0]?.url, "https://api.resend.com/emails");
+    assert.equal(headers.get("Authorization"), "Bearer re-secret");
+    assert.equal(body.from, "Torrevie <noreply@torrevie.com>");
+    assert.deepEqual(body.to, ["finance@example.test", "ops@example.test"]);
   }
 
   {

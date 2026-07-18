@@ -61,7 +61,7 @@ export async function sendTenantAdminInvitationEmail(
   }
 
   const resend = new Resend(resendApiKey);
-  const from = process.env.RESEND_FROM_EMAIL ?? process.env.EMAIL_FROM_ADDRESS ?? "Torrevie <hello@torrevie.com>";
+  const from = process.env.RESEND_FROM_EMAIL ?? process.env.EMAIL_FROM_ADDRESS ?? "Torrevie <noreply@torrevie.com>";
   const { error } = await resend.emails.send({
     from,
     to: invitation.email,
