@@ -3049,6 +3049,26 @@ form.member-row {
   gap: 6px;
 }
 
+.tex-whatsapp-sender-name,
+.tex-whatsapp-ocr-summary,
+.tex-whatsapp-action-group {
+  display: grid;
+  gap: 4px;
+}
+
+.tex-whatsapp-ocr-summary {
+  display: none;
+}
+
+.tex-mobile-cell-label {
+  color: var(--color-text-muted);
+  display: none;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
 .tex-match-chip {
   background: #ecfdf3;
   border: 1px solid #bbf7d0;
@@ -3095,6 +3115,23 @@ form.member-row {
 .tex-whatsapp-actions .tex-secondary-button,
 .tex-whatsapp-actions .tex-inline-button {
   inline-size: 100%;
+}
+
+.tex-whatsapp-new-employee {
+  display: grid;
+  gap: 8px;
+}
+
+.tex-whatsapp-new-employee summary {
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+  list-style: none;
+}
+
+.tex-whatsapp-new-employee summary::-webkit-details-marker {
+  display: none;
 }
 
 .tex-settings-workspace {
@@ -4364,6 +4401,7 @@ form.member-row {
   }
 
   .tex-whatsapp-row {
+    background: var(--color-bg-primary);
     border: 1px solid var(--color-border);
     border-radius: 8px;
     overflow: hidden;
@@ -4377,10 +4415,91 @@ form.member-row {
     grid-template-columns: 1fr;
   }
 
+  .tex-mobile-cell-label {
+    display: inline-flex;
+  }
+
+  .tex-whatsapp-sender {
+    background: var(--color-bg-primary);
+  }
+
+  .tex-whatsapp-sender-name {
+    gap: 2px;
+  }
+
+  .tex-whatsapp-sender-name strong {
+    font-size: 16px;
+  }
+
+  .tex-whatsapp-receipt-cell,
+  .tex-whatsapp-ocr-cell,
+  .tex-whatsapp-actions {
+    gap: 10px;
+  }
+
+  .tex-whatsapp-ocr-summary {
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    display: grid;
+    padding: 10px;
+  }
+
+  .tex-whatsapp-ocr-summary strong {
+    font-size: 15px;
+    overflow-wrap: anywhere;
+  }
+
+  .tex-whatsapp-ocr-summary span:last-child {
+    color: var(--color-text-muted);
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .tex-whatsapp-message,
+  .tex-field-hint {
+    overflow-wrap: anywhere;
+  }
+
+  .tex-receipt-preview {
+    background: var(--color-bg-primary);
+    inline-size: 100%;
+  }
+
+  .tex-receipt-preview img {
+    height: 88px;
+    width: 88px;
+  }
+
+  .tex-media-state,
+  .tex-receipt-missing {
+    padding: 12px;
+  }
+
+  .tex-whatsapp-action-group {
+    gap: 8px;
+  }
+
   .tex-whatsapp-actions .tex-primary-button,
   .tex-whatsapp-actions .tex-secondary-button,
   .tex-whatsapp-actions .tex-inline-button {
     min-block-size: 44px;
+  }
+
+  .tex-whatsapp-new-employee {
+    border-block-start: 1px solid var(--color-border);
+    padding-block-start: 8px;
+  }
+
+  .tex-whatsapp-new-employee summary {
+    align-items: center;
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    display: flex;
+    justify-content: center;
+    min-block-size: 44px;
+    padding-inline: 12px;
   }
 
   .tex-dashboard-hero {

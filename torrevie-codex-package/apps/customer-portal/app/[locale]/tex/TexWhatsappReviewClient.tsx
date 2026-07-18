@@ -147,12 +147,15 @@ export function TexWhatsappReviewClient({
                     </span>
                     {matchedEmployee ? <span className="tex-match-chip">Matched</span> : null}
                   </div>
-                  <strong>{matchedEmployee?.name ?? "Unknown sender"}</strong>
-                  <span>{matchedEmployee?.phoneNumber ?? senderLabel(submission)}</span>
+                  <div className="tex-whatsapp-sender-name">
+                    <strong>{matchedEmployee?.name ?? "Unknown sender"}</strong>
+                    <span>{matchedEmployee?.phoneNumber ?? senderLabel(submission)}</span>
+                  </div>
                   <small>{formatDateTime(submission.createdAt)}</small>
                 </div>
 
                 <div className="tex-whatsapp-receipt-cell" role="cell">
+                  <span className="tex-mobile-cell-label">Receipt</span>
                   <ReceiptPreview
                     contentType={submission.mediaMimeType}
                     expected={submission.messageType === "receipt"}
@@ -166,6 +169,15 @@ export function TexWhatsappReviewClient({
                 </div>
 
                 <div className="tex-whatsapp-ocr-cell" role="cell">
+                  <div className="tex-whatsapp-ocr-summary">
+                    <span className="tex-mobile-cell-label">OCR result</span>
+                    <strong>{ocrReceipt?.vendor ?? "Needs review"}</strong>
+                    <span>
+                      {ocrReceipt?.amount != null
+                        ? `${ocrReceipt.currency ?? "AED"} ${ocrReceipt.amount}`
+                        : "Amount needs review"}
+                    </span>
+                  </div>
                   <dl className="tex-compact-dl">
                     <div>
                       <dt>OCR</dt>
@@ -210,59 +222,67 @@ export function TexWhatsappReviewClient({
                 </div>
 
                 <div className="tex-whatsapp-actions" role="cell">
-                  <label className="tex-wide-label">
-                    Assign to employee
-                    <select
-                      value={selectedEmployeeId}
-                      onChange={(event) =>
-                        setSelectedEmployees((current) => ({
-                          ...current,
-                          [submission.id]: event.target.value
-                        }))
-                      }
+                  <span className="tex-mobile-cell-label">Action</span>
+                  <div className="tex-whatsapp-action-group">
+                    <label className="tex-wide-label">
+                      Assign to employee
+                      <select
+                        value={selectedEmployeeId}
+                        onChange={(event) =>
+                          setSelectedEmployees((current) => ({
+                            ...current,
+                            [submission.id]: event.target.value
+                          }))
+                        }
+                      >
+                        <option value="">Select employee</option>
+                        {activeEmployees.map((employee) => (
+                          <option key={employee.id} value={employee.id}>
+                            {employee.name} ({employee.phoneNumber})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      className="tex-secondary-button"
+                      disabled={busyId === submission.id || !selectedEmployeeId}
+                      onClick={() => resolveSubmission(submission, "existing_employee")}
                     >
-                      <option value="">Select employee</option>
-                      {activeEmployees.map((employee) => (
-                        <option key={employee.id} value={employee.id}>
-                          {employee.name} ({employee.phoneNumber})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    className="tex-secondary-button"
-                    disabled={busyId === submission.id || !selectedEmployeeId}
-                    onClick={() => resolveSubmission(submission, "existing_employee")}
-                  >
-                    {matchedEmployee
-                      ? receiptCount > 1
-                        ? `Create ${receiptCount} expenses`
-                        : "Create expense"
-                      : "Assign"}
-                  </button>
+                      {matchedEmployee
+                        ? receiptCount > 1
+                          ? `Create ${receiptCount} expenses`
+                          : "Create expense"
+                        : "Assign"}
+                    </button>
+                  </div>
 
-                  <label className="tex-wide-label">
-                    Add as employee
-                    <input
-                      value={newEmployeeNames[submission.id] ?? ""}
-                      onChange={(event) =>
-                        setNewEmployeeNames((current) => ({
-                          ...current,
-                          [submission.id]: event.target.value
-                        }))
-                      }
-                      placeholder="Employee name"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="tex-primary-button"
-                    disabled={busyId === submission.id || !newEmployeeNames[submission.id]?.trim()}
-                    onClick={() => resolveSubmission(submission, "new_employee")}
-                  >
-                    Add and assign
-                  </button>
+                  <details className="tex-whatsapp-new-employee">
+                    <summary>Add as employee</summary>
+                    <div className="tex-whatsapp-action-group">
+                      <label className="tex-wide-label">
+                        Employee name
+                        <input
+                          value={newEmployeeNames[submission.id] ?? ""}
+                          onChange={(event) =>
+                            setNewEmployeeNames((current) => ({
+                              ...current,
+                              [submission.id]: event.target.value
+                            }))
+                          }
+                          placeholder="Employee name"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="tex-primary-button"
+                        disabled={busyId === submission.id || !newEmployeeNames[submission.id]?.trim()}
+                        onClick={() => resolveSubmission(submission, "new_employee")}
+                      >
+                        Add and assign
+                      </button>
+                    </div>
+                  </details>
 
                   <button
                     type="button"
