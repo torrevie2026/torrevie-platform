@@ -2592,6 +2592,12 @@ form.member-row {
   margin: 4px 0 2px;
 }
 
+.tex-expense-card-main {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
 .tex-expense-card p,
 .tex-card-actions span {
   color: var(--color-text-muted);
@@ -2599,7 +2605,18 @@ form.member-row {
   margin: 0;
 }
 
-.tex-expense-card strong {
+.tex-duplicate-note {
+  background: color-mix(in srgb, var(--color-status-warning) 10%, var(--color-bg-primary));
+  border: 1px solid color-mix(in srgb, var(--color-status-warning) 42%, var(--color-border));
+  border-radius: 6px;
+  color: color-mix(in srgb, var(--color-status-warning) 72%, var(--color-text-primary));
+  font-weight: 800;
+  margin-block-start: 4px !important;
+  padding-block: 6px;
+  padding-inline: 8px;
+}
+
+.tex-expense-card-amount {
   font-size: 16px;
   text-align: end;
 }
@@ -2609,6 +2626,10 @@ form.member-row {
   display: flex;
   gap: 6px;
   justify-content: flex-end;
+}
+
+.tex-expense-mobile-actions {
+  display: none;
 }
 
 .tex-status {
@@ -4420,36 +4441,109 @@ form.member-row {
     inline-size: 100%;
   }
 
-  .tex-expense-card strong,
+  .tex-expense-card-amount,
   .tex-card-actions,
   .tex-segmented-control {
     justify-content: flex-start;
     text-align: start;
   }
 
+  .tex-expense-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tex-expense-toolbar .tex-panel-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+  }
+
+  .tex-expense-toolbar .tex-panel-actions button {
+    min-block-size: 42px;
+  }
+
+  .tex-expense-toolbar .tex-panel-actions span {
+    grid-column: 1 / -1;
+    text-align: start;
+  }
+
   .tex-expense-card {
     align-items: stretch;
     gap: 9px;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
   }
 
   .tex-expense-card .tex-row-checkbox {
     justify-content: flex-start;
   }
 
-  .tex-card-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .tex-expense-card-main {
+    gap: 3px;
   }
 
-  .tex-card-actions button,
-  .tex-card-actions a {
+  .tex-expense-card-main h4,
+  .tex-expense-card-main p {
+    overflow-wrap: anywhere;
+  }
+
+  .tex-expense-card-amount {
+    align-self: start;
+    white-space: nowrap;
+  }
+
+  .tex-duplicate-note {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .tex-card-actions-desktop {
+    display: none;
+  }
+
+  .tex-expense-mobile-actions {
+    border-block-start: 1px solid var(--color-border);
+    display: grid;
+    gap: 8px;
+    grid-column: 1 / -1;
+    padding-block-start: 8px;
+  }
+
+  .tex-expense-mobile-actions summary {
+    align-items: center;
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    display: flex;
+    font-size: 13px;
+    font-weight: 900;
     justify-content: center;
+    list-style: none;
     min-block-size: 42px;
+    padding-inline: 12px;
+  }
+
+  .tex-expense-mobile-actions summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .tex-expense-mobile-action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .tex-expense-mobile-action-grid button,
+  .tex-expense-mobile-action-grid a {
+    justify-content: center;
+    min-block-size: 44px;
     min-inline-size: 0;
   }
 
-  .tex-card-actions .tex-receipt-link,
-  .tex-card-actions span {
+  .tex-expense-mobile-action-grid .tex-receipt-chip,
+  .tex-expense-mobile-action-grid span {
     grid-column: 1 / -1;
     justify-content: center;
     white-space: normal;
