@@ -19,7 +19,7 @@ import {
   type ResolvedTenantContext,
   type TenantQueryClient
 } from "@torrevie/tenant-context";
-import { extractReceiptWithAI, type TexReceiptExtraction } from "./tex-ai";
+import { extractReceiptWithAI, extractReceiptsWithAI, type TexReceiptExtraction } from "./tex-ai";
 
 export type TexActorContext = ResolvedTenantContext & {
   roles: readonly RoleKey[];
@@ -643,7 +643,7 @@ export type TexUnregisteredWhatsappSubmission = TexWebhookSubmissionRecord & {
   mediaError: string | null;
   messageType: "receipt" | "status" | "text";
   ocrStatus: TexWhatsappReceiptResult["ocrStatus"];
-  ocrResult: TexReceiptExtraction | null;
+  ocrResult: TexReceiptExtraction | TexReceiptBatchResult | null;
   ocrError: string | null;
   whatsappReplyText: string | null;
   intakeStatus: string;
@@ -667,6 +667,7 @@ export type TexUnregisteredWhatsappResolveResult = {
   submission: TexWebhookSubmissionRecord;
   employee: TexEmployeeProfile;
   expense: TexExpenseRecord;
+  expenses: TexExpenseRecord[];
   delivery: WhatsAppDispatchResult | null;
 };
 
@@ -674,8 +675,14 @@ export type TexWhatsappReceiptResult = {
   submission: TexWebhookSubmissionRecord;
   replyText: string;
   expense: TexExpenseRecord | null;
+  expenses?: TexExpenseRecord[];
   ocrStatus: "pending" | "processing" | "extracted" | "failed" | "manual_review" | "not_applicable";
   delivery: WhatsAppDispatchResult | null;
+};
+
+export type TexReceiptBatchResult = {
+  multipleReceipts: true;
+  receipts: TexReceiptExtraction[];
 };
 
 let texWhatsappNotificationDispatcher = dispatchWhatsAppNotification;
@@ -3329,8 +3336,8 @@ export async function parseTexReceiptUpload(
   input: Pick<TexReceiptUploadInput, "contentType" | "dataBase64">
 ): Promise<TexReceiptExtraction> {
   const contentType = cleanContentType(input.contentType);
-  if (!contentType.startsWith("image/")) {
-    throw new Error("OCR currently supports image receipts only.");
+  if (!isOcrSupportedReceiptType(contentType)) {
+    throw new Error("OCR currently supports image and PDF receipts only.");
   }
 
   const buffer = receiptBufferFromBase64(input.dataBase64);
@@ -3615,7 +3622,7 @@ export async function recordTexWebhookSubmission(
         classifyWhatsappMessage(submission),
         submission.mediaUrl,
         submission.mediaMimeType,
-        submission.mediaUrl ? "pending" : "manual_review",
+        "manual_review",
         JSON.stringify(submission.payload),
         actor.userId
       ]
@@ -3667,17 +3674,36 @@ export async function processTexWhatsappSubmission(
   return withTenantContext(client, actor, async () => {
     const settings = await getTexIntegrationSettingsForProcessing(client);
     const employee = await findEmployeeBySubmissionSender(client, submission);
-    const { extraction, extractionError } = await extractReceiptForSubmission(client, submission);
+    const { extraction, extractions, extractionError, multipleReceipts } = await extractReceiptForSubmission(client, submission);
+    const missingReceiptAttachment = messageType === "receipt" && !hasReceiptAttachmentForOcr(submission);
 
     if (!employee) {
       const replyText =
-        "Receipt received, but this WhatsApp number is not enrolled for TEX. Please ask your tenant admin to enroll your number.";
+        missingReceiptAttachment
+          ? "Receipt message received, but TEX could not access the image or PDF attachment. Please resend the receipt as a photo or PDF attachment."
+          : "Receipt received, but this WhatsApp number is not enrolled for TEX. Please ask your tenant admin to enroll your number.";
       const row = await insertWhatsappSubmission(client, actor, submission, {
         messageType,
         ocrStatus: "manual_review",
         ocrResult: extraction ?? {},
-        ocrError: extractionError,
+        ocrError: missingReceiptAttachment ? missingReceiptAttachmentError(submission) : extractionError,
         replyText
+      });
+      const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
+
+      return { submission: row, replyText, expense: null, ocrStatus: "manual_review", delivery };
+    }
+
+    if (missingReceiptAttachment) {
+      const replyText =
+        "Receipt message received, but TEX could not access the image or PDF attachment. Please resend the receipt as a photo or PDF attachment. Status: waiting for receipt attachment.";
+      const row = await insertWhatsappSubmission(client, actor, submission, {
+        messageType,
+        ocrStatus: "manual_review",
+        ocrResult: extraction ?? {},
+        ocrError: missingReceiptAttachmentError(submission),
+        replyText,
+        resolvedEmployeeProfileId: employee.id
       });
       const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
 
@@ -3698,6 +3724,28 @@ export async function processTexWhatsappSubmission(
       const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
 
       return { submission: row, replyText, expense: null, ocrStatus: "manual_review", delivery };
+    }
+
+    if (multipleReceipts) {
+      const replyText = `Receipt PDF received. TEX detected ${extractions.length} separate receipts and sent them for manager review before creating expenses.`;
+      const row = await insertWhatsappSubmission(client, actor, submission, {
+        messageType,
+        ocrStatus: "manual_review",
+        ocrResult: buildReceiptBatchResult(extractions),
+        ocrError: extractionError,
+        replyText,
+        resolvedEmployeeProfileId: employee.id
+      });
+      const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
+
+      return {
+        submission: row,
+        replyText,
+        expense: null,
+        expenses: [],
+        ocrStatus: "manual_review",
+        delivery
+      };
     }
 
     const extractionForProcessing = defaultReceiptCurrency(extraction);
@@ -3918,14 +3966,50 @@ export async function resolveTexUnregisteredWhatsappSubmission(
               input.phoneNumber ?? submission.sender_phone ?? submission.sender_raw ?? "",
             department: input.department
           });
-    const extraction = parseSubmissionExtraction(submission.ocr_result);
-    const resolved = resolveWhatsappExpenseFields(submission, extraction);
-    const expense = await insertResolvedWhatsappExpense(client, actor, {
-      submission,
-      employee,
-      extraction,
-      ...resolved
-    });
+    const { extraction, extractions, extractionError, multipleReceipts } = await extractionForWhatsappReviewSubmission(client, submission);
+    if (extraction || extractions.length > 0 || extractionError) {
+      await client.query(
+        `
+          update public.tex_unregistered_whatsapp_submissions
+             set ocr_status = $1,
+                 ocr_result = $2::jsonb,
+                 ocr_error = $3,
+                 updated_by = $4,
+                 updated_at = now()
+           where tenant_id = public.current_tenant_id()
+             and id = $5
+        `,
+        [
+          extraction ? (multipleReceipts ? "manual_review" : "extracted") : "failed",
+          JSON.stringify(multipleReceipts ? buildReceiptBatchResult(extractions) : extraction ?? {}),
+          extractionError,
+          actor.userId,
+          submission.id
+        ]
+      );
+    }
+    const reviewExtractions = extractions.length > 0 ? extractions : [extraction].filter((item): item is TexReceiptExtraction => Boolean(item));
+    const expenses: TexExpenseRecord[] = [];
+
+    for (const candidate of reviewExtractions.length > 0 ? reviewExtractions : [null]) {
+      const resolved = resolveWhatsappExpenseFields(submission, candidate);
+      const duplicate =
+        candidate?.expenseDate && candidate.amount && candidate.currency
+          ? await findDuplicateExpense(client, employee.id, candidate)
+          : null;
+      expenses.push(await insertResolvedWhatsappExpense(client, actor, {
+        submission,
+        employee,
+        duplicate,
+        extraction: candidate,
+        ...resolved
+      }));
+    }
+
+    const expense = expenses[0];
+    if (!expense) {
+      throw new Error("Unable to create expense from WhatsApp submission.");
+    }
     const updated = requireSingleRow(
       (
         await client.query<TexWebhookSubmissionRow>(
@@ -3955,10 +4039,13 @@ export async function resolveTexUnregisteredWhatsappSubmission(
       submission.id,
       {
         expense_id: expense.id,
-        employee_profile_id: employee.id
+        employee_profile_id: employee.id,
+        expense_count: `${expenses.length}`
       }
     );
-    const replyText = `Receipt reviewed and linked to ${employee.name}. It is now pending finance review.`;
+    const replyText = expenses.length > 1
+      ? `${expenses.length} receipts reviewed and linked to ${employee.name}. They are now pending manager approval.`
+      : `Receipt reviewed and linked to ${employee.name}. It is now pending manager approval.`;
     const delivery = await deliverTexWhatsappReply(
       client,
       actor,
@@ -3975,6 +4062,7 @@ export async function resolveTexUnregisteredWhatsappSubmission(
       submission: updated,
       employee,
       expense,
+      expenses,
       delivery
     };
   });
@@ -4159,7 +4247,7 @@ async function insertWhatsappSubmission(
   options: {
     messageType: "receipt" | "status" | "text";
     ocrStatus: TexWhatsappReceiptResult["ocrStatus"];
-    ocrResult: Record<string, unknown>;
+    ocrResult: unknown;
     ocrError?: string | null;
     replyText: string;
     resolvedExpenseId?: string | null;
@@ -4790,11 +4878,13 @@ async function extractReceiptForSubmission(
   submission: Required<TexWebhookSubmissionInput>
 ) {
   let extraction: TexReceiptExtraction | null = submission.extractedReceipt;
+  let extractions: TexReceiptExtraction[] = extraction ? [extraction] : [];
   let extractionError: string | null = null;
 
   if (!extraction && submission.mediaUrl) {
     try {
-      extraction = await extractReceiptWithAI(submission.mediaUrl);
+      extractions = await extractReceiptsWithAI(submission.mediaUrl);
+      extraction = extractions[0] ?? null;
     } catch (error) {
       extractionError = error instanceof Error ? error.message : "Receipt extraction failed.";
     }
@@ -4802,17 +4892,48 @@ async function extractReceiptForSubmission(
 
   if (!extraction && submission.receiptFileId) {
     try {
-      extraction = await extractStoredReceiptWithAI(client, submission.receiptFileId);
+      extractions = await extractStoredReceiptsWithAI(client, submission.receiptFileId);
+      extraction = extractions[0] ?? null;
       extractionError = null;
     } catch (error) {
       extractionError = error instanceof Error ? error.message : "Stored receipt extraction failed.";
     }
   }
 
-  return { extraction, extractionError };
+  return {
+    extraction,
+    extractions: extractions.length > 0 ? extractions : extraction ? [extraction] : [],
+    extractionError,
+    multipleReceipts: extractions.length > 1
+  };
 }
 
-async function extractStoredReceiptWithAI(client: TenantQueryClient, receiptFileId: string) {
+function hasReceiptAttachmentForOcr(submission: Required<TexWebhookSubmissionInput>) {
+  return Boolean(submission.extractedReceipt || submission.receiptFileId || submission.mediaUrl);
+}
+
+function missingReceiptAttachmentError(submission: Required<TexWebhookSubmissionInput>) {
+  const payload = readRecord(submission.payload);
+  const media = readRecord(payload.media);
+  const status = readString(media.status);
+  const error = readString(media.error);
+
+  if (error) {
+    return error;
+  }
+
+  if (status === "download_failed") {
+    return "WhatsApp sent media, but Quick Connect could not download the receipt attachment.";
+  }
+
+  if (status === "upload_failed") {
+    return "WhatsApp media was received, but TEX could not store the receipt attachment.";
+  }
+
+  return "TEX received the WhatsApp message, but no receipt image or PDF bytes were attached to the ingest request.";
+}
+
+async function extractStoredReceiptsWithAI(client: TenantQueryClient, receiptFileId: string) {
   const result = await client.query<{
     storage_path: string;
     content_type: string;
@@ -4828,12 +4949,12 @@ async function extractStoredReceiptWithAI(client: TenantQueryClient, receiptFile
   );
   const row = requireSingleRow(result.rows, "receipt file");
   const contentType = cleanContentType(row.content_type);
-  if (!contentType.startsWith("image/")) {
-    throw new Error("OCR currently supports image receipts only.");
+  if (!isOcrSupportedReceiptType(contentType)) {
+    throw new Error("OCR currently supports image and PDF receipts only.");
   }
 
   const buffer = await downloadReceiptObject(row.storage_path);
-  return extractReceiptWithAI(`data:${contentType};base64,${buffer.toString("base64")}`);
+  return extractReceiptsWithAI(`data:${contentType};base64,${buffer.toString("base64")}`);
 }
 
 function normalizeDuplicateVendor(value: string | null | undefined) {
@@ -5111,6 +5232,10 @@ function isAllowedReceiptType(contentType: string) {
     "image/heif",
     "application/pdf"
   ].includes(contentType);
+}
+
+function isOcrSupportedReceiptType(contentType: string) {
+  return contentType.startsWith("image/") || contentType === "application/pdf";
 }
 
 function receiptBufferFromBase64(value: string) {
@@ -5986,6 +6111,98 @@ async function getTexTeam(client: TenantQueryClient, teamId: string): Promise<Te
   return mapTeam(requireSingleRow(result.rows, "team"));
 }
 
+async function extractionForWhatsappReviewSubmission(
+  client: TenantQueryClient,
+  submission: TexUnregisteredWhatsappSubmissionRow
+) {
+  const existing = parseSubmissionExtractions(submission.ocr_result);
+  if (existing.length > 0) {
+    return {
+      extraction: existing[0] ?? null,
+      extractions: existing,
+      extractionError: cleanOptional(submission.ocr_error),
+      multipleReceipts: existing.length > 1
+    };
+  }
+
+  if (submission.media_url) {
+    try {
+      const receipts = await extractReceiptsWithAI(submission.media_url);
+      return {
+        extraction: receipts[0] ?? null,
+        extractions: receipts,
+        extractionError: null,
+        multipleReceipts: receipts.length > 1
+      };
+    } catch (error) {
+      return {
+        extraction: null,
+        extractions: [],
+        extractionError: error instanceof Error ? error.message : "Receipt extraction failed.",
+        multipleReceipts: false
+      };
+    }
+  }
+
+  if (submission.receipt_file_id) {
+    try {
+      const receipts = await extractStoredReceiptsWithAI(client, submission.receipt_file_id);
+      return {
+        extraction: receipts[0] ?? null,
+        extractions: receipts,
+        extractionError: null,
+        multipleReceipts: receipts.length > 1
+      };
+    } catch (error) {
+      return {
+        extraction: null,
+        extractions: [],
+        extractionError: error instanceof Error ? error.message : "Stored receipt extraction failed.",
+        multipleReceipts: false
+      };
+    }
+  }
+
+  return {
+    extraction: null,
+    extractions: [],
+    extractionError: "No receipt image or PDF is attached to this WhatsApp submission.",
+    multipleReceipts: false
+  };
+}
+
+function buildReceiptBatchResult(receipts: TexReceiptExtraction[]): TexReceiptBatchResult {
+  return {
+    multipleReceipts: true,
+    receipts
+  };
+}
+
+function parseSubmissionExtractions(value: unknown): TexReceiptExtraction[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [];
+  }
+
+  const record = value as { receipts?: unknown };
+  if (Array.isArray(record.receipts)) {
+    return record.receipts
+      .map((item) => parseSubmissionExtraction(item))
+      .filter((item): item is TexReceiptExtraction => Boolean(item));
+  }
+
+  const single = parseSubmissionExtraction(value);
+  return single ? [single] : [];
+}
+
+function parseSubmissionOcrResult(value: unknown): TexReceiptExtraction | TexReceiptBatchResult | null {
+  const receipts = parseSubmissionExtractions(value);
+  if (receipts.length > 1) {
+    return buildReceiptBatchResult(receipts);
+  }
+
+  return receipts[0] ?? null;
+}
+
 function parseSubmissionExtraction(value: unknown): TexReceiptExtraction | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -6034,6 +6251,10 @@ function whatsappIntakeStatus(row: TexUnregisteredWhatsappSubmissionRow, mediaSt
 
   if (!row.receipt_file_id && mediaStatus === "upload_failed") {
     return "Media upload failed";
+  }
+
+  if (row.message_type === "receipt" && !row.receipt_file_id && !row.media_url) {
+    return "Receipt attachment missing";
   }
 
   if (row.receipt_file_id) {
@@ -6086,6 +6307,7 @@ async function insertResolvedWhatsappExpense(
   input: {
     submission: TexUnregisteredWhatsappSubmissionRow;
     employee: TexEmployeeProfile;
+    duplicate: TexDuplicateCandidateRow | null;
     extraction: TexReceiptExtraction | null;
     vendor: string | null;
     expenseDate: string;
@@ -6094,6 +6316,16 @@ async function insertResolvedWhatsappExpense(
     notes: string;
   }
 ): Promise<TexExpenseRecord> {
+  const duplicateStatus = input.duplicate ? "suspected" : "clear";
+  const duplicateReason = input.duplicate
+    ? `Possible duplicate of ${input.duplicate.vendor ?? "existing receipt"} on ${input.duplicate.expense_date} for ${input.duplicate.currency} ${input.duplicate.amount}.`
+    : null;
+  const policyReason = [
+    "Receipt came from an unregistered WhatsApp number and was assigned by a reviewer.",
+    duplicateReason
+  ]
+    .filter(Boolean)
+    .join(" ");
   const result = await client.query<TexExpenseRow>(
     `
       insert into public.tex_expenses (
@@ -6119,6 +6351,9 @@ async function insertResolvedWhatsappExpense(
         extraction_source,
         extraction_confidence,
         extraction_payload,
+        duplicate_status,
+        duplicate_of_expense_id,
+        duplicate_reason,
         policy_flag,
         policy_flag_reason,
         manager_review_required,
@@ -6148,8 +6383,11 @@ async function insertResolvedWhatsappExpense(
         'whatsapp_ai',
         $16,
         $17::jsonb,
-        true,
         $18,
+        $19,
+        $20,
+        true,
+        $21,
         true,
         $1,
         $1
@@ -6174,7 +6412,10 @@ async function insertResolvedWhatsappExpense(
       input.submission.receipt_file_id,
       input.extraction?.confidence ?? null,
       JSON.stringify(input.extraction ?? {}),
-      "Receipt came from an unregistered WhatsApp number and was assigned by a reviewer."
+      duplicateStatus,
+      input.duplicate?.id ?? null,
+      duplicateReason,
+      policyReason
     ]
   );
 
@@ -6807,8 +7048,8 @@ function mapUnregisteredWhatsappSubmission(
     mediaStatus,
     mediaError,
     messageType: row.message_type,
-    ocrStatus: row.ocr_status,
-    ocrResult: parseSubmissionExtraction(row.ocr_result),
+    ocrStatus: normalizeWhatsappReviewOcrStatus(row, mediaStatus),
+    ocrResult: parseSubmissionOcrResult(row.ocr_result),
     ocrError: row.ocr_error,
     whatsappReplyText: row.whatsapp_reply_text,
     intakeStatus: whatsappIntakeStatus(row, mediaStatus),
@@ -6821,8 +7062,24 @@ function mapUnregisteredWhatsappSubmission(
   };
 }
 
+function normalizeWhatsappReviewOcrStatus(
+  row: TexUnregisteredWhatsappSubmissionRow,
+  mediaStatus: string | null
+): TexWhatsappReceiptResult["ocrStatus"] {
+  if (
+    row.message_type === "receipt" &&
+    !row.receipt_file_id &&
+    !row.media_url &&
+    (row.ocr_status === "pending" || row.ocr_status === "processing" || mediaStatus !== "stored")
+  ) {
+    return "manual_review";
+  }
+
+  return row.ocr_status;
+}
+
 function whatsappDuplicateHint(row: TexUnregisteredWhatsappSubmissionRow) {
-  const result = parseSubmissionExtraction(row.ocr_result);
+  const result = parseSubmissionExtractions(row.ocr_result)[0] ?? null;
   if (!result?.vendor && !result?.amount && !result?.expenseDate) {
     return null;
   }

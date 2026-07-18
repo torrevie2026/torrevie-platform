@@ -1168,7 +1168,28 @@ async function main() {
     assert.equal(submission.status, "open");
     assert.equal(client.hasSql("on conflict (tenant_id, message_id)"), true);
     assert.equal(client.valuesContain("wamid.abc"), true);
+    assert.equal(client.valuesContain("manual_review"), true);
     assert.equal(client.valuesContain("tex.webhook.submission_recorded"), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
+    const result = await processTexWhatsappSubmission(client, integrationActor, {
+      senderPhone: "+971500000001",
+      messageId: "wamid.receipt.missing-media",
+      payload: {
+        provider: "quickconnect",
+        media: {
+          expected: true,
+          status: "download_failed",
+          error: "download timed out"
+        }
+      }
+    });
+    assert.equal(result.ocrStatus, "manual_review");
+    assert.equal(result.expense, null);
+    assert.match(result.replyText, /could not access the image or PDF attachment/i);
+    assert.equal(client.valuesContain("download timed out"), true);
   }
 
   {

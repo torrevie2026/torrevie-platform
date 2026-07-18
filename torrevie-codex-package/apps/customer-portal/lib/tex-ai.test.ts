@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { extractReceiptWithAI } from "./tex-ai";
+import { extractReceiptWithAI, extractReceiptsWithAI, extractReceiptWithOpenAI } from "./tex-ai";
 
 async function main() {
   const previousEnv = {
@@ -64,6 +64,108 @@ async function main() {
     assert.equal(extraction.vendor, "Airport Cafe");
     assert.equal(extraction.currency, "AED");
     assert.equal(extraction.amount, 120);
+
+    globalThis.fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        contents?: Array<{ parts?: Array<{ inlineData?: { mimeType?: string; data?: string } }> }>;
+      };
+      assert.equal(body.contents?.[0]?.parts?.[1]?.inlineData?.mimeType, "application/pdf");
+      assert.equal(body.contents?.[0]?.parts?.[1]?.inlineData?.data, "JVBERi0xLjQ=");
+
+      return new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      vendor: "PDF Parking",
+                      expenseDate: "2026-07-14",
+                      amount: 55,
+                      currency: "AED",
+                      category: "Parking",
+                      taxAmount: 0,
+                      taxIdNumber: null,
+                      confidence: 0.86,
+                      notes: "PDF receipt"
+                    })
+                  }
+                ]
+              }
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    };
+
+    const pdfExtraction = await extractReceiptWithAI("data:application/pdf;base64,JVBERi0xLjQ=");
+    assert.equal(pdfExtraction.vendor, "PDF Parking");
+    assert.equal(pdfExtraction.amount, 55);
+
+    globalThis.fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        contents?: Array<{ parts?: Array<{ text?: string; inlineData?: { mimeType?: string; data?: string } }> }>;
+      };
+      assert.match(body.contents?.[0]?.parts?.[0]?.text ?? "", /every distinct expense receipt/i);
+      assert.equal(body.contents?.[0]?.parts?.[1]?.inlineData?.mimeType, "application/pdf");
+
+      return new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      multipleReceipts: true,
+                      receipts: [
+                        {
+                          vendor: "Fuel One",
+                          expenseDate: "2026-07-14",
+                          amount: 80,
+                          currency: "AED",
+                          category: "Fuel",
+                          taxAmount: 3.8,
+                          taxIdNumber: "100000000000003",
+                          confidence: 0.92,
+                          notes: "First receipt"
+                        },
+                        {
+                          vendor: "Parking Two",
+                          expenseDate: "2026-07-15",
+                          amount: 25,
+                          currency: "AED",
+                          category: "Parking",
+                          taxAmount: 0,
+                          taxIdNumber: null,
+                          confidence: 0.88,
+                          notes: "Second receipt"
+                        }
+                      ]
+                    })
+                  }
+                ]
+              }
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    };
+
+    const pdfReceipts = await extractReceiptsWithAI("data:application/pdf;base64,JVBERi0xLjQ=");
+    assert.equal(pdfReceipts.length, 2);
+    assert.equal(pdfReceipts[0]?.vendor, "Fuel One");
+    assert.equal(pdfReceipts[1]?.amount, 25);
+
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    await assert.rejects(
+      () => extractReceiptWithOpenAI("data:application/pdf;base64,JVBERi0xLjQ="),
+      /image inputs only/
+    );
+    delete process.env.OPENAI_API_KEY;
 
     process.env.GEMINI_RECEIPT_MODELS = "retired-model, gemini-3.5-flash";
     const requestedModels: string[] = [];

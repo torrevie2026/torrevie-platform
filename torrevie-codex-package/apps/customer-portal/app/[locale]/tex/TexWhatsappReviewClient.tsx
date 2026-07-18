@@ -9,6 +9,14 @@ type TexWhatsappReviewClientProps = {
 };
 
 type ResolveMode = "existing_employee" | "new_employee";
+type OcrReceipt = {
+  vendor: string | null;
+  expenseDate: string | null;
+  amount: number | null;
+  currency: string | null;
+  taxAmount: number | null;
+  taxIdNumber: string | null;
+};
 
 export function TexWhatsappReviewClient({
   employees,
@@ -127,6 +135,8 @@ export function TexWhatsappReviewClient({
             );
             const selectedEmployeeId =
               selectedEmployees[submission.id] ?? submission.resolvedEmployeeProfileId ?? "";
+            const ocrReceipt = firstOcrReceipt(submission.ocrResult);
+            const receiptCount = ocrReceiptCount(submission.ocrResult);
 
             return (
               <article className="tex-whatsapp-row" key={submission.id} role="row">
@@ -167,19 +177,19 @@ export function TexWhatsappReviewClient({
                     </div>
                     <div>
                       <dt>Vendor</dt>
-                      <dd>{submission.ocrResult?.vendor ?? "Needs review"}</dd>
+                      <dd>{ocrReceipt?.vendor ?? "Needs review"}</dd>
                     </div>
                     <div>
                       <dt>Amount</dt>
                       <dd>
-                        {submission.ocrResult?.amount != null
-                          ? `${submission.ocrResult.currency ?? "AED"} ${submission.ocrResult.amount}`
+                        {ocrReceipt?.amount != null
+                          ? `${ocrReceipt.currency ?? "AED"} ${ocrReceipt.amount}`
                           : "Needs review"}
                       </dd>
                     </div>
                     <div>
                       <dt>Date</dt>
-                      <dd>{submission.ocrResult?.expenseDate ?? "Needs review"}</dd>
+                      <dd>{ocrReceipt?.expenseDate ?? "Needs review"}</dd>
                     </div>
                     <div>
                       <dt>VAT / TRN</dt>
@@ -193,6 +203,9 @@ export function TexWhatsappReviewClient({
                   </p>
                   {submission.duplicateHint ? (
                     <p className="tex-field-hint">Duplicate check: {submission.duplicateHint}</p>
+                  ) : null}
+                  {receiptCount > 1 ? (
+                    <p className="tex-field-hint">PDF contains {receiptCount} receipts. Confirm to create {receiptCount} expenses.</p>
                   ) : null}
                 </div>
 
@@ -222,7 +235,11 @@ export function TexWhatsappReviewClient({
                     disabled={busyId === submission.id || !selectedEmployeeId}
                     onClick={() => resolveSubmission(submission, "existing_employee")}
                   >
-                    {matchedEmployee ? "Create expense" : "Assign"}
+                    {matchedEmployee
+                      ? receiptCount > 1
+                        ? `Create ${receiptCount} expenses`
+                        : "Create expense"
+                      : "Assign"}
                   </button>
 
                   <label className="tex-wide-label">
@@ -265,6 +282,38 @@ export function TexWhatsappReviewClient({
   );
 }
 
+function firstOcrReceipt(
+  ocrResult: TexUnregisteredWhatsappSubmission["ocrResult"]
+): OcrReceipt | null {
+  if (!ocrResult) {
+    return null;
+  }
+
+  if (isOcrBatch(ocrResult)) {
+    return (ocrResult.receipts[0] ?? null) as OcrReceipt | null;
+  }
+
+  return ocrResult;
+}
+
+function ocrReceiptCount(ocrResult: TexUnregisteredWhatsappSubmission["ocrResult"]) {
+  if (!ocrResult) {
+    return 0;
+  }
+
+  if (isOcrBatch(ocrResult)) {
+    return ocrResult.receipts.length;
+  }
+
+  return 1;
+}
+
+function isOcrBatch(
+  ocrResult: NonNullable<TexUnregisteredWhatsappSubmission["ocrResult"]>
+): ocrResult is Extract<NonNullable<TexUnregisteredWhatsappSubmission["ocrResult"]>, { receipts: unknown[] }> {
+  return "receipts" in ocrResult && Array.isArray(ocrResult.receipts);
+}
+
 function ReceiptPreview({
   contentType,
   expected,
@@ -283,11 +332,15 @@ function ReceiptPreview({
   url: string | null;
 }) {
   if (!url) {
+    const isWaitingWithoutAttachment =
+      (ocrStatus === "pending" || ocrStatus === "processing") && mediaStatus !== "stored";
     return (
       <div className="tex-receipt-missing">
         <strong>
-          {ocrStatus === "pending" || ocrStatus === "processing"
-            ? "Receipt processing"
+          {isWaitingWithoutAttachment
+            ? "Receipt attachment missing"
+            : ocrStatus === "pending" || ocrStatus === "processing"
+              ? "Receipt processing"
             : expected
               ? "Receipt attachment unavailable"
               : "No receipt attachment"}
@@ -349,7 +402,7 @@ function receiptMissingText(
   }
 
   if (ocrStatus === "pending" || ocrStatus === "processing") {
-    return "TEX has captured the message and is waiting for the receipt file to finish processing.";
+    return "TEX captured the WhatsApp message, but the receipt image or PDF is not attached yet. Resend the receipt as a photo or PDF attachment.";
   }
 
   if (mediaStatus === "download_failed") {
@@ -384,13 +437,15 @@ function senderLabel(submission: TexUnregisteredWhatsappSubmission) {
 }
 
 function vatTrnLabel(submission: TexUnregisteredWhatsappSubmission) {
-  if (submission.ocrResult?.taxAmount == null && !submission.ocrResult?.taxIdNumber) {
+  const receipt = firstOcrReceipt(submission.ocrResult);
+
+  if (receipt?.taxAmount == null && !receipt?.taxIdNumber) {
     return "Not read";
   }
 
   return [
-    submission.ocrResult.taxAmount != null ? `VAT ${submission.ocrResult.taxAmount}` : null,
-    submission.ocrResult.taxIdNumber ? `TRN ${submission.ocrResult.taxIdNumber}` : null
+    receipt.taxAmount != null ? `VAT ${receipt.taxAmount}` : null,
+    receipt.taxIdNumber ? `TRN ${receipt.taxIdNumber}` : null
   ]
     .filter(Boolean)
     .join(" / ");
