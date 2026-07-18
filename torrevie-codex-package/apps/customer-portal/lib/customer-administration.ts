@@ -28,6 +28,8 @@ export type CustomerMemberRecord = {
   displayName: string | null;
   status: MembershipStatus;
   roles: RoleKey[];
+  requireMfa: boolean;
+  mfaEnrolled: boolean;
 };
 
 export type TenantUsageLimits = {
@@ -57,6 +59,12 @@ type CustomerInviteEmailInput = {
   tenantName: string;
   actionLink: string;
   kind: CustomerInviteIdentity["kind"];
+};
+
+type CustomerPasswordResetEmailInput = {
+  email: string;
+  tenantName: string;
+  actionLink: string;
 };
 
 export type WhatsappProvider = "ultramsg" | "wappfly" | "meta";
@@ -130,6 +138,8 @@ const unlimitedFeatureKeys = new Set([
 
 let customerInviteIdentityCreator = createCustomerInviteIdentity;
 let customerInviteEmailDispatcher = sendCustomerInviteEmail;
+let customerPasswordResetLinkCreator = createCustomerPasswordResetLink;
+let customerPasswordResetEmailDispatcher = sendCustomerPasswordResetEmail;
 
 export function setCustomerInviteIdentityCreatorForTests(
   creator: typeof createCustomerInviteIdentity | null
@@ -141,6 +151,18 @@ export function setCustomerInviteEmailDispatcherForTests(
   dispatcher: typeof sendCustomerInviteEmail | null
 ) {
   customerInviteEmailDispatcher = dispatcher ?? sendCustomerInviteEmail;
+}
+
+export function setCustomerPasswordResetLinkCreatorForTests(
+  creator: typeof createCustomerPasswordResetLink | null
+) {
+  customerPasswordResetLinkCreator = creator ?? createCustomerPasswordResetLink;
+}
+
+export function setCustomerPasswordResetEmailDispatcherForTests(
+  dispatcher: typeof sendCustomerPasswordResetEmail | null
+) {
+  customerPasswordResetEmailDispatcher = dispatcher ?? sendCustomerPasswordResetEmail;
 }
 
 export async function listCustomerMembers(
@@ -155,8 +177,10 @@ export async function listCustomerMembers(
         select
           u.id as user_id,
           u.email,
+          u.mfa_enrolled,
           tm.status,
           up.display_name,
+          up.require_mfa,
           r.key as role_key
         from public.tenant_memberships tm
         join public.users u on u.id = tm.user_id
@@ -240,7 +264,9 @@ export async function inviteCustomerUser(
       email,
       displayName,
       status: "invited",
-      roles: [role]
+      roles: [role],
+      requireMfa: false,
+      mfaEnrolled: false
     };
   });
 }
@@ -683,6 +709,110 @@ export async function setCustomerMembershipStatus(
   });
 }
 
+export async function setCustomerUserMfaRequirement(
+  client: TenantQueryClient,
+  actor: CustomerAdminContext,
+  targetUserId: string,
+  required: boolean
+): Promise<void> {
+  assertCustomerPermission(actor, "tenant.user.manage");
+  assertUuid(targetUserId, "target user id");
+
+  await withTenantContext(client, actor, async () => {
+    await assertTenantMemberExists(client, targetUserId);
+    await client.query(
+      `
+        insert into public.user_profiles (tenant_id, user_id, display_name, require_mfa, created_by, updated_by)
+        values (public.current_tenant_id(), $1, 'Tenant user', $2, $3, $3)
+        on conflict (tenant_id, user_id)
+        do update set require_mfa = excluded.require_mfa,
+                      updated_by = excluded.updated_by
+      `,
+      [targetUserId, required, actor.userId]
+    );
+    await writeCustomerAdminAuditEvent(client, actor, "tenant.user.mfa_requirement_updated", "user", targetUserId, {
+      require_mfa: String(required)
+    });
+  });
+}
+
+export async function removeCustomerUser(
+  client: TenantQueryClient,
+  actor: CustomerAdminContext,
+  targetUserId: string
+): Promise<void> {
+  assertCustomerPermission(actor, "tenant.user.manage");
+  assertUuid(targetUserId, "target user id");
+
+  if (targetUserId === actor.userId) {
+    throw new Error("Customer administrators cannot delete their own tenant access.");
+  }
+
+  await withTenantContext(client, actor, async () => {
+    await assertTenantMemberExists(client, targetUserId);
+    await client.query(
+      `
+        delete from public.user_role_assignments
+         where tenant_id = public.current_tenant_id()
+           and user_id = $1
+      `,
+      [targetUserId]
+    );
+    await client.query(
+      `
+        delete from public.user_profiles
+         where tenant_id = public.current_tenant_id()
+           and user_id = $1
+      `,
+      [targetUserId]
+    );
+    await client.query(
+      `
+        delete from public.tenant_memberships
+         where tenant_id = public.current_tenant_id()
+           and user_id = $1
+      `,
+      [targetUserId]
+    );
+    await writeCustomerAdminAuditEvent(client, actor, "tenant.user.removed", "user", targetUserId, {});
+  });
+}
+
+export async function sendCustomerPasswordReset(
+  client: TenantQueryClient,
+  actor: CustomerAdminContext,
+  targetUserId: string
+): Promise<void> {
+  assertCustomerPermission(actor, "tenant.user.manage");
+  assertUuid(targetUserId, "target user id");
+
+  await withTenantContext(client, actor, async () => {
+    await assertTenantMemberExists(client, targetUserId);
+    const tenantName = await getCurrentTenantName(client);
+    const email = await getCustomerUserEmail(client, targetUserId);
+    const actionLink = await customerPasswordResetLinkCreator(email);
+
+    await client.query(
+      `
+        insert into public.user_profiles (tenant_id, user_id, display_name, require_password_change, created_by, updated_by)
+        values (public.current_tenant_id(), $1, 'Tenant user', true, $2, $2)
+        on conflict (tenant_id, user_id)
+        do update set require_password_change = true,
+                      updated_by = excluded.updated_by
+      `,
+      [targetUserId, actor.userId]
+    );
+    await customerPasswordResetEmailDispatcher({
+      email,
+      tenantName,
+      actionLink
+    });
+    await writeCustomerAdminAuditEvent(client, actor, "tenant.user.password_reset_sent", "user", targetUserId, {
+      email
+    });
+  });
+}
+
 function assertCustomerPermission(actor: CustomerAdminContext, permission: "tenant.user.invite" | "tenant.user.manage" | "tenant.role.assign") {
   if (actor.roleScope !== "customer") {
     throw new Error("Customer administration requires a customer tenant context.");
@@ -1014,6 +1144,23 @@ async function createCustomerInviteIdentity(email: string): Promise<CustomerInvi
   };
 }
 
+async function createCustomerPasswordResetLink(email: string) {
+  const client = getSupabaseAdminClient();
+  const { data, error } = await client.auth.admin.generateLink({
+    type: "recovery",
+    email,
+    options: {
+      redirectTo: `${customerPortalUrl()}/login?email=${encodeURIComponent(email)}`
+    }
+  });
+
+  if (error || !data.properties?.action_link) {
+    throw new Error(`Unable to create password reset link: ${error?.message ?? "missing action link"}`);
+  }
+
+  return data.properties.action_link;
+}
+
 async function findAuthUserByEmail(client: SupabaseClient, email: string) {
   for (let page = 1; page <= 20; page += 1) {
     const { data, error } = await client.auth.admin.listUsers({
@@ -1038,6 +1185,25 @@ async function findAuthUserByEmail(client: SupabaseClient, email: string) {
   throw new Error("Unable to find existing Supabase Auth user after scanning 20000 users.");
 }
 
+async function getCustomerUserEmail(client: TenantQueryClient, userId: string) {
+  const result = await client.query<{ email: string }>(
+    `
+      select email
+      from public.users
+      where id = $1
+      limit 1
+    `,
+    [userId]
+  );
+  const email = result.rows[0]?.email;
+
+  if (!email) {
+    throw new Error("Tenant user email was not found.");
+  }
+
+  return email;
+}
+
 async function sendCustomerInviteEmail(input: CustomerInviteEmailInput) {
   const title = input.kind === "existing_user" ? "Torrevie access granted" : "Torrevie invitation";
   const cta = input.kind === "existing_user" ? "Open your workspace" : "Accept invitation";
@@ -1058,6 +1224,27 @@ async function sendCustomerInviteEmail(input: CustomerInviteEmailInput) {
 
   if (!result.ok) {
     throw new Error(`Unable to send invitation email: ${result.error ?? result.status}`);
+  }
+}
+
+async function sendCustomerPasswordResetEmail(input: CustomerPasswordResetEmailInput) {
+  const result = await dispatchEmailNotification({
+    to: input.email,
+    subject: `${input.tenantName} password reset`,
+    html: `
+      <div style="font-family: Inter, Arial, sans-serif; color: #162449; line-height: 1.5;">
+        <h1 style="font-size: 22px;">Reset your Torrevie password</h1>
+        <p>A tenant administrator requested a password reset for your ${escapeHtml(input.tenantName)} Torrevie account.</p>
+        <p><a href="${escapeHtml(input.actionLink)}" style="background:#0D9488;color:#fff;padding:12px 18px;text-decoration:none;border-radius:6px;display:inline-block;">Reset password</a></p>
+        <p>If the button does not work, open this link:</p>
+        <p><a href="${escapeHtml(input.actionLink)}">${escapeHtml(input.actionLink)}</a></p>
+      </div>
+    `,
+    text: `A tenant administrator requested a password reset for your ${input.tenantName} Torrevie account.\n\nReset password: ${input.actionLink}`
+  });
+
+  if (!result.ok) {
+    throw new Error(`Unable to send password reset email: ${result.error ?? result.status}`);
   }
 }
 
@@ -1217,8 +1404,13 @@ function groupMemberRows(rows: readonly MemberRow[]) {
       email: row.email,
       displayName: row.display_name,
       status: row.status,
-      roles: []
+      roles: [],
+      requireMfa: row.require_mfa ?? false,
+      mfaEnrolled: row.mfa_enrolled
     };
+
+    member.requireMfa = member.requireMfa || Boolean(row.require_mfa);
+    member.mfaEnrolled = member.mfaEnrolled || row.mfa_enrolled;
 
     if (row.role_key && isRoleKey(row.role_key) && !member.roles.includes(row.role_key)) {
       member.roles.push(row.role_key);
@@ -1442,7 +1634,9 @@ function isRoleKey(value: string): value is RoleKey {
 type MemberRow = {
   user_id: string;
   email: string;
+  mfa_enrolled: boolean;
   display_name: string | null;
+  require_mfa: boolean | null;
   status: MembershipStatus;
   role_key: string | null;
 };

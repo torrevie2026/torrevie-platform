@@ -6,9 +6,14 @@ import {
   getTenantWhatsappSettings,
   inviteCustomerUser,
   listCustomerMembers,
+  removeCustomerUser,
+  sendCustomerPasswordReset,
   setCustomerMembershipStatus,
   setCustomerInviteEmailDispatcherForTests,
   setCustomerInviteIdentityCreatorForTests,
+  setCustomerPasswordResetEmailDispatcherForTests,
+  setCustomerPasswordResetLinkCreatorForTests,
+  setCustomerUserMfaRequirement,
   updateTenantWhatsappSettings,
   type CustomerAdminContext
 } from "./customer-administration";
@@ -103,6 +108,18 @@ class RecordingTenantClient implements TenantQueryClient {
 
     if (sql.includes("insert into public.users")) {
       return { rows: [{ id: values[0] }] as Row[] };
+    }
+
+    if (sql.includes("from public.users") && sql.includes("where id = $1")) {
+      return { rows: [{ email: "member@example.test" }] as Row[] };
+    }
+
+    if (sql.includes("insert into public.user_profiles")) {
+      return { rows: [{ id: "00000000-0000-4000-8000-000000000701" }] as Row[] };
+    }
+
+    if (sql.includes("delete from public.user_role_assignments") || sql.includes("delete from public.user_profiles")) {
+      return { rows: [{ id: "00000000-0000-4000-8000-000000000801" }] as Row[] };
     }
 
     return { rows: [] };
@@ -298,6 +315,61 @@ async function main() {
 
   {
     const client = new RecordingTenantClient();
+    await setCustomerUserMfaRequirement(
+      client,
+      adminContext,
+      "00000000-0000-4000-8000-000000000301",
+      true
+    );
+    assert.equal(client.hasSql("require_mfa"), true);
+    assert.equal(client.valuesContain(true), true);
+    assert.equal(client.valuesContain("tenant.user.mfa_requirement_updated"), true);
+  }
+
+  {
+    const client = new RecordingTenantClient();
+    const passwordResetEmails: Array<{ email: string; tenantName: string; actionLink: string }> = [];
+    setCustomerPasswordResetLinkCreatorForTests(async () => "https://app.torrevie.com/reset");
+    setCustomerPasswordResetEmailDispatcherForTests(async (input) => {
+      passwordResetEmails.push(input);
+    });
+
+    try {
+      await sendCustomerPasswordReset(
+        client,
+        adminContext,
+        "00000000-0000-4000-8000-000000000301"
+      );
+      assert.equal(client.hasSql("require_password_change"), true);
+      assert.equal(client.valuesContain("tenant.user.password_reset_sent"), true);
+      assert.deepEqual(passwordResetEmails, [
+        {
+          email: "member@example.test",
+          tenantName: "Demo Tenant",
+          actionLink: "https://app.torrevie.com/reset"
+        }
+      ]);
+    } finally {
+      setCustomerPasswordResetLinkCreatorForTests(null);
+      setCustomerPasswordResetEmailDispatcherForTests(null);
+    }
+  }
+
+  {
+    const client = new RecordingTenantClient();
+    await removeCustomerUser(
+      client,
+      adminContext,
+      "00000000-0000-4000-8000-000000000301"
+    );
+    assert.equal(client.hasSql("delete from public.user_role_assignments"), true);
+    assert.equal(client.hasSql("delete from public.user_profiles"), true);
+    assert.equal(client.hasSql("delete from public.tenant_memberships"), true);
+    assert.equal(client.valuesContain("tenant.user.removed"), true);
+  }
+
+  {
+    const client = new RecordingTenantClient();
     await assert.rejects(
       () => setCustomerMembershipStatus(client, adminContext, adminContext.userId, "disabled"),
       /cannot disable their own/
@@ -312,14 +384,18 @@ async function main() {
         email: "member@example.test",
         display_name: "Member",
         status: "active",
-        role_key: "customer_admin"
+        role_key: "customer_admin",
+        require_mfa: true,
+        mfa_enrolled: false
       },
       {
         user_id: "00000000-0000-4000-8000-000000000401",
         email: "member@example.test",
         display_name: "Member",
         status: "active",
-        role_key: "customer_manager"
+        role_key: "customer_manager",
+        require_mfa: true,
+        mfa_enrolled: false
       }
     ]);
     const members = await listCustomerMembers(client, adminContext);
@@ -329,7 +405,9 @@ async function main() {
         email: "member@example.test",
         displayName: "Member",
         status: "active",
-        roles: ["customer_admin", "customer_manager"]
+        roles: ["customer_admin", "customer_manager"],
+        requireMfa: true,
+        mfaEnrolled: false
       }
     ]);
   }

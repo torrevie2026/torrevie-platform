@@ -89,6 +89,8 @@ export default async function CustomerUsersPage({
           {status?.integration === "failed" ? <p className="tex-error">WhatsApp integration settings could not be updated.</p> : null}
           {status?.users === "invited" ? <p className="tex-notice">Tenant web user invitation created.</p> : null}
           {status?.users === "updated" ? <p className="tex-notice">Tenant web user updated.</p> : null}
+          {status?.users === "password_reset" ? <p className="tex-notice">Password reset email sent.</p> : null}
+          {status?.users === "deleted" ? <p className="tex-notice">Tenant web user removed.</p> : null}
           {status?.users === "failed" ? <p className="tex-error">{status.message ?? "Tenant web user update failed."}</p> : null}
 
           <section className="tenant-limit-strip" aria-label="Plan limits">
@@ -137,6 +139,7 @@ export default async function CustomerUsersPage({
                   <span role="columnheader">{admin.user}</span>
                   <span role="columnheader">{admin.status}</span>
                   <span role="columnheader">{admin.role}</span>
+                  <span role="columnheader">MFA</span>
                   <span role="columnheader">{admin.action}</span>
                 </div>
                 {members.map((member) => (
@@ -163,8 +166,26 @@ export default async function CustomerUsersPage({
                         ))}
                       </select>
                     </span>
-                    <span role="cell">
-                      <button type="submit">{admin.update}</button>
+                    <span role="cell" className="member-mfa-cell">
+                      <label className="member-mfa-toggle">
+                        <input name="requireMfa" type="checkbox" defaultChecked={member.requireMfa} />
+                        <span>{member.mfaEnrolled ? "Enrolled" : "Require"}</span>
+                      </label>
+                    </span>
+                    <span role="cell" className="member-action-cell">
+                      <button type="submit" name="intent" value="update">{admin.update}</button>
+                      <button type="submit" name="intent" value="password_reset" className="tex-secondary-button">
+                        Reset password
+                      </button>
+                      <button
+                        type="submit"
+                        name="intent"
+                        value="delete"
+                        className="tex-danger-button"
+                        disabled={member.userId === actor.userId}
+                      >
+                        Delete
+                      </button>
                     </span>
                   </form>
                 ))}

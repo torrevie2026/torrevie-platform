@@ -8,8 +8,11 @@ import {
   assignableCustomerRoles,
   inviteCustomerUser,
   membershipStatuses,
+  removeCustomerUser,
   saveWhatsappProviderProfile,
+  sendCustomerPasswordReset,
   setCustomerMembershipStatus,
+  setCustomerUserMfaRequirement,
   updateTenantWhatsappSettings,
   type CustomerAdminContext,
   type MembershipStatus,
@@ -96,9 +99,17 @@ export async function updateCustomerUserAction(formData: FormData) {
   try {
     const { client, actor } = await resolveActor();
     const userId = stringValue(formData, "userId");
+    const intent = stringValue(formData, "intent") || "update";
 
-    await assignCustomerUserRole(client, actor, userId, roleValue(formData));
-    await setCustomerMembershipStatus(client, actor, userId, membershipStatusValue(formData));
+    if (intent === "delete") {
+      await removeCustomerUser(client, actor, userId);
+    } else if (intent === "password_reset") {
+      await sendCustomerPasswordReset(client, actor, userId);
+    } else {
+      await assignCustomerUserRole(client, actor, userId, roleValue(formData));
+      await setCustomerMembershipStatus(client, actor, userId, membershipStatusValue(formData));
+      await setCustomerUserMfaRequirement(client, actor, userId, formData.get("requireMfa") === "on");
+    }
     revalidatePath(`/${locale}/admin/users`);
   } catch (error) {
     if (isCustomerSessionError(error)) {
@@ -109,7 +120,13 @@ export async function updateCustomerUserAction(formData: FormData) {
     redirect(`/${locale}/admin/users?users=failed&message=${encodeURIComponent(message)}`);
   }
 
-  redirect(`/${locale}/admin/users?users=updated`);
+  const result =
+    stringValue(formData, "intent") === "delete"
+      ? "deleted"
+      : stringValue(formData, "intent") === "password_reset"
+        ? "password_reset"
+        : "updated";
+  redirect(`/${locale}/admin/users?users=${result}`);
 }
 
 export async function saveWhatsappProviderProfileAction(formData: FormData) {
