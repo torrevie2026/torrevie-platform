@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { TexBootstrap, TexExpenseListItem, TexExpenseStatus, TexTripListItem } from "../../../lib/tex";
+import type {
+  TexBootstrap,
+  TexExpenseListItem,
+  TexExpenseStatus,
+  TexTripListItem
+} from "../../../lib/tex";
 
 type TexExpensesClientProps = {
   categories: TexBootstrap["categories"];
@@ -92,7 +97,12 @@ function expenseToForm(expense: TexExpenseListItem): ExpenseFormState {
   };
 }
 
-export function TexExpensesClient({ categories, employees, trips, initialExpenses }: TexExpensesClientProps) {
+export function TexExpensesClient({
+  categories,
+  employees,
+  trips,
+  initialExpenses
+}: TexExpensesClientProps) {
   const [expenses, setExpenses] = useState(initialExpenses);
   const [form, setForm] = useState<ExpenseFormState>(blankForm);
   const [statusFilter, setStatusFilter] = useState<"all" | TexExpenseStatus>("all");
@@ -116,13 +126,19 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
   const activeCategories = categories.filter((category) => category.isActive);
   const openTrips = trips.filter((trip) => trip.status !== "closed" && trip.status !== "cancelled");
   const selectedExpenses = expenses.filter((expense) => selectedExpenseIds.has(expense.id));
-  const selectedPendingCount = selectedExpenses.filter((expense) => expense.status === "pending").length;
-  const selectedApprovedCount = selectedExpenses.filter((expense) => expense.status === "approved").length;
+  const selectedPendingCount = selectedExpenses.filter(
+    (expense) => expense.status === "pending"
+  ).length;
+  const selectedApprovedCount = selectedExpenses.filter(
+    (expense) => expense.status === "approved"
+  ).length;
 
   async function refreshExpenses() {
     const response = await texFetch<{ expenses: TexExpenseListItem[] }>("/expenses");
     setExpenses(response.expenses);
-    setSelectedExpense((current) => response.expenses.find((expense) => expense.id === current?.id) ?? current);
+    setSelectedExpense(
+      (current) => response.expenses.find((expense) => expense.id === current?.id) ?? current
+    );
     setSelectedExpenseIds((current) => {
       const nextIds = new Set(response.expenses.map((expense) => expense.id));
       return new Set([...current].filter((id) => nextIds.has(id)));
@@ -225,7 +241,11 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
           });
           const filled = new Set<keyof ExpenseFormState>();
           setForm((current) => {
-            const next = { ...current, extractionConfidence: parsed.confidence, extractionPayload: parsed as unknown as Record<string, unknown> };
+            const next = {
+              ...current,
+              extractionConfidence: parsed.confidence,
+              extractionPayload: parsed as unknown as Record<string, unknown>
+            };
 
             if (parsed.vendor) {
               next.vendor = parsed.vendor;
@@ -243,7 +263,10 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
               next.currency = parsed.currency.toUpperCase();
               filled.add("currency");
             }
-            if (parsed.category && activeCategories.some((category) => category.name === parsed.category)) {
+            if (
+              parsed.category &&
+              activeCategories.some((category) => category.name === parsed.category)
+            ) {
               next.category = parsed.category;
               filled.add("category");
             }
@@ -263,7 +286,10 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
             return next;
           });
           setAutoFilledFields(filled);
-          parseMessage = filled.size > 0 ? null : "Receipt uploaded, but no fields could be read automatically. Please fill in the fields manually.";
+          parseMessage =
+            filled.size > 0
+              ? null
+              : "Receipt uploaded, but no fields could be read automatically. Please fill in the fields manually.";
         } catch (caught) {
           parseMessage = errorMessage(caught);
         }
@@ -319,11 +345,17 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
 
   async function bulkUpdateStatus(status: Exclude<TexExpenseStatus, "pending">) {
     const targetIds = selectedExpenses
-      .filter((expense) => (status === "approved" ? expense.status === "pending" : expense.status === "approved"))
+      .filter((expense) =>
+        status === "approved" ? expense.status === "pending" : expense.status === "approved"
+      )
       .map((expense) => expense.id);
 
     if (targetIds.length === 0) {
-      setError(status === "approved" ? "Select pending expenses to approve." : "Select approved expenses to mark paid.");
+      setError(
+        status === "approved"
+          ? "Select pending expenses to approve."
+          : "Select approved expenses to mark paid."
+      );
       return;
     }
 
@@ -363,11 +395,7 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
   return (
     <div className="tex-expense-workspace">
       {isExpenseDrawerOpen ? (
-        <div
-          className="tex-drawer-backdrop"
-          role="presentation"
-          onMouseDown={closeExpenseDrawer}
-        >
+        <div className="tex-drawer-backdrop" role="presentation" onMouseDown={closeExpenseDrawer}>
           <aside
             className="tex-drawer"
             aria-labelledby="tex-new-expense-title"
@@ -376,12 +404,10 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="section-heading-row">
-              <h3 id="tex-new-expense-title">{editingExpenseId ? "Edit expense" : "New expense"}</h3>
-              <button
-                type="button"
-                className="tex-secondary-button"
-                onClick={closeExpenseDrawer}
-              >
+              <h3 id="tex-new-expense-title">
+                {editingExpenseId ? "Edit expense" : "New expense"}
+              </h3>
+              <button type="button" className="tex-secondary-button" onClick={closeExpenseDrawer}>
                 Close
               </button>
             </div>
@@ -409,7 +435,12 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
             <div className="tex-form-grid">
               <label className={fieldClass(autoFilledFields, "employeeProfileId")}>
                 Employee
-                <select value={form.employeeProfileId} onChange={(event) => setFormValue(setForm, "employeeProfileId", event.target.value)}>
+                <select
+                  value={form.employeeProfileId}
+                  onChange={(event) =>
+                    setFormValue(setForm, "employeeProfileId", event.target.value)
+                  }
+                >
                   <option value="">Signed-in user</option>
                   {activeEmployees.map((employee) => (
                     <option key={employee.id} value={employee.id}>
@@ -420,23 +451,36 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
               </label>
               <label className={fieldClass(autoFilledFields, "expenseDate")}>
                 Date
-                <input value={form.expenseDate} type="date" onChange={(event) => setFormValue(setForm, "expenseDate", event.target.value)} />
+                <input
+                  value={form.expenseDate}
+                  type="date"
+                  onChange={(event) => setFormValue(setForm, "expenseDate", event.target.value)}
+                />
               </label>
               <label className={fieldClass(autoFilledFields, "amount")}>
                 Amount
-                <input value={form.amount} inputMode="decimal" onChange={(event) => setFormValue(setForm, "amount", event.target.value)} />
+                <input
+                  value={form.amount}
+                  inputMode="decimal"
+                  onChange={(event) => setFormValue(setForm, "amount", event.target.value)}
+                />
               </label>
               <label className={fieldClass(autoFilledFields, "currency")}>
                 Currency
                 <input
                   value={form.currency}
                   maxLength={3}
-                  onChange={(event) => setFormValue(setForm, "currency", event.target.value.toUpperCase())}
+                  onChange={(event) =>
+                    setFormValue(setForm, "currency", event.target.value.toUpperCase())
+                  }
                 />
               </label>
               <label className={fieldClass(autoFilledFields, "category")}>
                 Category
-                <select value={form.category} onChange={(event) => setFormValue(setForm, "category", event.target.value)}>
+                <select
+                  value={form.category}
+                  onChange={(event) => setFormValue(setForm, "category", event.target.value)}
+                >
                   <option value="">Uncategorized</option>
                   {activeCategories.map((category) => (
                     <option key={category.id} value={category.name}>
@@ -447,7 +491,10 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
               </label>
               <label>
                 Trip
-                <select value={form.tripId} onChange={(event) => setFormValue(setForm, "tripId", event.target.value)}>
+                <select
+                  value={form.tripId}
+                  onChange={(event) => setFormValue(setForm, "tripId", event.target.value)}
+                >
                   <option value="">No trip</option>
                   {openTrips.map((trip) => (
                     <option key={trip.id} value={trip.id}>
@@ -458,11 +505,17 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
               </label>
               <label className={fieldClass(autoFilledFields, "vendor")}>
                 Vendor
-                <input value={form.vendor} onChange={(event) => setFormValue(setForm, "vendor", event.target.value)} />
+                <input
+                  value={form.vendor}
+                  onChange={(event) => setFormValue(setForm, "vendor", event.target.value)}
+                />
               </label>
               <label>
                 Payment method
-                <select value={form.paymentMethod} onChange={(event) => setFormValue(setForm, "paymentMethod", event.target.value)}>
+                <select
+                  value={form.paymentMethod}
+                  onChange={(event) => setFormValue(setForm, "paymentMethod", event.target.value)}
+                >
                   <option value="">Not specified</option>
                   <option value="Corporate Card">Corporate Card</option>
                   <option value="Personal Card">Personal Card</option>
@@ -472,20 +525,35 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
               </label>
               <label className={fieldClass(autoFilledFields, "taxIdNumber")}>
                 TRN / tax number
-                <input value={form.taxIdNumber} onChange={(event) => setFormValue(setForm, "taxIdNumber", event.target.value)} />
+                <input
+                  value={form.taxIdNumber}
+                  onChange={(event) => setFormValue(setForm, "taxIdNumber", event.target.value)}
+                />
               </label>
               <label className={fieldClass(autoFilledFields, "taxAmount")}>
                 VAT / tax amount
-                <input value={form.taxAmount} inputMode="decimal" onChange={(event) => setFormValue(setForm, "taxAmount", event.target.value)} />
+                <input
+                  value={form.taxAmount}
+                  inputMode="decimal"
+                  onChange={(event) => setFormValue(setForm, "taxAmount", event.target.value)}
+                />
               </label>
               <label className={fieldClass(autoFilledFields, "notes")}>
                 Notes
-                <input value={form.notes} onChange={(event) => setFormValue(setForm, "notes", event.target.value)} />
+                <input
+                  value={form.notes}
+                  onChange={(event) => setFormValue(setForm, "notes", event.target.value)}
+                />
               </label>
             </div>
 
             <div className="tex-drawer-submit-row">
-              <button type="button" className="tex-primary-button" disabled={isCreating} onClick={submitExpense}>
+              <button
+                type="button"
+                className="tex-primary-button"
+                disabled={isCreating}
+                onClick={submitExpense}
+              >
                 {isCreating ? "Saving..." : editingExpenseId ? "Save changes" : "Submit expense"}
               </button>
             </div>
@@ -495,7 +563,11 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
       ) : null}
 
       {selectedExpense ? (
-        <div className="tex-drawer-backdrop" role="presentation" onMouseDown={() => setSelectedExpense(null)}>
+        <div
+          className="tex-drawer-backdrop"
+          role="presentation"
+          onMouseDown={() => setSelectedExpense(null)}
+        >
           <aside
             className="tex-drawer"
             aria-labelledby="tex-expense-detail-title"
@@ -505,18 +577,27 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
           >
             <div className="section-heading-row">
               <div>
-                <h3 id="tex-expense-detail-title">{selectedExpense.vendor ?? selectedExpense.category ?? "Expense"}</h3>
+                <h3 id="tex-expense-detail-title">
+                  {selectedExpense.vendor ?? selectedExpense.category ?? "Expense"}
+                </h3>
                 <p>
-                  {selectedExpense.employeeName ?? "Unassigned"} - {formatDate(selectedExpense.expenseDate)}
+                  {selectedExpense.employeeName ?? "Unassigned"} -{" "}
+                  {formatDate(selectedExpense.expenseDate)}
                 </p>
               </div>
-              <button type="button" className="tex-secondary-button" onClick={() => setSelectedExpense(null)}>
+              <button
+                type="button"
+                className="tex-secondary-button"
+                onClick={() => setSelectedExpense(null)}
+              >
                 Close
               </button>
             </div>
             <div className="tex-detail-grid">
               <span>Status</span>
-              <strong className={`tex-status tex-status-${selectedExpense.status}`}>{selectedExpense.status}</strong>
+              <strong className={`tex-status tex-status-${selectedExpense.status}`}>
+                {selectedExpense.status}
+              </strong>
               <span>Amount</span>
               <strong>
                 {formatAmount(selectedExpense.amount)} {selectedExpense.currency}
@@ -526,7 +607,9 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
               <span>Trip</span>
               <strong>{selectedExpense.tripName ?? "No trip"}</strong>
               <span>Duplicate review</span>
-              <strong>{selectedExpense.duplicateStatus}</strong>
+              <strong>
+                <ExpenseDuplicateBadge expense={selectedExpense} />
+              </strong>
               <span>TRN / tax number</span>
               <strong>{selectedExpense.taxIdNumber ?? "Not read"}</strong>
               <span>VAT / tax amount</span>
@@ -542,9 +625,15 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
                 <ExpenseReceiptLink expense={selectedExpense} compact={false} />
               </strong>
             </div>
-            {selectedExpense.duplicateReason ? <p className="tex-error">{selectedExpense.duplicateReason}</p> : null}
+            {selectedExpense.duplicateReason ? (
+              <p className="tex-error">{selectedExpense.duplicateReason}</p>
+            ) : null}
             <div className="tex-hero-actions">
-              <button type="button" className="tex-secondary-button" onClick={() => openEditExpense(selectedExpense)}>
+              <button
+                type="button"
+                className="tex-secondary-button"
+                onClick={() => openEditExpense(selectedExpense)}
+              >
                 Edit
               </button>
             </div>
@@ -585,18 +674,17 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
         </div>
       ) : null}
 
-      <section className="tex-form-panel tex-expense-panel" aria-labelledby="tex-expense-list-title">
+      <section
+        className="tex-form-panel tex-expense-panel"
+        aria-labelledby="tex-expense-list-title"
+      >
         <div className="section-heading-row">
           <div>
             <h3 id="tex-expense-list-title">Expense queue</h3>
             <p>Review OCR receipts, status, and approvals in one list.</p>
           </div>
           <div className="tex-panel-actions">
-            <button
-              type="button"
-              className="tex-primary-button"
-              onClick={openNewExpenseDrawer}
-            >
+            <button type="button" className="tex-primary-button" onClick={openNewExpenseDrawer}>
               New expense
             </button>
             <button type="button" className="tex-secondary-button" onClick={refreshExpenses}>
@@ -645,8 +733,18 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
         ) : (
           <div className="tex-expense-list">
             {visibleExpenses.map((expense) => (
-              <article key={expense.id} className="tex-expense-card">
-                <label className="tex-row-checkbox" aria-label={`Select ${expense.vendor ?? "expense"}`}>
+              <article
+                key={expense.id}
+                className={
+                  expense.duplicateStatus === "clear"
+                    ? "tex-expense-card"
+                    : `tex-expense-card tex-expense-card-duplicate-${expense.duplicateStatus}`
+                }
+              >
+                <label
+                  className="tex-row-checkbox"
+                  aria-label={`Select ${expense.vendor ?? "expense"}`}
+                >
                   <input
                     type="checkbox"
                     checked={selectedExpenseIds.has(expense.id)}
@@ -654,7 +752,12 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
                   />
                 </label>
                 <div>
-                  <span className={`tex-status tex-status-${expense.status}`}>{expense.status}</span>
+                  <div className="tex-expense-card-badges">
+                    <span className={`tex-status tex-status-${expense.status}`}>
+                      {expense.status}
+                    </span>
+                    <ExpenseDuplicateBadge expense={expense} />
+                  </div>
                   <h4>{expense.vendor ?? expense.category ?? "Expense"}</h4>
                   <p>
                     {expense.employeeName ?? "Unassigned"} · {formatDate(expense.expenseDate)}
@@ -707,6 +810,21 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
         )}
       </section>
     </div>
+  );
+}
+
+function ExpenseDuplicateBadge({ expense }: { expense: TexExpenseListItem }) {
+  if (expense.duplicateStatus === "clear") {
+    return <span className="tex-duplicate-chip tex-duplicate-chip-clear">Clear</span>;
+  }
+
+  return (
+    <span
+      className={`tex-duplicate-chip tex-duplicate-chip-${expense.duplicateStatus}`}
+      title={expense.duplicateReason ?? undefined}
+    >
+      {expense.duplicateStatus === "duplicate" ? "Duplicate" : "Possible duplicate"}
+    </span>
   );
 }
 
@@ -804,7 +922,9 @@ function ReceiptUploadPanel({
           <small>JPEG, PNG, WEBP, HEIC, or PDF up to 20MB</small>
         </label>
       )}
-      {isParsing ? <p className="tex-notice">Reading receipt and extracting expense fields...</p> : null}
+      {isParsing ? (
+        <p className="tex-notice">Reading receipt and extracting expense fields...</p>
+      ) : null}
       {warning ? <p className="tex-error">{warning}</p> : null}
     </div>
   );

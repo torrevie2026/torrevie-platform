@@ -2550,6 +2550,23 @@ form.member-row {
   padding: 10px 12px;
 }
 
+.tex-expense-card-duplicate-suspected {
+  background: color-mix(in srgb, var(--color-status-warning) 6%, var(--color-bg-primary));
+  border-color: color-mix(in srgb, var(--color-status-warning) 48%, var(--color-border));
+}
+
+.tex-expense-card-duplicate-duplicate {
+  background: color-mix(in srgb, var(--color-status-error) 6%, var(--color-bg-primary));
+  border-color: color-mix(in srgb, var(--color-status-error) 48%, var(--color-border));
+}
+
+.tex-expense-card-badges {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
 .tex-row-checkbox {
   align-items: center;
   display: inline-flex;
@@ -2618,6 +2635,35 @@ form.member-row {
   background: var(--color-accent-secondary);
 }
 
+.tex-duplicate-chip {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 800;
+  padding-block: 3px;
+  padding-inline: 7px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tex-duplicate-chip-clear {
+  background: color-mix(in srgb, var(--color-status-success) 8%, var(--color-bg-primary));
+  color: var(--color-status-success);
+}
+
+.tex-duplicate-chip-suspected {
+  background: color-mix(in srgb, var(--color-status-warning) 14%, var(--color-bg-primary));
+  border-color: color-mix(in srgb, var(--color-status-warning) 50%, var(--color-border));
+  color: color-mix(in srgb, var(--color-status-warning) 72%, var(--color-text-primary));
+}
+
+.tex-duplicate-chip-duplicate {
+  background: color-mix(in srgb, var(--color-status-error) 14%, var(--color-bg-primary));
+  border-color: color-mix(in srgb, var(--color-status-error) 50%, var(--color-border));
+  color: var(--color-status-error);
+}
+
 .tex-inline-button {
   inline-size: fit-content;
 }
@@ -2634,7 +2680,10 @@ form.member-row {
   border-radius: 8px;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(240px, 1.25fr) minmax(110px, auto) minmax(260px, 1fr) minmax(190px, auto);
+  grid-template-columns: minmax(240px, 1.25fr) minmax(110px, auto) minmax(260px, 1fr) minmax(
+      190px,
+      auto
+    );
   padding: 10px 12px;
 }
 
@@ -2903,7 +2952,10 @@ form.member-row {
 .tex-whatsapp-table-head,
 .tex-whatsapp-row {
   display: grid;
-  grid-template-columns: minmax(180px, 0.8fr) minmax(230px, 1fr) minmax(320px, 1.2fr) minmax(260px, 0.9fr);
+  grid-template-columns: minmax(180px, 0.8fr) minmax(230px, 1fr) minmax(320px, 1.2fr) minmax(
+      260px,
+      0.9fr
+    );
 }
 
 .tex-whatsapp-table-head {
