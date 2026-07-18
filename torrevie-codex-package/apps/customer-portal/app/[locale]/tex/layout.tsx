@@ -31,7 +31,7 @@ export default async function TexLayout({
           locale={locale}
           planKey={actor.texPlan.planKey}
           roles={actor.roles}
-          tenantId={actor.tenantId}
+          tenantName={actor.tenantName ?? actor.tenantId}
         />
         <section className="customer-main tex-main">{children}</section>
       </main>
