@@ -467,13 +467,14 @@ async function handleInboundMessage(session, sock, message) {
   const messageId = message.key.id || randomUUID();
   const remoteJid = message.key.remoteJid || null;
   const sender = resolveInboundSender(message);
+  const content = unwrapWhatsappMessageContent(message.message);
   const text =
-    message.message.conversation ||
-    message.message.extendedTextMessage?.text ||
-    message.message.imageMessage?.caption ||
-    message.message.documentMessage?.caption ||
+    content.conversation ||
+    content.extendedTextMessage?.text ||
+    content.imageMessage?.caption ||
+    content.documentMessage?.caption ||
     "";
-  const hasMedia = Boolean(message.message.imageMessage || message.message.documentMessage);
+  const hasMedia = Boolean(content.imageMessage || content.documentMessage);
   let mediaInfo = null;
   let mediaError = null;
 
@@ -545,7 +546,7 @@ async function handleInboundMessage(session, sock, message) {
       error: errorText,
       expenseId: null,
       ocrStatus: "failed",
-      replyText: fallbackQuickConnectReply(hasMedia),
+      replyText: fallbackQuickConnectReply(hasMedia, mediaError),
       status: "failed",
       submissionId: null
     };
@@ -739,21 +740,25 @@ async function processQuickConnectIngest(session, input) {
     error: null,
     expenseId: body.expense?.id ?? null,
     ocrStatus: body.ocrStatus ?? null,
-    replyText: body.replyText || fallbackQuickConnectReply(Boolean(input.mediaInfo)),
+    replyText: body.replyText || fallbackQuickConnectReply(Boolean(input.mediaInfo), input.mediaError),
     status: "processed",
     submissionId: body.submission?.id ?? null
   };
 }
 
-function fallbackQuickConnectReply(hasMedia) {
+function fallbackQuickConnectReply(hasMedia, mediaError = null) {
   return hasMedia
-    ? "Receipt received by TEX. It has been queued for finance review."
+    ? `Receipt received by TEX, but OCR could not finish because the attachment was not processed${mediaError ? ` (${mediaError})` : ""}. Please resend the receipt as a clear photo or PDF.`
     : "Message received by TEX. Send a receipt photo or document to queue it for finance review.";
 }
 
 async function downloadMessageMedia(sock, message) {
+  const mediaMessage = {
+    ...message,
+    message: unwrapWhatsappMessageContent(message.message)
+  };
   const buffer = await downloadMediaMessage(
-    message,
+    mediaMessage,
     "buffer",
     {},
     {
@@ -761,8 +766,9 @@ async function downloadMessageMedia(sock, message) {
       reuploadRequest: sock.updateMediaMessage
     }
   );
-  const image = message.message?.imageMessage;
-  const document = message.message?.documentMessage;
+  const content = unwrapWhatsappMessageContent(message.message);
+  const image = content.imageMessage;
+  const document = content.documentMessage;
 
   return {
     bufferLength: Buffer.isBuffer(buffer) ? buffer.length : 0,
@@ -771,6 +777,26 @@ async function downloadMessageMedia(sock, message) {
     mediaType: image ? "image" : "document",
     mimeType: image?.mimetype || document?.mimetype || null
   };
+}
+
+function unwrapWhatsappMessageContent(content, depth = 0) {
+  if (!content || depth > 5) {
+    return {};
+  }
+
+  return (
+    content.ephemeralMessage?.message &&
+      unwrapWhatsappMessageContent(content.ephemeralMessage.message, depth + 1)
+  ) || (
+    content.viewOnceMessage?.message &&
+      unwrapWhatsappMessageContent(content.viewOnceMessage.message, depth + 1)
+  ) || (
+    content.viewOnceMessageV2?.message &&
+      unwrapWhatsappMessageContent(content.viewOnceMessageV2.message, depth + 1)
+  ) || (
+    content.documentWithCaptionMessage?.message &&
+      unwrapWhatsappMessageContent(content.documentWithCaptionMessage.message, depth + 1)
+  ) || content;
 }
 
 async function recordQuickConnectSubmission(session, input) {

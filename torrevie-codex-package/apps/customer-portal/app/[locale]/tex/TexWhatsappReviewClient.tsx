@@ -332,11 +332,15 @@ function ReceiptPreview({
   url: string | null;
 }) {
   if (!url) {
+    const isWaitingWithoutAttachment =
+      (ocrStatus === "pending" || ocrStatus === "processing") && mediaStatus !== "stored";
     return (
       <div className="tex-receipt-missing">
         <strong>
-          {ocrStatus === "pending" || ocrStatus === "processing"
-            ? "Receipt processing"
+          {isWaitingWithoutAttachment
+            ? "Receipt attachment missing"
+            : ocrStatus === "pending" || ocrStatus === "processing"
+              ? "Receipt processing"
             : expected
               ? "Receipt attachment unavailable"
               : "No receipt attachment"}
@@ -398,7 +402,7 @@ function receiptMissingText(
   }
 
   if (ocrStatus === "pending" || ocrStatus === "processing") {
-    return "TEX has captured the message and is waiting for the receipt file to finish processing.";
+    return "TEX captured the WhatsApp message, but the receipt image or PDF is not attached yet. Resend the receipt as a photo or PDF attachment.";
   }
 
   if (mediaStatus === "download_failed") {

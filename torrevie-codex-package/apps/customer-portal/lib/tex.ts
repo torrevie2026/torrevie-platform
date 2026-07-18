@@ -3622,7 +3622,7 @@ export async function recordTexWebhookSubmission(
         classifyWhatsappMessage(submission),
         submission.mediaUrl,
         submission.mediaMimeType,
-        submission.mediaUrl ? "pending" : "manual_review",
+        "manual_review",
         JSON.stringify(submission.payload),
         actor.userId
       ]
@@ -3675,16 +3675,35 @@ export async function processTexWhatsappSubmission(
     const settings = await getTexIntegrationSettingsForProcessing(client);
     const employee = await findEmployeeBySubmissionSender(client, submission);
     const { extraction, extractions, extractionError, multipleReceipts } = await extractReceiptForSubmission(client, submission);
+    const missingReceiptAttachment = messageType === "receipt" && !hasReceiptAttachmentForOcr(submission);
 
     if (!employee) {
       const replyText =
-        "Receipt received, but this WhatsApp number is not enrolled for TEX. Please ask your tenant admin to enroll your number.";
+        missingReceiptAttachment
+          ? "Receipt message received, but TEX could not access the image or PDF attachment. Please resend the receipt as a photo or PDF attachment."
+          : "Receipt received, but this WhatsApp number is not enrolled for TEX. Please ask your tenant admin to enroll your number.";
       const row = await insertWhatsappSubmission(client, actor, submission, {
         messageType,
         ocrStatus: "manual_review",
         ocrResult: extraction ?? {},
-        ocrError: extractionError,
+        ocrError: missingReceiptAttachment ? missingReceiptAttachmentError(submission) : extractionError,
         replyText
+      });
+      const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
+
+      return { submission: row, replyText, expense: null, ocrStatus: "manual_review", delivery };
+    }
+
+    if (missingReceiptAttachment) {
+      const replyText =
+        "Receipt message received, but TEX could not access the image or PDF attachment. Please resend the receipt as a photo or PDF attachment. Status: waiting for receipt attachment.";
+      const row = await insertWhatsappSubmission(client, actor, submission, {
+        messageType,
+        ocrStatus: "manual_review",
+        ocrResult: extraction ?? {},
+        ocrError: missingReceiptAttachmentError(submission),
+        replyText,
+        resolvedEmployeeProfileId: employee.id
       });
       const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
 
@@ -4887,6 +4906,31 @@ async function extractReceiptForSubmission(
     extractionError,
     multipleReceipts: extractions.length > 1
   };
+}
+
+function hasReceiptAttachmentForOcr(submission: Required<TexWebhookSubmissionInput>) {
+  return Boolean(submission.extractedReceipt || submission.receiptFileId || submission.mediaUrl);
+}
+
+function missingReceiptAttachmentError(submission: Required<TexWebhookSubmissionInput>) {
+  const payload = readRecord(submission.payload);
+  const media = readRecord(payload.media);
+  const status = readString(media.status);
+  const error = readString(media.error);
+
+  if (error) {
+    return error;
+  }
+
+  if (status === "download_failed") {
+    return "WhatsApp sent media, but Quick Connect could not download the receipt attachment.";
+  }
+
+  if (status === "upload_failed") {
+    return "WhatsApp media was received, but TEX could not store the receipt attachment.";
+  }
+
+  return "TEX received the WhatsApp message, but no receipt image or PDF bytes were attached to the ingest request.";
 }
 
 async function extractStoredReceiptWithAI(client: TenantQueryClient, receiptFileId: string) {
@@ -6219,6 +6263,10 @@ function whatsappIntakeStatus(row: TexUnregisteredWhatsappSubmissionRow, mediaSt
     return "Media upload failed";
   }
 
+  if (row.message_type === "receipt" && !row.receipt_file_id && !row.media_url) {
+    return "Receipt attachment missing";
+  }
+
   if (row.receipt_file_id) {
     return row.ocr_status === "extracted" ? "Receipt processed" : "Receipt attached";
   }
@@ -7010,7 +7058,7 @@ function mapUnregisteredWhatsappSubmission(
     mediaStatus,
     mediaError,
     messageType: row.message_type,
-    ocrStatus: row.ocr_status,
+    ocrStatus: normalizeWhatsappReviewOcrStatus(row, mediaStatus),
     ocrResult: parseSubmissionOcrResult(row.ocr_result),
     ocrError: row.ocr_error,
     whatsappReplyText: row.whatsapp_reply_text,
@@ -7022,6 +7070,22 @@ function mapUnregisteredWhatsappSubmission(
     resolvedAt: row.resolved_at,
     createdAt: row.created_at
   };
+}
+
+function normalizeWhatsappReviewOcrStatus(
+  row: TexUnregisteredWhatsappSubmissionRow,
+  mediaStatus: string | null
+): TexWhatsappReceiptResult["ocrStatus"] {
+  if (
+    row.message_type === "receipt" &&
+    !row.receipt_file_id &&
+    !row.media_url &&
+    (row.ocr_status === "pending" || row.ocr_status === "processing" || mediaStatus !== "stored")
+  ) {
+    return "manual_review";
+  }
+
+  return row.ocr_status;
 }
 
 function whatsappDuplicateHint(row: TexUnregisteredWhatsappSubmissionRow) {
