@@ -751,7 +751,7 @@ export function TexExpensesClient({
                     onChange={() => toggleExpenseSelection(expense.id)}
                   />
                 </label>
-                <div>
+                <div className="tex-expense-card-main">
                   <div className="tex-expense-card-badges">
                     <span className={`tex-status tex-status-${expense.status}`}>
                       {expense.status}
@@ -759,15 +759,18 @@ export function TexExpensesClient({
                     <ExpenseDuplicateBadge expense={expense} />
                   </div>
                   <h4>{expense.vendor ?? expense.category ?? "Expense"}</h4>
+                  {expense.duplicateReason ? (
+                    <p className="tex-duplicate-note">{expense.duplicateReason}</p>
+                  ) : null}
                   <p>
                     {expense.employeeName ?? "Unassigned"} · {formatDate(expense.expenseDate)}
                     {expense.tripName ? ` · ${expense.tripName}` : ""}
                   </p>
                 </div>
-                <strong>
+                <strong className="tex-expense-card-amount">
                   {formatAmount(expense.amount)} {expense.currency}
                 </strong>
-                <div className="tex-card-actions">
+                <div className="tex-card-actions tex-card-actions-desktop">
                   <ExpenseReceiptLink expense={expense} compact />
                   <button type="button" onClick={() => setSelectedExpense(expense)}>
                     Open
@@ -804,6 +807,46 @@ export function TexExpensesClient({
                     <span>{expense.category ?? "No category"}</span>
                   )}
                 </div>
+                <details className="tex-expense-mobile-actions">
+                  <summary>Actions</summary>
+                  <div className="tex-expense-mobile-action-grid">
+                    <ExpenseReceiptLink expense={expense} compact />
+                    <button type="button" onClick={() => setSelectedExpense(expense)}>
+                      Open
+                    </button>
+                    <button type="button" onClick={() => openEditExpense(expense)}>
+                      Edit
+                    </button>
+                    {expense.status === "pending" ? (
+                      <>
+                        <button
+                          type="button"
+                          disabled={busyExpenseId === expense.id}
+                          onClick={() => updateStatus(expense.id, "approved")}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyExpenseId === expense.id}
+                          onClick={() => updateStatus(expense.id, "rejected")}
+                        >
+                          Reject
+                        </button>
+                      </>
+                    ) : expense.status === "approved" ? (
+                      <button
+                        type="button"
+                        disabled={busyExpenseId === expense.id}
+                        onClick={() => updateStatus(expense.id, "paid")}
+                      >
+                        Mark paid
+                      </button>
+                    ) : (
+                      <span>{expense.category ?? "No category"}</span>
+                    )}
+                  </div>
+                </details>
               </article>
             ))}
           </div>
