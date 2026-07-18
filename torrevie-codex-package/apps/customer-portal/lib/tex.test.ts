@@ -1167,6 +1167,7 @@ async function main() {
     });
     assert.equal(submission.status, "open");
     assert.equal(client.hasSql("on conflict (tenant_id, message_id)"), true);
+    assert.equal(client.hasSql("receipt_file_id = excluded.receipt_file_id"), true);
     assert.equal(client.valuesContain("wamid.abc"), true);
     assert.equal(client.valuesContain("manual_review"), true);
     assert.equal(client.valuesContain("tex.webhook.submission_recorded"), true);
@@ -1241,6 +1242,8 @@ async function main() {
     });
     assert.equal(result.ocrStatus, "extracted");
     assert.equal(result.expense?.status, "pending");
+    assert.equal(client.hasSql("$1::uuid"), true);
+    assert.equal(client.hasSql("case when $21::text = 'rejected' then $1::uuid else null end"), true);
     assert.equal(client.valuesContain("00000000-0000-4000-8000-000000004001"), true);
     assert.equal(client.valuesContain("100000000000003"), true);
   }
