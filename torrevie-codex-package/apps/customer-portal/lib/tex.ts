@@ -4933,16 +4933,6 @@ function missingReceiptAttachmentError(submission: Required<TexWebhookSubmission
   return "TEX received the WhatsApp message, but no receipt image or PDF bytes were attached to the ingest request.";
 }
 
-async function extractStoredReceiptWithAI(client: TenantQueryClient, receiptFileId: string) {
-  const receipts = await extractStoredReceiptsWithAI(client, receiptFileId);
-  const receipt = receipts[0];
-  if (!receipt) {
-    throw new Error("Stored receipt extraction returned no receipts.");
-  }
-
-  return receipt;
-}
-
 async function extractStoredReceiptsWithAI(client: TenantQueryClient, receiptFileId: string) {
   const result = await client.query<{
     storage_path: string;
