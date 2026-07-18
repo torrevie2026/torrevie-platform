@@ -10,6 +10,11 @@ export type TexReceiptExtraction = {
   notes: string | null;
 };
 
+export type TexReceiptExtractionBatch = {
+  receipts: TexReceiptExtraction[];
+  multipleReceipts: boolean;
+};
+
 type ReceiptAiProvider = "gemini" | "openai";
 
 const receiptExtractionSchema = {
@@ -32,6 +37,9 @@ const receiptExtractionSchema = {
 const receiptPrompt =
   "Extract expense receipt fields for a travel and expense system. Return only fields visible or strongly inferable from the receipt. Do not invent merchant names, dates, amounts, or currencies. Return valid JSON only with keys: vendor, expenseDate, amount, currency, category, taxAmount, taxIdNumber, confidence, notes.";
 
+const receiptBatchPrompt =
+  "Extract every distinct expense receipt from this PDF for a travel and expense system. If the file contains one receipt, return one item. If it contains multiple receipts on one or more pages, return one item per receipt. Do not split one receipt into line items. Do not merge separate receipts. Return valid JSON only with keys: receipts and multipleReceipts. Each receipts item must use keys: vendor, expenseDate, amount, currency, category, taxAmount, taxIdNumber, confidence, notes.";
+
 export async function extractReceiptWithAI(mediaUrl: string): Promise<TexReceiptExtraction> {
   const providers = receiptProviderOrder();
   const errors: string[] = [];
@@ -39,6 +47,29 @@ export async function extractReceiptWithAI(mediaUrl: string): Promise<TexReceipt
   for (const provider of providers) {
     try {
       return provider === "gemini" ? await extractReceiptWithGemini(mediaUrl) : await extractReceiptWithOpenAI(mediaUrl);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : `${provider} receipt extraction failed.`);
+    }
+  }
+
+  throw new Error(errors.join(" ") || "No receipt AI provider is configured.");
+}
+
+export async function extractReceiptsWithAI(mediaUrl: string): Promise<TexReceiptExtraction[]> {
+  if (mediaMimeType(mediaUrl) !== "application/pdf") {
+    return [await extractReceiptWithAI(mediaUrl)];
+  }
+
+  const providers = receiptProviderOrder();
+  const errors: string[] = [];
+
+  for (const provider of providers) {
+    try {
+      if (provider === "gemini") {
+        return (await extractReceiptsWithGemini(mediaUrl)).receipts;
+      }
+
+      return [await extractReceiptWithOpenAI(mediaUrl)];
     } catch (error) {
       errors.push(error instanceof Error ? error.message : `${provider} receipt extraction failed.`);
     }
@@ -130,6 +161,27 @@ export async function extractReceiptWithGemini(mediaUrl: string): Promise<TexRec
   throw new Error(errors.join(" "));
 }
 
+async function extractReceiptsWithGemini(mediaUrl: string): Promise<TexReceiptExtractionBatch> {
+  const apiKey = geminiApiKey();
+
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not configured.");
+  }
+
+  const media = await receiptMediaForGemini(mediaUrl);
+  const errors: string[] = [];
+
+  for (const model of geminiReceiptModels()) {
+    try {
+      return await extractReceiptsWithGeminiModel(apiKey, model, media);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : `Gemini receipt extraction failed for ${model}.`);
+    }
+  }
+
+  throw new Error(errors.join(" "));
+}
+
 async function extractReceiptWithGeminiModel(apiKey: string, model: string, media: { mimeType: string; dataBase64: string }) {
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
@@ -174,6 +226,56 @@ async function extractReceiptWithGeminiModel(apiKey: string, model: string, medi
   }
 
   return sanitizeExtraction(parseJsonObject(outputText));
+}
+
+async function extractReceiptsWithGeminiModel(
+  apiKey: string,
+  model: string,
+  media: { mimeType: string; dataBase64: string }
+) {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-goog-api-key": apiKey
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: receiptBatchPrompt },
+            {
+              inlineData: {
+                mimeType: media.mimeType,
+                data: media.dataBase64
+              }
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.1
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Gemini receipt extraction failed with ${model}: ${response.status} ${text.slice(0, 400)}`);
+  }
+
+  const data = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const outputText = data.candidates?.[0]?.content?.parts?.find((part) => typeof part.text === "string")?.text;
+
+  if (!outputText) {
+    throw new Error(`Gemini receipt extraction returned no structured text with ${model}.`);
+  }
+
+  return sanitizeExtractionBatch(parseJsonValue(outputText));
 }
 
 function findOutputText(output: unknown): string {
@@ -278,19 +380,23 @@ function cleanMediaMimeType(value: string | null | undefined) {
   return value?.split(";")[0]?.trim().toLowerCase() || "image/jpeg";
 }
 
-function parseJsonObject(value: string): Partial<TexReceiptExtraction> {
+function parseJsonValue(value: string): unknown {
   const trimmed = value.trim();
 
   try {
-    return JSON.parse(trimmed) as Partial<TexReceiptExtraction>;
+    return JSON.parse(trimmed) as unknown;
   } catch {
     const match = trimmed.match(/\{[\s\S]*\}/);
     if (!match) {
       throw new Error("Receipt extraction returned invalid JSON.");
     }
 
-    return JSON.parse(match[0]) as Partial<TexReceiptExtraction>;
+    return JSON.parse(match[0]) as unknown;
   }
+}
+
+function parseJsonObject(value: string): Partial<TexReceiptExtraction> {
+  return parseJsonValue(value) as Partial<TexReceiptExtraction>;
 }
 
 function sanitizeExtraction(value: Partial<TexReceiptExtraction>): TexReceiptExtraction {
@@ -304,6 +410,26 @@ function sanitizeExtraction(value: Partial<TexReceiptExtraction>): TexReceiptExt
     taxIdNumber: cleanOptional(value.taxIdNumber),
     confidence: clampConfidence(value.confidence),
     notes: cleanOptional(value.notes)
+  };
+}
+
+function sanitizeExtractionBatch(value: unknown): TexReceiptExtractionBatch {
+  const record = value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+  const rawReceipts = Array.isArray(record.receipts)
+    ? record.receipts
+    : value && typeof value === "object" && !Array.isArray(value)
+      ? [value]
+      : [];
+  const receipts = rawReceipts
+    .filter((item): item is Partial<TexReceiptExtraction> => Boolean(item && typeof item === "object" && !Array.isArray(item)))
+    .map((item) => sanitizeExtraction(item))
+    .filter((item) => Boolean(item.vendor || item.expenseDate || item.amount));
+
+  return {
+    receipts,
+    multipleReceipts: record.multipleReceipts === true || receipts.length > 1
   };
 }
 
