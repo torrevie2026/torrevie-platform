@@ -34,8 +34,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
+  let diagnosticBody: Partial<QuickConnectIngestBody> | null = null;
   try {
     const body = (await request.json()) as QuickConnectIngestBody;
+    diagnosticBody = body;
     const tenantId = assertUuid(body.tenantId, "tenant id");
     const client = new PostgresTenantQueryClient(INTEGRATION_ACTOR_USER_ID);
     const actorUserId = await resolveIntegrationActorUserId(client, tenantId);
@@ -119,6 +121,18 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     const status = error instanceof Error && "statusCode" in error ? Number(error.statusCode) : 400;
+    console.error(
+      JSON.stringify({
+        event: "tex.quick_connect.ingest_failed",
+        error: error instanceof Error ? error.message : "Quick Connect ingest failed.",
+        hasMedia: Boolean(diagnosticBody?.media?.dataBase64),
+        mediaMimeType: diagnosticBody?.media?.mimeType ?? null,
+        messageId: diagnosticBody?.messageId ?? null,
+        senderPhonePresent: Boolean(diagnosticBody?.senderPhone),
+        statusCode: Number.isInteger(status) ? status : 400,
+        tenantId: diagnosticBody?.tenantId ?? null
+      })
+    );
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Quick Connect ingest failed." },
       { status: Number.isInteger(status) && status >= 400 && status < 600 ? status : 400 }

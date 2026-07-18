@@ -774,6 +774,12 @@ async function downloadMessageMedia(sock, message) {
 }
 
 async function recordQuickConnectSubmission(session, input) {
+  const mediaUrl =
+    input.mediaInfo?.dataBase64 && input.mediaInfo.mimeType
+      ? `data:${input.mediaInfo.mimeType};base64,${input.mediaInfo.dataBase64}`
+      : null;
+  const ocrStatus = input.hasMedia && input.mediaInfo ? "failed" : "manual_review";
+  const ocrError = input.mediaError || "Quick Connect app ingest failed before OCR could run.";
   const payload = {
     key: input.message.key,
     messageTimestamp: input.message.messageTimestamp,
@@ -782,15 +788,26 @@ async function recordQuickConnectSubmission(session, input) {
       expected: Boolean(input.hasMedia),
       status: input.mediaError ? "download_failed" : input.mediaInfo ? "downloaded" : "not_provided"
     },
-    mediaInfo: input.mediaInfo,
+    mediaInfo: input.mediaInfo
+      ? {
+          bufferLength: input.mediaInfo.bufferLength,
+          fileName: input.mediaInfo.fileName,
+          mediaType: input.mediaInfo.mediaType,
+          mimeType: input.mediaInfo.mimeType
+        }
+      : null,
     sender: input.sender,
     source: "quick_connect"
   };
   await insertWhatsappSubmission({
+    media_url: mediaUrl,
     media_mime_type: input.mediaInfo?.mimeType ?? null,
     message_id: input.messageId,
     message_text: input.text,
     message_type: input.hasMedia || input.mediaInfo ? "receipt" : "text",
+    ocr_error: ocrError,
+    ocr_result: {},
+    ocr_status: ocrStatus,
     payload,
     sender_phone: input.sender.phone,
     sender_raw: input.sender.raw,
@@ -916,9 +933,13 @@ async function insertWhatsappSubmission(row) {
         `/rest/v1/tex_unregistered_whatsapp_submissions?tenant_id=eq.${row.tenant_id}&message_id=eq.${row.message_id}`,
         {
           body: JSON.stringify({
+            media_url: row.media_url,
             media_mime_type: row.media_mime_type,
             message_text: row.message_text,
             message_type: row.message_type,
+            ocr_error: row.ocr_error,
+            ocr_result: row.ocr_result,
+            ocr_status: row.ocr_status,
             payload: row.payload,
             updated_at: new Date().toISOString()
           }),
@@ -943,7 +964,11 @@ async function insertWhatsappSubmission(row) {
         session_id,
         message_text,
         message_type,
+        media_url,
         media_mime_type,
+        ocr_status,
+        ocr_result,
+        ocr_error,
         payload,
         status
       )
@@ -957,15 +982,23 @@ async function insertWhatsappSubmission(row) {
         $7,
         $8,
         $9,
-        $10::jsonb,
-        $11
+        $10,
+        $11,
+        $12::jsonb,
+        $13,
+        $14::jsonb,
+        $15
       )
       on conflict (tenant_id, message_id)
       where message_id is not null
       do update set
         message_text = excluded.message_text,
         message_type = excluded.message_type,
+        media_url = excluded.media_url,
         media_mime_type = excluded.media_mime_type,
+        ocr_status = excluded.ocr_status,
+        ocr_result = excluded.ocr_result,
+        ocr_error = excluded.ocr_error,
         payload = excluded.payload,
         updated_at = now()
     `,
@@ -978,7 +1011,11 @@ async function insertWhatsappSubmission(row) {
       row.session_id,
       row.message_text,
       row.message_type,
+      row.media_url,
       row.media_mime_type,
+      row.ocr_status,
+      JSON.stringify(row.ocr_result ?? {}),
+      row.ocr_error,
       JSON.stringify(row.payload),
       row.status
     ]

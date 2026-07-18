@@ -3918,11 +3918,37 @@ export async function resolveTexUnregisteredWhatsappSubmission(
               input.phoneNumber ?? submission.sender_phone ?? submission.sender_raw ?? "",
             department: input.department
           });
-    const extraction = parseSubmissionExtraction(submission.ocr_result);
+    const { extraction, extractionError } = await extractionForWhatsappReviewSubmission(client, submission);
+    if (extraction || extractionError) {
+      await client.query(
+        `
+          update public.tex_unregistered_whatsapp_submissions
+             set ocr_status = $1,
+                 ocr_result = $2::jsonb,
+                 ocr_error = $3,
+                 updated_by = $4,
+                 updated_at = now()
+           where tenant_id = public.current_tenant_id()
+             and id = $5
+        `,
+        [
+          extraction ? "extracted" : "failed",
+          JSON.stringify(extraction ?? {}),
+          extractionError,
+          actor.userId,
+          submission.id
+        ]
+      );
+    }
     const resolved = resolveWhatsappExpenseFields(submission, extraction);
+    const duplicate =
+      extraction?.expenseDate && extraction.amount && extraction.currency
+        ? await findDuplicateExpense(client, employee.id, extraction)
+        : null;
     const expense = await insertResolvedWhatsappExpense(client, actor, {
       submission,
       employee,
+      duplicate,
       extraction,
       ...resolved
     });
@@ -5986,6 +6012,49 @@ async function getTexTeam(client: TenantQueryClient, teamId: string): Promise<Te
   return mapTeam(requireSingleRow(result.rows, "team"));
 }
 
+async function extractionForWhatsappReviewSubmission(
+  client: TenantQueryClient,
+  submission: TexUnregisteredWhatsappSubmissionRow
+) {
+  const existing = parseSubmissionExtraction(submission.ocr_result);
+  if (existing) {
+    return { extraction: existing, extractionError: cleanOptional(submission.ocr_error) };
+  }
+
+  if (submission.media_url) {
+    try {
+      return {
+        extraction: await extractReceiptWithAI(submission.media_url),
+        extractionError: null
+      };
+    } catch (error) {
+      return {
+        extraction: null,
+        extractionError: error instanceof Error ? error.message : "Receipt extraction failed."
+      };
+    }
+  }
+
+  if (submission.receipt_file_id) {
+    try {
+      return {
+        extraction: await extractStoredReceiptWithAI(client, submission.receipt_file_id),
+        extractionError: null
+      };
+    } catch (error) {
+      return {
+        extraction: null,
+        extractionError: error instanceof Error ? error.message : "Stored receipt extraction failed."
+      };
+    }
+  }
+
+  return {
+    extraction: null,
+    extractionError: "No receipt image is attached to this WhatsApp submission."
+  };
+}
+
 function parseSubmissionExtraction(value: unknown): TexReceiptExtraction | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -6086,6 +6155,7 @@ async function insertResolvedWhatsappExpense(
   input: {
     submission: TexUnregisteredWhatsappSubmissionRow;
     employee: TexEmployeeProfile;
+    duplicate: TexDuplicateCandidateRow | null;
     extraction: TexReceiptExtraction | null;
     vendor: string | null;
     expenseDate: string;
@@ -6094,6 +6164,16 @@ async function insertResolvedWhatsappExpense(
     notes: string;
   }
 ): Promise<TexExpenseRecord> {
+  const duplicateStatus = input.duplicate ? "suspected" : "clear";
+  const duplicateReason = input.duplicate
+    ? `Possible duplicate of ${input.duplicate.vendor ?? "existing receipt"} on ${input.duplicate.expense_date} for ${input.duplicate.currency} ${input.duplicate.amount}.`
+    : null;
+  const policyReason = [
+    "Receipt came from an unregistered WhatsApp number and was assigned by a reviewer.",
+    duplicateReason
+  ]
+    .filter(Boolean)
+    .join(" ");
   const result = await client.query<TexExpenseRow>(
     `
       insert into public.tex_expenses (
@@ -6119,6 +6199,9 @@ async function insertResolvedWhatsappExpense(
         extraction_source,
         extraction_confidence,
         extraction_payload,
+        duplicate_status,
+        duplicate_of_expense_id,
+        duplicate_reason,
         policy_flag,
         policy_flag_reason,
         manager_review_required,
@@ -6148,8 +6231,11 @@ async function insertResolvedWhatsappExpense(
         'whatsapp_ai',
         $16,
         $17::jsonb,
-        true,
         $18,
+        $19,
+        $20,
+        true,
+        $21,
         true,
         $1,
         $1
@@ -6174,7 +6260,10 @@ async function insertResolvedWhatsappExpense(
       input.submission.receipt_file_id,
       input.extraction?.confidence ?? null,
       JSON.stringify(input.extraction ?? {}),
-      "Receipt came from an unregistered WhatsApp number and was assigned by a reviewer."
+      duplicateStatus,
+      input.duplicate?.id ?? null,
+      duplicateReason,
+      policyReason
     ]
   );
 
