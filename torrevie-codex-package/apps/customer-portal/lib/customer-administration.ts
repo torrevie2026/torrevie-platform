@@ -1304,20 +1304,25 @@ async function upsertUserIdentity(
 ) {
   await client.query("select set_config('app.platform_service_role', 'true', true)");
 
-  const result = await client.query<{ id: string }>(
-    `
-      insert into public.users (id, email, status, created_by, updated_by)
-      values ($1, $2, 'active', $3, $3)
-      on conflict (id)
-      do update set email = excluded.email,
-                    status = 'active',
-                    updated_by = $3
-      returning id
-    `,
-    [authUserId, email, actorUserId]
-  );
+  let result: { rows: Array<{ id: string }> };
 
-  await client.query("select set_config('app.platform_service_role', 'false', true)");
+  try {
+    await releaseStalePlatformEmail(client, email, authUserId, actorUserId);
+    result = await client.query<{ id: string }>(
+      `
+        insert into public.users (id, email, status, created_by, updated_by)
+        values ($1, $2, 'active', $3, $3)
+        on conflict (id)
+        do update set email = excluded.email,
+                      status = 'active',
+                      updated_by = $3
+        returning id
+      `,
+      [authUserId, email, actorUserId]
+    );
+  } finally {
+    await client.query("select set_config('app.platform_service_role', 'false', true)");
+  }
 
   const [user] = result.rows;
 
@@ -1326,6 +1331,56 @@ async function upsertUserIdentity(
   }
 
   return user.id;
+}
+
+async function releaseStalePlatformEmail(
+  client: TenantQueryClient,
+  email: string,
+  authUserId: string,
+  actorUserId: string
+) {
+  const existing = await client.query<{ id: string }>(
+    `
+      select id
+      from public.users
+      where lower(email) = $1
+      limit 1
+    `,
+    [email]
+  );
+  const existingUserId = existing.rows[0]?.id;
+
+  if (!existingUserId || existingUserId === authUserId) {
+    return;
+  }
+
+  const memberships = await client.query<{ count: number }>(
+    `
+      select count(*)::int as count
+      from public.tenant_memberships
+      where user_id = $1
+    `,
+    [existingUserId]
+  );
+
+  if ((memberships.rows[0]?.count ?? 0) > 0) {
+    throw new Error("This email is already linked to another Torrevie user. Please use password reset or another email.");
+  }
+
+  await client.query(
+    `
+      update public.users
+         set email = $2,
+             status = 'deactivated',
+             updated_by = $3
+       where id = $1
+    `,
+    [existingUserId, tombstoneEmail(existingUserId), actorUserId]
+  );
+}
+
+function tombstoneEmail(userId: string) {
+  return `deleted+${userId.replace(/-/g, "")}@torrevie.local`;
 }
 
 async function replaceCustomerRole(

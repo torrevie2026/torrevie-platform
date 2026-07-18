@@ -36,7 +36,12 @@ class RecordingTenantClient implements TenantQueryClient {
 
   constructor(
     private readonly memberRows: unknown[] = [],
-    private readonly options: { fsmEntitlementRows?: unknown[]; fsmSeatUsageCount?: number } = {}
+    private readonly options: {
+      existingPlatformUserId?: string;
+      existingPlatformMembershipCount?: number;
+      fsmEntitlementRows?: unknown[];
+      fsmSeatUsageCount?: number;
+    } = {}
   ) {}
 
   async query<Row>(sql: string, values: readonly QueryValue[] = []): Promise<QueryResult<Row>> {
@@ -60,6 +65,10 @@ class RecordingTenantClient implements TenantQueryClient {
 
     if (sql.includes("from public.tenant_memberships") && sql.includes("join public.users")) {
       return { rows: this.memberRows as Row[] };
+    }
+
+    if (sql.includes("from public.tenant_memberships") && sql.includes("where user_id = $1")) {
+      return { rows: [{ count: this.options.existingPlatformMembershipCount ?? 0 }] as Row[] };
     }
 
     if (sql.includes("from public.tenant_memberships") || sql.includes("update public.tenant_memberships")) {
@@ -108,6 +117,14 @@ class RecordingTenantClient implements TenantQueryClient {
 
     if (sql.includes("insert into public.users")) {
       return { rows: [{ id: values[0] }] as Row[] };
+    }
+
+    if (sql.includes("from public.users") && sql.includes("lower(email) = $1")) {
+      return {
+        rows: this.options.existingPlatformUserId
+          ? [{ id: this.options.existingPlatformUserId, status: null }]
+          : []
+      } as QueryResult<Row>;
     }
 
     if (sql.includes("from public.users") && sql.includes("where id = $1")) {
@@ -177,6 +194,65 @@ async function main() {
           kind: "new_invitation"
         }
       ]);
+    } finally {
+      setCustomerInviteIdentityCreatorForTests(null);
+      setCustomerInviteEmailDispatcherForTests(null);
+    }
+  }
+
+  {
+    const staleUserId = "00000000-0000-4000-8000-000000000444";
+    const newAuthUserId = "00000000-0000-4000-8000-000000000445";
+    const client = new RecordingTenantClient([], {
+      existingPlatformUserId: staleUserId,
+      existingPlatformMembershipCount: 0
+    });
+    setCustomerInviteIdentityCreatorForTests(async () => ({
+      userId: newAuthUserId,
+      actionLink: "https://app.torrevie.com/invite",
+      kind: "new_invitation"
+    }));
+    setCustomerInviteEmailDispatcherForTests(async () => {});
+
+    try {
+      const invited = await inviteCustomerUser(client, adminContext, {
+        email: "removed.user@example.test",
+        displayName: "Removed User",
+        role: "customer_manager"
+      });
+
+      assert.equal(invited.userId, newAuthUserId);
+      assert.equal(client.hasSql("set email = $2"), true);
+      assert.equal(client.valuesContain(staleUserId), true);
+      assert.equal(client.valuesContain("deleted+00000000000040008000000000000444@torrevie.local"), true);
+      assert.equal(client.valuesContain(newAuthUserId), true);
+    } finally {
+      setCustomerInviteIdentityCreatorForTests(null);
+      setCustomerInviteEmailDispatcherForTests(null);
+    }
+  }
+
+  {
+    const client = new RecordingTenantClient([], {
+      existingPlatformUserId: "00000000-0000-4000-8000-000000000444",
+      existingPlatformMembershipCount: 1
+    });
+    setCustomerInviteIdentityCreatorForTests(async () => ({
+      userId: "00000000-0000-4000-8000-000000000445",
+      actionLink: "https://app.torrevie.com/invite",
+      kind: "new_invitation"
+    }));
+    setCustomerInviteEmailDispatcherForTests(async () => {});
+
+    try {
+      await assert.rejects(
+        () =>
+          inviteCustomerUser(client, adminContext, {
+            email: "member-in-another-tenant@example.test",
+            role: "customer_manager"
+          }),
+        /already linked to another Torrevie user/
+      );
     } finally {
       setCustomerInviteIdentityCreatorForTests(null);
       setCustomerInviteEmailDispatcherForTests(null);
