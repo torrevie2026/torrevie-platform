@@ -41,6 +41,7 @@ import {
   updateTexExpenseCategory,
   updateTexExpense,
   updateTexEmployeeProfile,
+  updateTexProcessingSettings,
   updateTexTeam,
   updateTexTrip,
   updateTexExpenseStatus,
@@ -57,6 +58,7 @@ import {
   type TexExpenseStatus,
   type TexFinancePaymentInput,
   type TexNotificationInput,
+  type TexProcessingSettingsInput,
   type TexReceiptUploadInput,
   type TexEmailReportInput,
   type TexReportInput,
@@ -398,6 +400,16 @@ export async function handleTexApiRequest(
     });
   }
 
+  if (path === "/settings/processing" && method === "PUT") {
+    return json(200, {
+      processingSettings: await updateTexProcessingSettings(
+        client,
+        actor,
+        readProcessingSettingsInput(request.body)
+      )
+    });
+  }
+
   if (path === "/settings/budgets" && method === "PUT") {
     return json(200, {
       budget: await upsertTexBudget(client, actor, readBudgetInput(request.body))
@@ -641,6 +653,17 @@ function readBudgetInput(value: unknown): TexBudgetInput {
     budgetAmount:
       readOptionalNumber(body.budgetAmount) ?? readOptionalNumber(body.budget_amount) ?? -1
   };
+}
+
+function readProcessingSettingsInput(value: unknown): TexProcessingSettingsInput {
+  const body = readRecord(value);
+  const duplicateHandlingMode = readOptionalString(body.duplicateHandlingMode) ?? "";
+
+  if (duplicateHandlingMode !== "manager_review" && duplicateHandlingMode !== "auto_reject") {
+    throw new Error("Duplicate handling must be manager_review or auto_reject.");
+  }
+
+  return { duplicateHandlingMode };
 }
 
 function readReportInput(value: unknown): TexReportInput {

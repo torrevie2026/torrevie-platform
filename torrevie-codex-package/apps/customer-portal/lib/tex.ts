@@ -155,12 +155,7 @@ export type TexProviderProfileSummary = {
   apiKeyLast4: string;
 };
 
-export type TexQuickConnectStatus =
-  | "idle"
-  | "qr_pending"
-  | "connected"
-  | "disconnected"
-  | "failed";
+export type TexQuickConnectStatus = "idle" | "qr_pending" | "connected" | "disconnected" | "failed";
 
 export type TexQuickConnectSession = {
   id: string;
@@ -602,11 +597,24 @@ export type TexBudgetInput = {
   budgetAmount: number;
 };
 
+export type TexDuplicateHandlingMode = "manager_review" | "auto_reject";
+
+export type TexProcessingSettings = {
+  duplicateDetectionEnabled: boolean;
+  duplicateAutoRejectEnabled: boolean;
+  duplicateHandlingMode: TexDuplicateHandlingMode;
+};
+
+export type TexProcessingSettingsInput = {
+  duplicateHandlingMode: TexDuplicateHandlingMode;
+};
+
 export type TexSettingsWorkspace = {
   categories: TexExpenseCategory[];
   policies: TexSpendPolicy[];
   budgets: TexBudget[];
   departments: string[];
+  processingSettings: TexProcessingSettings;
   month: number;
   year: number;
 };
@@ -2895,17 +2903,18 @@ export async function listTexSettingsWorkspace(
   const normalizedYear = sanitizeYear(year);
 
   return withTenantContext(client, actor, async () => {
-    const [categoriesResult, policiesResult, budgetsResult, departmentsResult] = await Promise.all([
-      client.query<TexExpenseCategoryRow>(
-        `
+    const [categoriesResult, policiesResult, budgetsResult, departmentsResult, processingResult] =
+      await Promise.all([
+        client.query<TexExpenseCategoryRow>(
+          `
           select id, name, is_active, is_system, sort_order
           from public.tex_expense_categories
           where tenant_id = public.current_tenant_id()
           order by sort_order asc, name asc
         `
-      ),
-      client.query<TexSpendPolicyRow>(
-        `
+        ),
+        client.query<TexSpendPolicyRow>(
+          `
           select
             id,
             category,
@@ -2917,9 +2926,9 @@ export async function listTexSettingsWorkspace(
           where tenant_id = public.current_tenant_id()
           order by category asc
         `
-      ),
-      client.query<TexBudgetRow>(
-        `
+        ),
+        client.query<TexBudgetRow>(
+          `
           select
             b.id,
             b.department,
@@ -2945,10 +2954,10 @@ export async function listTexSettingsWorkspace(
             and b.year = $2
           order by b.department asc
         `,
-        [normalizedMonth, normalizedYear]
-      ),
-      client.query<{ department: string }>(
-        `
+          [normalizedMonth, normalizedYear]
+        ),
+        client.query<{ department: string }>(
+          `
           select distinct department
           from public.tex_employee_profiles
           where tenant_id = public.current_tenant_id()
@@ -2956,17 +2965,78 @@ export async function listTexSettingsWorkspace(
             and trim(department) <> ''
           order by department asc
         `
-      )
-    ]);
+        ),
+        client.query<TexProcessingSettingsRow>(
+          `
+          select
+            ai_receipt_extraction_enabled,
+            duplicate_detection_enabled,
+            duplicate_auto_reject_enabled,
+            duplicate_similarity_threshold::float as duplicate_similarity_threshold
+          from public.tex_integration_settings
+          where tenant_id = public.current_tenant_id()
+          limit 1
+        `
+        )
+      ]);
 
     return {
       categories: categoriesResult.rows.map(mapCategory),
       policies: mergePoliciesWithCategories(categoriesResult.rows, policiesResult.rows),
       budgets: budgetsResult.rows.map(mapBudget),
       departments: departmentsResult.rows.map((row) => row.department),
+      processingSettings: mapProcessingSettings(processingResult.rows[0]),
       month: normalizedMonth,
       year: normalizedYear
     };
+  });
+}
+
+export async function updateTexProcessingSettings(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  input: TexProcessingSettingsInput
+): Promise<TexProcessingSettings> {
+  assertTexPermission(actor, "tex.policy.manage");
+  const duplicateAutoRejectEnabled = input.duplicateHandlingMode === "auto_reject";
+
+  return withTenantContext(client, actor, async () => {
+    const result = await client.query<TexProcessingSettingsRow>(
+      `
+        insert into public.tex_integration_settings (
+          tenant_id,
+          duplicate_detection_enabled,
+          duplicate_auto_reject_enabled,
+          updated_by
+        )
+        values (public.current_tenant_id(), true, $1, $2)
+        on conflict (tenant_id) do update set
+          duplicate_detection_enabled = true,
+          duplicate_auto_reject_enabled = excluded.duplicate_auto_reject_enabled,
+          updated_by = excluded.updated_by,
+          updated_at = now()
+        returning
+          ai_receipt_extraction_enabled,
+          duplicate_detection_enabled,
+          duplicate_auto_reject_enabled,
+          duplicate_similarity_threshold::float as duplicate_similarity_threshold
+      `,
+      [duplicateAutoRejectEnabled, actor.userId]
+    );
+    const settings = mapProcessingSettings(requireSingleRow(result.rows, "processing settings"));
+
+    await writeTexAuditEvent(
+      client,
+      actor,
+      "tex.processing_settings.updated",
+      "tex_integration_settings",
+      actor.tenantId,
+      {
+        duplicate_handling_mode: settings.duplicateHandlingMode
+      }
+    );
+
+    return settings;
   });
 }
 
@@ -3686,19 +3756,22 @@ export async function processTexWhatsappSubmission(
   return withTenantContext(client, actor, async () => {
     const settings = await getTexIntegrationSettingsForProcessing(client);
     const employee = await findEmployeeBySubmissionSender(client, submission);
-    const { extraction, extractions, extractionError, multipleReceipts } = await extractReceiptForSubmission(client, submission);
-    const missingReceiptAttachment = messageType === "receipt" && !hasReceiptAttachmentForOcr(submission);
+    const { extraction, extractions, extractionError, multipleReceipts } =
+      await extractReceiptForSubmission(client, submission);
+    const missingReceiptAttachment =
+      messageType === "receipt" && !hasReceiptAttachmentForOcr(submission);
 
     if (!employee) {
-      const replyText =
-        missingReceiptAttachment
-          ? "Receipt message received, but TEX could not access the image or PDF attachment. Please resend the receipt as a photo or PDF attachment."
-          : "Receipt received, but this WhatsApp number is not enrolled for TEX. Please ask your tenant admin to enroll your number.";
+      const replyText = missingReceiptAttachment
+        ? "Receipt message received, but TEX could not access the image or PDF attachment. Please resend the receipt as a photo or PDF attachment."
+        : "Receipt received, but this WhatsApp number is not enrolled for TEX. Please ask your tenant admin to enroll your number.";
       const row = await insertWhatsappSubmission(client, actor, submission, {
         messageType,
         ocrStatus: "manual_review",
         ocrResult: extraction ?? {},
-        ocrError: missingReceiptAttachment ? missingReceiptAttachmentError(submission) : extractionError,
+        ocrError: missingReceiptAttachment
+          ? missingReceiptAttachmentError(submission)
+          : extractionError,
         replyText
       });
       const delivery = await deliverTexWhatsappReply(client, actor, submission, replyText, row.id);
@@ -3764,13 +3837,14 @@ export async function processTexWhatsappSubmission(
 
     const hasCompleteExtraction = Boolean(
       extractionForProcessing?.expenseDate &&
-      extractionForProcessing.amount &&
-      extractionForProcessing.currency
+        extractionForProcessing.amount &&
+        extractionForProcessing.currency
     );
     const duplicateExtraction = hasCompleteExtraction ? extractionForProcessing : null;
-    const duplicate = settings.duplicate_detection_enabled && duplicateExtraction
-      ? await findDuplicateExpense(client, employee.id, duplicateExtraction)
-      : null;
+    const duplicate =
+      settings.duplicate_detection_enabled && duplicateExtraction
+        ? await findDuplicateExpense(client, employee.id, duplicateExtraction)
+        : null;
     const shouldAutoReject = Boolean(duplicate && settings.duplicate_auto_reject_enabled);
     const expense = await createExpenseFromWhatsappReceipt(client, actor, {
       employee,
@@ -3978,7 +4052,8 @@ export async function resolveTexUnregisteredWhatsappSubmission(
               input.phoneNumber ?? submission.sender_phone ?? submission.sender_raw ?? "",
             department: input.department
           });
-    const { extraction, extractions, extractionError, multipleReceipts } = await extractionForWhatsappReviewSubmission(client, submission);
+    const { extraction, extractions, extractionError, multipleReceipts } =
+      await extractionForWhatsappReviewSubmission(client, submission);
     if (extraction || extractions.length > 0 || extractionError) {
       await client.query(
         `
@@ -3993,14 +4068,19 @@ export async function resolveTexUnregisteredWhatsappSubmission(
         `,
         [
           extraction ? (multipleReceipts ? "manual_review" : "extracted") : "failed",
-          JSON.stringify(multipleReceipts ? buildReceiptBatchResult(extractions) : extraction ?? {}),
+          JSON.stringify(
+            multipleReceipts ? buildReceiptBatchResult(extractions) : (extraction ?? {})
+          ),
           extractionError,
           actor.userId,
           submission.id
         ]
       );
     }
-    const reviewExtractions = extractions.length > 0 ? extractions : [extraction].filter((item): item is TexReceiptExtraction => Boolean(item));
+    const reviewExtractions =
+      extractions.length > 0
+        ? extractions
+        : [extraction].filter((item): item is TexReceiptExtraction => Boolean(item));
     const expenses: TexExpenseRecord[] = [];
 
     for (const candidate of reviewExtractions.length > 0 ? reviewExtractions : [null]) {
@@ -4009,13 +4089,15 @@ export async function resolveTexUnregisteredWhatsappSubmission(
         candidate?.expenseDate && candidate.amount && candidate.currency
           ? await findDuplicateExpense(client, employee.id, candidate)
           : null;
-      expenses.push(await insertResolvedWhatsappExpense(client, actor, {
-        submission,
-        employee,
-        duplicate,
-        extraction: candidate,
-        ...resolved
-      }));
+      expenses.push(
+        await insertResolvedWhatsappExpense(client, actor, {
+          submission,
+          employee,
+          duplicate,
+          extraction: candidate,
+          ...resolved
+        })
+      );
     }
 
     const expense = expenses[0];
@@ -4055,9 +4137,10 @@ export async function resolveTexUnregisteredWhatsappSubmission(
         expense_count: `${expenses.length}`
       }
     );
-    const replyText = expenses.length > 1
-      ? `${expenses.length} receipts reviewed and linked to ${employee.name}. They are now pending manager approval.`
-      : `Receipt reviewed and linked to ${employee.name}. It is now pending manager approval.`;
+    const replyText =
+      expenses.length > 1
+        ? `${expenses.length} receipts reviewed and linked to ${employee.name}. They are now pending manager approval.`
+        : `Receipt reviewed and linked to ${employee.name}. It is now pending manager approval.`;
     const delivery = await deliverTexWhatsappReply(
       client,
       actor,
@@ -4099,14 +4182,15 @@ function assertTexAnyPermission(actor: TexActorContext, permissions: readonly Pe
     throw new Error("TEX access requires a customer tenant context.");
   }
 
-  const allowed = permissions.some((permission) =>
-    hasPermission({
-      roles: actor.roles,
-      permission,
-      entitledProducts: actor.entitledProducts,
-      moduleAdminProducts: actor.moduleAdminProducts,
-      integrationPermissions: actor.integrationPermissions
-    }).allowed
+  const allowed = permissions.some(
+    (permission) =>
+      hasPermission({
+        roles: actor.roles,
+        permission,
+        entitledProducts: actor.entitledProducts,
+        moduleAdminProducts: actor.moduleAdminProducts,
+        integrationPermissions: actor.integrationPermissions
+      }).allowed
   );
 
   if (!allowed) {
@@ -4656,7 +4740,9 @@ async function findEmployeeByPhone(client: TenantQueryClient, phone: string | nu
     return null;
   }
 
-  const suffixMatches = result.rows.filter((row) => isSamePhoneBySafeSuffix(row.phone_digits, digits));
+  const suffixMatches = result.rows.filter((row) =>
+    isSamePhoneBySafeSuffix(row.phone_digits, digits)
+  );
 
   return suffixMatches.length === 1 ? suffixMatches[0] : null;
 }
@@ -4761,7 +4847,10 @@ function defaultReceiptCurrency(extraction: TexReceiptExtraction | null) {
   return {
     ...extraction,
     currency: "AED",
-    notes: [extraction.notes, "Currency defaulted to AED because the receipt did not state a currency."]
+    notes: [
+      extraction.notes,
+      "Currency defaulted to AED because the receipt did not state a currency."
+    ]
       .filter(Boolean)
       .join(" ")
   };
@@ -4877,13 +4966,10 @@ async function findDuplicateExpense(
       const sameAmount = Math.abs(row.amount - amount) <= 0.01;
       const sameDate = row.expense_date === extraction.expenseDate;
       const existingVendorKey = normalizeDuplicateVendor(row.vendor);
-      return (
-        (sameAmount && sameDate) ||
-        (Boolean(vendorKey) && vendorKey === existingVendorKey)
-      );
+      return (sameAmount && sameDate) || (Boolean(vendorKey) && vendorKey === existingVendorKey);
     }) ?? null;
 
-  return exactOrVendorMatch ?? (result.rows.length === 1 ? result.rows[0] ?? null : null);
+  return exactOrVendorMatch ?? (result.rows.length === 1 ? (result.rows[0] ?? null) : null);
 }
 
 async function extractReceiptForSubmission(
@@ -4909,7 +4995,8 @@ async function extractReceiptForSubmission(
       extraction = extractions[0] ?? null;
       extractionError = null;
     } catch (error) {
-      extractionError = error instanceof Error ? error.message : "Stored receipt extraction failed.";
+      extractionError =
+        error instanceof Error ? error.message : "Stored receipt extraction failed.";
     }
   }
 
@@ -4971,7 +5058,10 @@ async function extractStoredReceiptsWithAI(client: TenantQueryClient, receiptFil
 }
 
 function normalizeDuplicateVendor(value: string | null | undefined) {
-  const clean = value?.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const clean = value
+    ?.toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
   return clean || null;
 }
 
@@ -6170,7 +6260,8 @@ async function extractionForWhatsappReviewSubmission(
       return {
         extraction: null,
         extractions: [],
-        extractionError: error instanceof Error ? error.message : "Stored receipt extraction failed.",
+        extractionError:
+          error instanceof Error ? error.message : "Stored receipt extraction failed.",
         multipleReceipts: false
       };
     }
@@ -6207,7 +6298,9 @@ function parseSubmissionExtractions(value: unknown): TexReceiptExtraction[] {
   return single ? [single] : [];
 }
 
-function parseSubmissionOcrResult(value: unknown): TexReceiptExtraction | TexReceiptBatchResult | null {
+function parseSubmissionOcrResult(
+  value: unknown
+): TexReceiptExtraction | TexReceiptBatchResult | null {
   const receipts = parseSubmissionExtractions(value);
   if (receipts.length > 1) {
     return buildReceiptBatchResult(receipts);
@@ -6249,7 +6342,10 @@ function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function whatsappIntakeStatus(row: TexUnregisteredWhatsappSubmissionRow, mediaStatus: string | null) {
+function whatsappIntakeStatus(
+  row: TexUnregisteredWhatsappSubmissionRow,
+  mediaStatus: string | null
+) {
   if (row.resolved_expense_id) {
     return "Expense created";
   }
@@ -6588,7 +6684,9 @@ function classifyWhatsappMessage(
   }
 
   const media = readRecord(submission.payload.media);
-  return submission.mediaUrl || submission.receiptFileId || media.expected === true ? "receipt" : "text";
+  return submission.mediaUrl || submission.receiptFileId || media.expected === true
+    ? "receipt"
+    : "text";
 }
 
 function normalizePhoneDigits(value: string | null) {
@@ -6655,11 +6753,7 @@ function whatsappOcrSummary(extraction: TexReceiptExtraction | null) {
 function whatsappExpenseSummary(
   row: Pick<TexWhatsappExpenseStatusReplyRow, "vendor" | "amount" | "currency" | "expense_date">
 ) {
-  return [
-    row.vendor ?? "receipt",
-    row.expense_date,
-    formatMoney(row.amount, row.currency)
-  ]
+  return [row.vendor ?? "receipt", row.expense_date, formatMoney(row.amount, row.currency)]
     .filter(Boolean)
     .join(" / ");
 }
@@ -6783,6 +6877,17 @@ function mapIntegrationSettings(row: TexIntegrationSettingsRow): TexIntegrationS
     duplicateDetectionEnabled: row.duplicate_detection_enabled,
     duplicateAutoRejectEnabled: row.duplicate_auto_reject_enabled,
     duplicateSimilarityThreshold: row.duplicate_similarity_threshold
+  };
+}
+
+function mapProcessingSettings(row: TexProcessingSettingsRow | undefined): TexProcessingSettings {
+  const duplicateDetectionEnabled = row?.duplicate_detection_enabled ?? true;
+  const duplicateAutoRejectEnabled = row?.duplicate_auto_reject_enabled ?? false;
+
+  return {
+    duplicateDetectionEnabled,
+    duplicateAutoRejectEnabled,
+    duplicateHandlingMode: duplicateAutoRejectEnabled ? "auto_reject" : "manager_review"
   };
 }
 

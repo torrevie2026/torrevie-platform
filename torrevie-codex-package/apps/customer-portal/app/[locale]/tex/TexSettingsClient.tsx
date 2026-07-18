@@ -58,6 +58,8 @@ export function TexSettingsClient({ initialSettings, canManage }: TexSettingsCli
   const policyRows = useMemo(() => settings?.policies ?? [], [settings]);
   const budgetRows = useMemo(() => settings?.budgets ?? [], [settings]);
   const categoryRows = useMemo(() => settings?.categories ?? [], [settings]);
+  const duplicateHandlingMode =
+    settings?.processingSettings.duplicateHandlingMode ?? "manager_review";
 
   if (!settings) {
     return null;
@@ -123,6 +125,22 @@ export function TexSettingsClient({ initialSettings, canManage }: TexSettingsCli
     });
   }
 
+  async function saveDuplicateHandlingMode(mode: "manager_review" | "auto_reject") {
+    await run("processing", async () => {
+      const result = await texFetch<Pick<TexSettingsWorkspace, "processingSettings">>(
+        "/settings/processing",
+        {
+          method: "PUT",
+          body: JSON.stringify({ duplicateHandlingMode: mode })
+        }
+      );
+      setSettings((current) =>
+        current ? { ...current, processingSettings: result.processingSettings } : current
+      );
+      setNotice("Duplicate handling saved.");
+    });
+  }
+
   async function saveBudget() {
     await run("budget", async () => {
       await texFetch("/settings/budgets", {
@@ -180,6 +198,27 @@ export function TexSettingsClient({ initialSettings, canManage }: TexSettingsCli
       {error ? <p className="tex-error">{error}</p> : null}
 
       <div className="tex-settings-grid">
+        <section className="tex-form-panel">
+          <h3>Receipt processing</h3>
+          <label className="tex-wide-label">
+            Duplicate handling
+            <select
+              value={duplicateHandlingMode}
+              disabled={!canManage || busy === "processing"}
+              onChange={(event) =>
+                saveDuplicateHandlingMode(event.target.value as "manager_review" | "auto_reject")
+              }
+            >
+              <option value="manager_review">Push for manager review</option>
+              <option value="auto_reject">Auto reject likely duplicates</option>
+            </select>
+          </label>
+          <p className="tex-field-hint">
+            TEX always checks for duplicate receipts. Choose whether likely duplicates stay pending
+            for manager approval or are rejected automatically.
+          </p>
+        </section>
+
         <section className="tex-form-panel">
           <h3>Expense categories</h3>
           {canManage ? (
