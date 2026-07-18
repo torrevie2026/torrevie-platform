@@ -751,41 +751,49 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
                     </div>
                     <strong>{formatAmount(legTotalDistance(leg))} km</strong>
                   </header>
-                  <div className="tex-form-grid">
-                    <LegPlaceInput
-                      label="Origin"
-                      value={leg.origin}
-                      placeId={leg.originPlaceId}
-                      onChange={(value, placeId) => updateLeg(setLegs, index, { origin: value, originPlaceId: placeId ?? "", distanceSource: placeId ? leg.distanceSource : "" })}
-                    />
-                    <LegPlaceInput
-                      label="Destination"
-                      value={leg.destination}
-                      placeId={leg.destinationPlaceId}
-                      onChange={(value, placeId) => updateLeg(setLegs, index, { destination: value, destinationPlaceId: placeId ?? "", distanceSource: placeId ? leg.distanceSource : "" })}
-                    />
-                    <label>
-                      Mode
-                      <select value={leg.mode} onChange={(event) => updateLeg(setLegs, index, { mode: event.target.value as LegFormState["mode"] })}>
-                        <option value="">None</option>
-                        <option value="road">Road</option>
-                        <option value="sea">Sea</option>
-                        <option value="air">Air</option>
-                        <option value="rail">Rail</option>
-                      </select>
-                    </label>
-                    <label>
-                      Status
-                      <select
-                        value={leg.status}
-                        onChange={(event) => updateLeg(setLegs, index, { status: event.target.value as LegFormState["status"] })}
-                      >
-                        <option value="planned">Planned</option>
-                        <option value="in_transit">In transit</option>
-                        <option value="completed">Completed</option>
-                        <option value="cancelled">Cancelled</option>
-                      </select>
-                    </label>
+                  <div className="tex-leg-form-sections">
+                    <section className="tex-leg-form-section" aria-label={`Leg ${index + 1} route`}>
+                      <h5>Route</h5>
+                      <div className="tex-form-grid">
+                        <LegPlaceInput
+                          label="Origin"
+                          value={leg.origin}
+                          placeId={leg.originPlaceId}
+                          onChange={(value, placeId) => updateLeg(setLegs, index, { origin: value, originPlaceId: placeId ?? "", distanceSource: placeId ? leg.distanceSource : "" })}
+                        />
+                        <LegPlaceInput
+                          label="Destination"
+                          value={leg.destination}
+                          placeId={leg.destinationPlaceId}
+                          onChange={(value, placeId) => updateLeg(setLegs, index, { destination: value, destinationPlaceId: placeId ?? "", distanceSource: placeId ? leg.distanceSource : "" })}
+                        />
+                        <label>
+                          Mode
+                          <select value={leg.mode} onChange={(event) => updateLeg(setLegs, index, { mode: event.target.value as LegFormState["mode"] })}>
+                            <option value="">None</option>
+                            <option value="road">Road</option>
+                            <option value="sea">Sea</option>
+                            <option value="air">Air</option>
+                            <option value="rail">Rail</option>
+                          </select>
+                        </label>
+                        <label>
+                          Status
+                          <select
+                            value={leg.status}
+                            onChange={(event) => updateLeg(setLegs, index, { status: event.target.value as LegFormState["status"] })}
+                          >
+                            <option value="planned">Planned</option>
+                            <option value="in_transit">In transit</option>
+                            <option value="completed">Completed</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                        </label>
+                      </div>
+                    </section>
+                    <section className="tex-leg-form-section" aria-label={`Leg ${index + 1} schedule`}>
+                      <h5>Schedule</h5>
+                      <div className="tex-form-grid">
                     <label>
                       Planned start
                       <input
@@ -839,6 +847,11 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
                         onChange={(event) => updateLeg(setLegs, index, { actualEnd: event.target.value })}
                       />
                     </label>
+                      </div>
+                    </section>
+                    <section className="tex-leg-form-section" aria-label={`Leg ${index + 1} distance and budget`}>
+                      <h5>Distance and budget</h5>
+                      <div className="tex-form-grid">
                     <label>
                       Outbound distance km
                       <input
@@ -872,8 +885,10 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
                       Distance source
                       <input value={leg.distanceSource} disabled placeholder="Manual or Google Maps" />
                     </label>
+                      </div>
+                    </section>
                   </div>
-                  <div className="tex-action-bar">
+                  <div className="tex-action-bar tex-leg-quick-actions">
                     <button
                       type="button"
                       className="tex-secondary-button"
@@ -895,7 +910,7 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
                     Notes
                     <input value={leg.notes} onChange={(event) => updateLeg(setLegs, index, { notes: event.target.value })} />
                   </label>
-                  <footer className="tex-action-bar">
+                  <footer className="tex-action-bar tex-leg-row-actions">
                     <button className="tex-secondary-button" type="button" disabled={index === 0} onClick={() => moveLeg(index, -1)}>
                       Move up
                     </button>
@@ -910,7 +925,7 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
               ))}
             </div>
 
-            <div className="tex-hero-actions">
+            <div className="tex-hero-actions tex-leg-drawer-actions">
               <button type="button" className="tex-secondary-button" onClick={addLeg}>
                 Add leg
               </button>
