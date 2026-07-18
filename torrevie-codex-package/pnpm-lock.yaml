@@ -90,6 +90,9 @@ importers:
       '@supabase/ssr':
         specifier: 0.12.0
         version: 0.12.0(@supabase/supabase-js@2.110.2)
+      '@supabase/supabase-js':
+        specifier: 2.110.2
+        version: 2.110.2
       '@torrevie/auth':
         specifier: workspace:*
         version: link:../../packages/auth

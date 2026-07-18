@@ -1,3 +1,5 @@
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { dispatchEmailNotification } from "@torrevie/notifications";
 import { assertPermission, roleKeys, type RoleKey } from "@torrevie/permissions";
 import { withTenantContext, type ResolvedTenantContext, type TenantQueryClient } from "@torrevie/tenant-context";
 
@@ -42,6 +44,19 @@ export type CustomerInviteInput = {
   email: string;
   displayName?: string | null;
   role: RoleKey;
+};
+
+type CustomerInviteIdentity = {
+  userId: string;
+  actionLink: string;
+  kind: "new_invitation" | "existing_user";
+};
+
+type CustomerInviteEmailInput = {
+  email: string;
+  tenantName: string;
+  actionLink: string;
+  kind: CustomerInviteIdentity["kind"];
 };
 
 export type WhatsappProvider = "ultramsg" | "wappfly" | "meta";
@@ -113,6 +128,21 @@ const unlimitedFeatureKeys = new Set([
   "tex.finance.settlements.enabled"
 ]);
 
+let customerInviteIdentityCreator = createCustomerInviteIdentity;
+let customerInviteEmailDispatcher = sendCustomerInviteEmail;
+
+export function setCustomerInviteIdentityCreatorForTests(
+  creator: typeof createCustomerInviteIdentity | null
+) {
+  customerInviteIdentityCreator = creator ?? createCustomerInviteIdentity;
+}
+
+export function setCustomerInviteEmailDispatcherForTests(
+  dispatcher: typeof sendCustomerInviteEmail | null
+) {
+  customerInviteEmailDispatcher = dispatcher ?? sendCustomerInviteEmail;
+}
+
 export async function listCustomerMembers(
   client: TenantQueryClient,
   actor: CustomerAdminContext
@@ -162,7 +192,9 @@ export async function inviteCustomerUser(
     await assertWebUserLimitAllowsInvite(client, email);
     await assertFsmSeatLimitAllowsInvite(client, email, role);
 
-    const userId = await upsertUserIdentity(client, email, actor.userId);
+    const tenantName = await getCurrentTenantName(client);
+    const identity = await customerInviteIdentityCreator(email);
+    const userId = await upsertUserIdentity(client, email, actor.userId, identity.userId);
 
     await client.query(
       `
@@ -193,7 +225,14 @@ export async function inviteCustomerUser(
     await replaceCustomerRole(client, userId, role, actor.userId);
     await writeCustomerAdminAuditEvent(client, actor, "tenant.user.invited", "user", userId, {
       email,
-      role
+      role,
+      invite_kind: identity.kind
+    });
+    await customerInviteEmailDispatcher({
+      email,
+      tenantName,
+      actionLink: identity.actionLink,
+      kind: identity.kind
     });
 
     return {
@@ -915,19 +954,180 @@ async function syncDefaultWhatsappProfileToActiveSettings(
   );
 }
 
-async function upsertUserIdentity(client: TenantQueryClient, email: string, actorUserId: string) {
+async function getCurrentTenantName(client: TenantQueryClient) {
+  const result = await client.query<{ name: string }>(
+    "select name from public.tenants where id = public.current_tenant_id() limit 1"
+  );
+
+  return result.rows[0]?.name ?? "your Torrevie workspace";
+}
+
+async function createCustomerInviteIdentity(email: string): Promise<CustomerInviteIdentity> {
+  const client = getSupabaseAdminClient();
+  const { data, error } = await client.auth.admin.generateLink({
+    type: "invite",
+    email,
+    options: {
+      redirectTo: `${customerPortalUrl()}/login?email=${encodeURIComponent(email)}`
+    }
+  });
+
+  if (error) {
+    if (isAlreadyRegisteredError(error.message)) {
+      const existingUser = await findAuthUserByEmail(client, email);
+      if (!existingUser?.id) {
+        throw new Error("Supabase reported an existing Auth user, but the user could not be found.");
+      }
+
+      const recovery = await client.auth.admin.generateLink({
+        type: "recovery",
+        email,
+        options: {
+          redirectTo: `${customerPortalUrl()}/login?email=${encodeURIComponent(email)}`
+        }
+      });
+
+      if (recovery.error || !recovery.data.properties?.action_link) {
+        throw new Error(
+          `Unable to create existing user access link: ${recovery.error?.message ?? "missing action link"}`
+        );
+      }
+
+      return {
+        userId: existingUser.id,
+        actionLink: recovery.data.properties.action_link,
+        kind: "existing_user"
+      };
+    }
+
+    throw new Error(`Unable to create Supabase invitation link: ${error.message}`);
+  }
+
+  if (!data.user?.id || !data.properties?.action_link) {
+    throw new Error("Supabase did not return a complete invitation link.");
+  }
+
+  return {
+    userId: data.user.id,
+    actionLink: data.properties.action_link,
+    kind: "new_invitation"
+  };
+}
+
+async function findAuthUserByEmail(client: SupabaseClient, email: string) {
+  for (let page = 1; page <= 20; page += 1) {
+    const { data, error } = await client.auth.admin.listUsers({
+      page,
+      perPage: 1000
+    });
+
+    if (error) {
+      throw new Error(`Unable to find existing Supabase Auth user: ${error.message}`);
+    }
+
+    const existingUser = data.users?.find((user) => user.email?.toLowerCase() === email);
+    if (existingUser) {
+      return existingUser;
+    }
+
+    if ((data.users ?? []).length < 1000) {
+      return null;
+    }
+  }
+
+  throw new Error("Unable to find existing Supabase Auth user after scanning 20000 users.");
+}
+
+async function sendCustomerInviteEmail(input: CustomerInviteEmailInput) {
+  const title = input.kind === "existing_user" ? "Torrevie access granted" : "Torrevie invitation";
+  const cta = input.kind === "existing_user" ? "Open your workspace" : "Accept invitation";
+  const result = await dispatchEmailNotification({
+    to: input.email,
+    subject: `${input.tenantName} Torrevie access`,
+    html: `
+      <div style="font-family: Inter, Arial, sans-serif; color: #162449; line-height: 1.5;">
+        <h1 style="font-size: 22px;">${escapeHtml(title)}</h1>
+        <p>You have been invited to ${escapeHtml(input.tenantName)} on Torrevie.</p>
+        <p><a href="${escapeHtml(input.actionLink)}" style="background:#0D9488;color:#fff;padding:12px 18px;text-decoration:none;border-radius:6px;display:inline-block;">${escapeHtml(cta)}</a></p>
+        <p>If the button does not work, open this link:</p>
+        <p><a href="${escapeHtml(input.actionLink)}">${escapeHtml(input.actionLink)}</a></p>
+      </div>
+    `,
+    text: `You have been invited to ${input.tenantName} on Torrevie.\n\n${cta}: ${input.actionLink}`
+  });
+
+  if (!result.ok) {
+    throw new Error(`Unable to send invitation email: ${result.error ?? result.status}`);
+  }
+}
+
+function getSupabaseAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceRoleKey) {
+    throw new Error("Supabase admin environment variables are not configured.");
+  }
+
+  return createClient(url, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false
+    }
+  });
+}
+
+function customerPortalUrl() {
+  return (
+    normalizePortalUrl(process.env.CUSTOMER_PORTAL_URL) ||
+    normalizePortalUrl(process.env.NEXT_PUBLIC_CUSTOMER_PORTAL_URL) ||
+    normalizePortalUrl(process.env.NEXT_PUBLIC_APP_URL) ||
+    normalizePortalUrl(process.env.VERCEL_PROJECT_PRODUCTION_URL) ||
+    "https://app.torrevie.com"
+  );
+}
+
+function normalizePortalUrl(value: string | undefined) {
+  const clean = value?.trim().replace(/\/$/, "");
+  if (!clean) {
+    return null;
+  }
+
+  return /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+}
+
+function isAlreadyRegisteredError(message: string) {
+  return /already.*registered|already.*exists|user.*exists/i.test(message);
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function upsertUserIdentity(
+  client: TenantQueryClient,
+  email: string,
+  actorUserId: string,
+  authUserId: string
+) {
   await client.query("select set_config('app.platform_service_role', 'true', true)");
 
   const result = await client.query<{ id: string }>(
     `
-      insert into public.users (email, created_by, updated_by)
-      values ($1, $2, $2)
-      on conflict (email)
+      insert into public.users (id, email, status, created_by, updated_by)
+      values ($1, $2, 'active', $3, $3)
+      on conflict (id)
       do update set email = excluded.email,
-                    updated_by = $2
+                    status = 'active',
+                    updated_by = $3
       returning id
     `,
-    [email, actorUserId]
+    [authUserId, email, actorUserId]
   );
 
   await client.query("select set_config('app.platform_service_role', 'false', true)");
