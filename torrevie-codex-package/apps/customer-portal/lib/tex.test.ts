@@ -22,6 +22,7 @@ import {
   recordTexWebhookSubmission,
   refreshTexFxRates,
   replaceTexTripLegs,
+  resolveTexUnregisteredWhatsappSubmission,
   resolveTexActorContext,
   sendTexEmailReport,
   setTexEmailNotificationDispatcherForTest,
@@ -85,6 +86,8 @@ const unentitledActor: TexActorContext = {
 
 class RecordingTexClient implements TenantQueryClient {
   readonly calls: Array<{ sql: string; values: readonly QueryValue[] }> = [];
+
+  constructor(private readonly options: { duplicateAutoRejectEnabled?: boolean } = {}) {}
 
   async query<Row>(sql: string, values: readonly QueryValue[] = []): Promise<QueryResult<Row>> {
     this.calls.push({ sql, values });
@@ -318,7 +321,7 @@ class RecordingTexClient implements TenantQueryClient {
             meta_whatsapp_business_account_id: null,
             ai_receipt_extraction_enabled: true,
             duplicate_detection_enabled: true,
-            duplicate_auto_reject_enabled: false,
+            duplicate_auto_reject_enabled: this.options.duplicateAutoRejectEnabled ?? false,
             duplicate_similarity_threshold: 0.92
           }
         ] as Row[]
@@ -436,12 +439,32 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
-    if (sql.includes("insert into public.tex_expenses") && sql.includes("'whatsapp_ai'")) {
+    if (
+      sql.includes("insert into public.tex_expenses") &&
+      sql.includes("'whatsapp_ai'") &&
+      sql.includes("case when $21::text = 'rejected'")
+    ) {
       return {
         rows: [
           {
             id: "00000000-0000-4000-8000-000000006001",
             status: values[20],
+            amount: values[7],
+            currency: values[8]
+          }
+        ] as Row[]
+      };
+    }
+
+    if (
+      sql.includes("insert into public.tex_expenses") &&
+      sql.includes("case when $22::text = 'rejected'")
+    ) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000006001",
+            status: values[21],
             amount: values[7],
             currency: values[8]
           }
@@ -706,14 +729,59 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
-    if (sql.includes("from public.tex_unregistered_whatsapp_submissions s")) {
+    if (
+      sql.includes("update public.tex_unregistered_whatsapp_submissions") &&
+      sql.includes("returning id, status")
+    ) {
       return {
         rows: [
           {
+            id: "00000000-0000-4000-8000-000000007001",
+            status: "resolved"
+          }
+        ] as Row[]
+      };
+    }
+
+    if (
+      sql.includes("from public.tex_unregistered_whatsapp_submissions s") ||
+      sql.includes("from public.tex_unregistered_whatsapp_submissions")
+    ) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000007001",
             submission_id: "00000000-0000-4000-8000-000000007001",
             sender_raw: "971500000001@c.us",
             sender_phone: "+971500000001",
             whatsapp_chat_jid: "971500000001@c.us",
+            message_id: "wamid.unregistered.receipt",
+            session_id: "session-a",
+            message_text: null,
+            receipt_file_id: "00000000-0000-4000-8000-000000019001",
+            media_url: null,
+            media_mime_type: "image/jpeg",
+            message_type: "receipt",
+            ocr_status: "extracted",
+            ocr_result: {
+              vendor: "Airport Cafe",
+              expenseDate: "2026-07-12",
+              amount: 120,
+              currency: "AED",
+              category: "Meals",
+              taxAmount: 5,
+              taxIdNumber: "100000000000003",
+              confidence: 0.94,
+              notes: "Lunch"
+            },
+            ocr_error: null,
+            payload: { provider: "quickconnect" },
+            whatsapp_reply_text: null,
+            status: "open",
+            resolved_expense_id: null,
+            resolved_employee_profile_id: null,
+            resolved_at: null,
+            created_at: "2026-07-12T09:00:00.000Z",
             vendor: "Airport Cafe",
             amount: 120,
             currency: "AED",
@@ -1307,6 +1375,30 @@ async function main() {
             value.includes("Receipt requires manager review because TEX could not read all key fields.")
         )
       ),
+      true
+    );
+  }
+
+  {
+    const client = new RecordingTexClient({ duplicateAutoRejectEnabled: true });
+    const result = await resolveTexUnregisteredWhatsappSubmission(
+      client,
+      actor,
+      "00000000-0000-4000-8000-000000007001",
+      {
+        mode: "existing_employee",
+        employeeProfileId: "00000000-0000-4000-8000-000000004001"
+      }
+    );
+    assert.equal(result.expense.status, "rejected");
+    assert.equal(result.expenses[0]?.status, "rejected");
+    assert.equal(result.delivery?.messageId, "test-whatsapp-message");
+    assert.equal(client.hasSql("rejected_by"), true);
+    assert.equal(client.valuesContain("duplicate"), true);
+    assert.equal(client.valuesContain("rejected"), true);
+    assert.equal(client.valuesContain(false), true);
+    assert.equal(
+      whatsappMessages.some((message) => message.includes("auto-rejected as likely duplicate")),
       true
     );
   }

@@ -7,6 +7,8 @@ import {
   inviteCustomerUser,
   listCustomerMembers,
   setCustomerMembershipStatus,
+  setCustomerInviteEmailDispatcherForTests,
+  setCustomerInviteIdentityCreatorForTests,
   updateTenantWhatsappSettings,
   type CustomerAdminContext
 } from "./customer-administration";
@@ -45,6 +47,10 @@ class RecordingTenantClient implements TenantQueryClient {
 
     if (sql.includes("from public.roles")) {
       return { rows: [{ id: "00000000-0000-4000-8000-000000000901" }] as Row[] };
+    }
+
+    if (sql.includes("from public.tenants")) {
+      return { rows: [{ name: "Demo Tenant" }] as Row[] };
     }
 
     if (sql.includes("from public.tenant_memberships") && sql.includes("join public.users")) {
@@ -96,7 +102,7 @@ class RecordingTenantClient implements TenantQueryClient {
     }
 
     if (sql.includes("insert into public.users")) {
-      return { rows: [{ id: "00000000-0000-4000-8000-000000000301" }] as Row[] };
+      return { rows: [{ id: values[0] }] as Row[] };
     }
 
     return { rows: [] };
@@ -118,21 +124,46 @@ async function main() {
 
   {
     const client = new RecordingTenantClient();
-    const invited = await inviteCustomerUser(client, adminContext, {
-      email: " New.User@Example.TEST ",
-      displayName: "New User",
-      role: "customer_manager"
+    const emails: Array<{ email: string; tenantName: string; actionLink: string; kind: string }> = [];
+    setCustomerInviteIdentityCreatorForTests(async () => ({
+      userId: "00000000-0000-4000-8000-000000000333",
+      actionLink: "https://app.torrevie.com/invite",
+      kind: "new_invitation"
+    }));
+    setCustomerInviteEmailDispatcherForTests(async (input) => {
+      emails.push(input);
     });
 
-    assert.equal(invited.email, "new.user@example.test");
-    assert.equal(invited.status, "invited");
-    assert.deepEqual(invited.roles, ["customer_manager"]);
-    assert.equal(client.hasSql("app.current_tenant_id"), true);
-    assert.equal(client.hasSql("app.platform_service_role', 'true"), true);
-    assert.equal(client.hasSql("public.tenant_memberships"), true);
-    assert.equal(client.hasSql("public.user_role_assignments"), true);
-    assert.equal(client.hasSql("public.audit_events"), true);
-    assert.equal(client.valuesContain(adminContext.tenantId), true);
+    try {
+      const invited = await inviteCustomerUser(client, adminContext, {
+        email: " New.User@Example.TEST ",
+        displayName: "New User",
+        role: "customer_manager"
+      });
+
+      assert.equal(invited.userId, "00000000-0000-4000-8000-000000000333");
+      assert.equal(invited.email, "new.user@example.test");
+      assert.equal(invited.status, "invited");
+      assert.deepEqual(invited.roles, ["customer_manager"]);
+      assert.equal(client.hasSql("app.current_tenant_id"), true);
+      assert.equal(client.hasSql("app.platform_service_role', 'true"), true);
+      assert.equal(client.hasSql("public.tenant_memberships"), true);
+      assert.equal(client.hasSql("public.user_role_assignments"), true);
+      assert.equal(client.hasSql("public.audit_events"), true);
+      assert.equal(client.valuesContain(adminContext.tenantId), true);
+      assert.equal(client.valuesContain("00000000-0000-4000-8000-000000000333"), true);
+      assert.deepEqual(emails, [
+        {
+          email: "new.user@example.test",
+          tenantName: "Demo Tenant",
+          actionLink: "https://app.torrevie.com/invite",
+          kind: "new_invitation"
+        }
+      ]);
+    } finally {
+      setCustomerInviteIdentityCreatorForTests(null);
+      setCustomerInviteEmailDispatcherForTests(null);
+    }
   }
 
   {

@@ -4082,18 +4082,21 @@ export async function resolveTexUnregisteredWhatsappSubmission(
         ? extractions
         : [extraction].filter((item): item is TexReceiptExtraction => Boolean(item));
     const expenses: TexExpenseRecord[] = [];
+    const settings = await getTexIntegrationSettingsForProcessing(client);
 
     for (const candidate of reviewExtractions.length > 0 ? reviewExtractions : [null]) {
       const resolved = resolveWhatsappExpenseFields(submission, candidate);
       const duplicate =
-        candidate?.expenseDate && candidate.amount && candidate.currency
+        settings.duplicate_detection_enabled && candidate?.expenseDate && candidate.amount && candidate.currency
           ? await findDuplicateExpense(client, employee.id, candidate)
           : null;
+      const shouldAutoReject = Boolean(duplicate && settings.duplicate_auto_reject_enabled);
       expenses.push(
         await insertResolvedWhatsappExpense(client, actor, {
           submission,
           employee,
           duplicate,
+          shouldAutoReject,
           extraction: candidate,
           ...resolved
         })
@@ -4137,10 +4140,15 @@ export async function resolveTexUnregisteredWhatsappSubmission(
         expense_count: `${expenses.length}`
       }
     );
+    const rejectedCount = expenses.filter((item) => item.status === "rejected").length;
     const replyText =
-      expenses.length > 1
-        ? `${expenses.length} receipts reviewed and linked to ${employee.name}. They are now pending manager approval.`
-        : `Receipt reviewed and linked to ${employee.name}. It is now pending manager approval.`;
+      rejectedCount > 0
+        ? rejectedCount === expenses.length
+          ? `${expenses.length} receipt${expenses.length === 1 ? "" : "s"} reviewed and auto-rejected as likely duplicate${expenses.length === 1 ? "" : "s"}.`
+          : `${expenses.length} receipts reviewed and linked to ${employee.name}. ${rejectedCount} duplicate receipt${rejectedCount === 1 ? "" : "s"} auto-rejected; the rest are pending manager approval.`
+        : expenses.length > 1
+          ? `${expenses.length} receipts reviewed and linked to ${employee.name}. They are now pending manager approval.`
+          : `Receipt reviewed and linked to ${employee.name}. It is now pending manager approval.`;
     const delivery = await deliverTexWhatsappReply(
       client,
       actor,
@@ -6417,6 +6425,7 @@ async function insertResolvedWhatsappExpense(
     submission: TexUnregisteredWhatsappSubmissionRow;
     employee: TexEmployeeProfile;
     duplicate: TexDuplicateCandidateRow | null;
+    shouldAutoReject: boolean;
     extraction: TexReceiptExtraction | null;
     vendor: string | null;
     expenseDate: string;
@@ -6425,7 +6434,11 @@ async function insertResolvedWhatsappExpense(
     notes: string;
   }
 ): Promise<TexExpenseRecord> {
-  const duplicateStatus = input.duplicate ? "suspected" : "clear";
+  const duplicateStatus = input.duplicate
+    ? input.shouldAutoReject
+      ? "duplicate"
+      : "suspected"
+    : "clear";
   const duplicateReason = input.duplicate
     ? `Possible duplicate of ${input.duplicate.vendor ?? "existing receipt"} on ${input.duplicate.expense_date} for ${input.duplicate.currency} ${input.duplicate.amount}.`
     : null;
@@ -6456,6 +6469,9 @@ async function insertResolvedWhatsappExpense(
         tax_amount,
         receipt_file_id,
         status,
+        rejected_by,
+        rejected_at,
+        rejected_reason,
         source,
         extraction_source,
         extraction_confidence,
@@ -6487,7 +6503,10 @@ async function insertResolvedWhatsappExpense(
         $13,
         $14,
         $15::uuid,
-        'pending',
+        $22,
+        case when $22::text = 'rejected' then $1::uuid else null end,
+        case when $22::text = 'rejected' then now() else null end,
+        case when $22::text = 'rejected' then $20::text else null end,
         'whatsapp',
         'whatsapp_ai',
         $16,
@@ -6497,7 +6516,7 @@ async function insertResolvedWhatsappExpense(
         $20,
         true,
         $21,
-        true,
+        $23,
         $1::uuid,
         $1::uuid
       )
@@ -6524,7 +6543,9 @@ async function insertResolvedWhatsappExpense(
       duplicateStatus,
       input.duplicate?.id ?? null,
       duplicateReason,
-      policyReason
+      policyReason,
+      input.shouldAutoReject ? "rejected" : "pending",
+      Boolean((input.duplicate && !input.shouldAutoReject) || input.amount === 0.01)
     ]
   );
 
