@@ -10,6 +10,7 @@ import {
   type SetStateAction
 } from "react";
 import type { TexBootstrap, TexTripInput, TexTripLeg, TexTripLegInput, TexTripListItem } from "../../../lib/tex";
+import { prepareReceiptUpload, readTexJsonResponse } from "./TexReceiptUploadClient";
 
 type TexTripsClientProps = {
   teams: TexBootstrap["teams"];
@@ -382,18 +383,19 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
   async function uploadAdvanceDeposit(file: File) {
     setTripError(null);
     try {
+      const receiptUpload = await prepareReceiptUpload(file);
       const upload = await texFetch<ReceiptUploadResponse>("/receipts", {
         method: "POST",
         body: JSON.stringify({
-          fileName: file.name,
-          contentType: file.type || "application/octet-stream",
-          dataBase64: await fileToDataUrl(file)
+          fileName: receiptUpload.fileName,
+          contentType: receiptUpload.contentType,
+          dataBase64: receiptUpload.dataBase64
         })
       });
       setForm((current) => ({
         ...current,
         advanceDepositFileId: upload.receipt.id,
-        advanceDepositFileName: upload.receipt.filename || file.name
+        advanceDepositFileName: upload.receipt.filename || receiptUpload.fileName
       }));
     } catch (caught) {
       setTripError(errorMessage(caught));
@@ -1301,15 +1303,6 @@ function focusElement(id: string) {
   window.setTimeout(() => document.getElementById(id)?.focus(), 0);
 }
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error || new Error("Could not read file."));
-    reader.readAsDataURL(file);
-  });
-}
-
 function readOptionalNumber(value: string) {
   return value.trim() ? Number(value) : null;
 }
@@ -1322,13 +1315,7 @@ async function texFetch<T = unknown>(path: string, init?: RequestInit): Promise<
       ...init?.headers
     }
   });
-  const body = await response.json();
-
-  if (!response.ok) {
-    throw new Error(typeof body?.error === "string" ? body.error : "TEX request failed.");
-  }
-
-  return body as T;
+  return readTexJsonResponse<T>(response);
 }
 
 function errorMessage(error: unknown) {
