@@ -58,6 +58,7 @@ export function TexPeopleClient({
   const [teamForm, setTeamForm] = useState<TeamForm>(emptyTeamForm);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [isEmployeeDrawerOpen, setIsEmployeeDrawerOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +79,14 @@ export function TexPeopleClient({
   const activeEmployeeOptions = employees.filter((employee) => employee.isActive);
   const editingTeam = teams.find((team) => team.id === editingTeamId) ?? null;
 
+  function openNewEmployeeDrawer() {
+    setEditingEmployeeId(null);
+    setForm(emptyEmployeeForm);
+    setNotice(null);
+    setError(null);
+    setIsEmployeeDrawerOpen(true);
+  }
+
   function editEmployee(employee: TexEmployeeProfile) {
     setEditingEmployeeId(employee.id);
     setForm({
@@ -91,11 +100,17 @@ export function TexPeopleClient({
     });
     setNotice(null);
     setError(null);
+    setIsEmployeeDrawerOpen(true);
   }
 
   function resetForm() {
     setEditingEmployeeId(null);
     setForm(emptyEmployeeForm);
+  }
+
+  function closeEmployeeDrawer() {
+    setIsEmployeeDrawerOpen(false);
+    resetForm();
   }
 
   function editTeam(team: TexTeam) {
@@ -154,6 +169,7 @@ export function TexPeopleClient({
       });
       setNotice(editingEmployeeId ? "Employee updated." : "Employee added.");
       resetForm();
+      setIsEmployeeDrawerOpen(false);
       await refreshPeople();
     } catch (requestError) {
       setError(errorMessage(requestError));
@@ -172,7 +188,7 @@ export function TexPeopleClient({
       setEmployees((current) => current.filter((item) => item.id !== employee.id));
       setNotice("Employee removed.");
       if (editingEmployeeId === employee.id) {
-        resetForm();
+        closeEmployeeDrawer();
       }
     } catch (requestError) {
       setError(errorMessage(requestError));
@@ -234,6 +250,142 @@ export function TexPeopleClient({
 
   return (
     <section className="tex-people-workspace" aria-labelledby="tex-people-title">
+      {isEmployeeDrawerOpen ? (
+        <div className="tex-drawer-backdrop" role="presentation" onMouseDown={closeEmployeeDrawer}>
+          <aside
+            className="tex-drawer"
+            aria-labelledby="tex-people-form-title"
+            aria-modal="true"
+            role="dialog"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="section-heading-row">
+              <div>
+                <p className="eyebrow">Employee record</p>
+                <h3 id="tex-people-form-title">
+                  {editingEmployee ? `Edit ${editingEmployee.name}` : "Add employee"}
+                </h3>
+              </div>
+              <button type="button" className="tex-secondary-button" onClick={closeEmployeeDrawer}>
+                Close
+              </button>
+            </div>
+
+            <div className="tex-form-grid">
+              <label>
+                Name
+                <input
+                  value={form.name}
+                  disabled={!canManage}
+                  onChange={(event) => setForm({ ...form, name: event.target.value })}
+                />
+              </label>
+              <label>
+                WhatsApp phone
+                <input
+                  inputMode="tel"
+                  value={form.phoneNumber}
+                  disabled={!canManage}
+                  onChange={(event) => setForm({ ...form, phoneNumber: event.target.value })}
+                />
+              </label>
+              <label>
+                Department
+                <input
+                  value={form.department}
+                  disabled={!canManage}
+                  onChange={(event) => setForm({ ...form, department: event.target.value })}
+                />
+              </label>
+              <label>
+                Monthly salary
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.monthlySalary}
+                  disabled={!canManage}
+                  onChange={(event) => setForm({ ...form, monthlySalary: event.target.value })}
+                />
+              </label>
+              <label>
+                Approval manager
+                <select
+                  value={form.managerUserId}
+                  disabled={!canManage}
+                  onChange={(event) => setForm({ ...form, managerUserId: event.target.value })}
+                >
+                  <option value="">No assigned manager</option>
+                  {initialManagerUsers.map((manager) => (
+                    <option key={manager.id} value={manager.id}>
+                      {managerLabel(manager)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Submission cadence
+                <select
+                  value={form.submissionFrequency}
+                  disabled={!canManage}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      submissionFrequency: event.target
+                        .value as TexEmployeeProfile["submissionFrequency"]
+                    })
+                  }
+                >
+                  <option value="realtime">Realtime</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </label>
+              <label className="tex-toggle-label">
+                <input
+                  type="checkbox"
+                  checked={form.isActive}
+                  disabled={!canManage}
+                  onChange={(event) => setForm({ ...form, isActive: event.target.checked })}
+                />
+                Active
+              </label>
+            </div>
+
+            {canManage ? (
+              <div className="tex-drawer-submit-row">
+                <button
+                  type="button"
+                  className="tex-secondary-button"
+                  disabled={busy !== null}
+                  onClick={closeEmployeeDrawer}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="tex-primary-button"
+                  disabled={busy !== null}
+                  onClick={saveEmployee}
+                >
+                  {busy === "employee"
+                    ? "Saving..."
+                    : editingEmployee
+                      ? "Save employee"
+                      : "Add employee"}
+                </button>
+              </div>
+            ) : (
+              <p className="tex-empty-state">
+                You need TEX people management permission to edit records.
+              </p>
+            )}
+            {error ? <p className="tex-error">{error}</p> : null}
+          </aside>
+        </div>
+      ) : null}
+
       <header className="section-heading-row">
         <div>
           <p className="eyebrow">People</p>
@@ -268,7 +420,19 @@ export function TexPeopleClient({
 
       <div className="tex-people-grid">
         <section className="tex-form-panel" aria-labelledby="tex-people-list-title">
-          <h3 id="tex-people-list-title">Employees</h3>
+          <div className="section-heading-row">
+            <h3 id="tex-people-list-title">Employees</h3>
+            {canManage ? (
+              <button
+                type="button"
+                className="tex-primary-button"
+                disabled={busy !== null}
+                onClick={openNewEmployeeDrawer}
+              >
+                Add employee
+              </button>
+            ) : null}
+          </div>
           {employees.length ? (
             <div className="tex-people-list">
               {employees.map((employee) => (
@@ -358,109 +522,6 @@ export function TexPeopleClient({
             </div>
           ) : (
             <p className="tex-empty-state">No TEX teams have been configured yet.</p>
-          )}
-        </section>
-
-        <section className="tex-form-panel" aria-labelledby="tex-people-form-title">
-          <h3 id="tex-people-form-title">
-            {editingEmployee ? `Edit ${editingEmployee.name}` : "Add employee"}
-          </h3>
-          <div className="tex-form-grid">
-            <label>
-              Name
-              <input
-                value={form.name}
-                disabled={!canManage}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-              />
-            </label>
-            <label>
-              WhatsApp phone
-              <input
-                inputMode="tel"
-                value={form.phoneNumber}
-                disabled={!canManage}
-                onChange={(event) => setForm({ ...form, phoneNumber: event.target.value })}
-              />
-            </label>
-            <label>
-              Department
-              <input
-                value={form.department}
-                disabled={!canManage}
-                onChange={(event) => setForm({ ...form, department: event.target.value })}
-              />
-            </label>
-            <label>
-              Monthly salary
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.monthlySalary}
-                disabled={!canManage}
-                onChange={(event) => setForm({ ...form, monthlySalary: event.target.value })}
-              />
-            </label>
-            <label>
-              Approval manager
-              <select
-                value={form.managerUserId}
-                disabled={!canManage}
-                onChange={(event) => setForm({ ...form, managerUserId: event.target.value })}
-              >
-                <option value="">No assigned manager</option>
-                {initialManagerUsers.map((manager) => (
-                  <option key={manager.id} value={manager.id}>
-                    {managerLabel(manager)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Submission cadence
-              <select
-                value={form.submissionFrequency}
-                disabled={!canManage}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    submissionFrequency: event.target
-                      .value as TexEmployeeProfile["submissionFrequency"]
-                  })
-                }
-              >
-                <option value="realtime">Realtime</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-              </select>
-            </label>
-            <label className="tex-toggle-label">
-              <input
-                type="checkbox"
-                checked={form.isActive}
-                disabled={!canManage}
-                onChange={(event) => setForm({ ...form, isActive: event.target.checked })}
-              />
-              Active
-            </label>
-          </div>
-          {canManage ? (
-            <div className="tex-panel-actions">
-              <button type="button" disabled={busy !== null} onClick={saveEmployee}>
-                {editingEmployee ? "Save employee" : "Add employee"}
-              </button>
-              {editingEmployee ? (
-                <button type="button" disabled={busy !== null} onClick={resetForm}>
-                  Cancel
-                </button>
-              ) : null}
-            </div>
-          ) : (
-            <p className="tex-empty-state">
-              You need TEX people management permission to edit records.
-            </p>
           )}
         </section>
 
