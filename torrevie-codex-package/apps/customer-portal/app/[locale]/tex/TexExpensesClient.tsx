@@ -8,6 +8,7 @@ import type {
   TexExpenseStatus,
   TexTripListItem
 } from "../../../lib/tex";
+import { prepareReceiptUpload, readTexJsonResponse } from "./TexReceiptUploadClient";
 
 type TexExpensesClientProps = {
   categories: TexBootstrap["categories"];
@@ -223,20 +224,20 @@ export function TexExpensesClient({
     setAutoFilledFields(new Set());
 
     try {
-      const dataUrl = await fileToDataUrl(file);
+      const receiptUpload = await prepareReceiptUpload(file);
       setForm((current) => ({
         ...current,
-        receiptFileName: file.name
+        receiptFileName: receiptUpload.fileName
       }));
 
       let parseMessage: string | null = null;
-      if (file.type.startsWith("image/")) {
+      if (receiptUpload.contentType.startsWith("image/")) {
         try {
           const parsed = await texFetch<ParsedReceipt>("/receipts/parse", {
             method: "POST",
             body: JSON.stringify({
-              contentType: file.type,
-              dataBase64: dataUrl
+              contentType: receiptUpload.contentType,
+              dataBase64: receiptUpload.dataBase64
             })
           });
           const filled = new Set<keyof ExpenseFormState>();
@@ -301,16 +302,16 @@ export function TexExpensesClient({
         const upload = await texFetch<ReceiptUploadResponse>("/receipts", {
           method: "POST",
           body: JSON.stringify({
-            fileName: file.name,
-            contentType: file.type || "application/octet-stream",
-            dataBase64: dataUrl
+            fileName: receiptUpload.fileName,
+            contentType: receiptUpload.contentType,
+            dataBase64: receiptUpload.dataBase64
           })
         });
         setForm((current) => ({
           ...current,
           receiptFileId: upload.receipt.id,
           receiptUrl: upload.receipt.url,
-          receiptFileName: upload.receipt.filename || file.name
+          receiptFileName: upload.receipt.filename || receiptUpload.fileName
         }));
         setReceiptWarning(parseMessage);
       } catch (caught) {
@@ -977,15 +978,6 @@ function fieldClass(fields: Set<keyof ExpenseFormState>, field: keyof ExpenseFor
   return fields.has(field) ? "tex-ai-filled" : undefined;
 }
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error || new Error("Could not read receipt file."));
-    reader.readAsDataURL(file);
-  });
-}
-
 async function texFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/tex${path}`, {
     ...init,
@@ -994,13 +986,7 @@ async function texFetch<T = unknown>(path: string, init?: RequestInit): Promise<
       ...init?.headers
     }
   });
-  const body = await response.json();
-
-  if (!response.ok) {
-    throw new Error(typeof body?.error === "string" ? body.error : "TEX request failed.");
-  }
-
-  return body as T;
+  return readTexJsonResponse<T>(response);
 }
 
 function errorMessage(error: unknown) {
