@@ -3604,6 +3604,7 @@ export async function recordTexWebhookSubmission(
         where message_id is not null
         do update set
           payload = excluded.payload,
+          receipt_file_id = excluded.receipt_file_id,
           message_type = excluded.message_type,
           media_url = excluded.media_url,
           media_mime_type = excluded.media_mime_type,
@@ -4209,13 +4210,13 @@ async function recordQuickConnectEvent(
       )
       values (
         public.current_tenant_id(),
-        $1,
+        $1::uuid,
         $2,
         'system',
         $3,
         $4,
         $5::jsonb,
-        $6
+        $6::uuid
       )
     `,
     [
@@ -4289,7 +4290,7 @@ async function insertWhatsappSubmission(
         $4,
         $5,
         $6,
-        $7,
+        $7::uuid,
         $8,
         $9,
         $10,
@@ -4299,17 +4300,18 @@ async function insertWhatsappSubmission(
         $14,
         $15::jsonb,
         $16,
-        $17,
-        $18,
-        $19,
-        case when $16 = 'resolved' then now() else null end,
-        $19,
-        $19
+        $17::uuid,
+        $18::uuid,
+        $19::uuid,
+        case when $16::text = 'resolved' then now() else null end,
+        $19::uuid,
+        $19::uuid
       )
       on conflict (tenant_id, message_id)
       where message_id is not null
       do update set
         payload = excluded.payload,
+        receipt_file_id = excluded.receipt_file_id,
         message_type = excluded.message_type,
         media_url = excluded.media_url,
         media_mime_type = excluded.media_mime_type,
@@ -5017,8 +5019,8 @@ async function createExpenseFromWhatsappReceipt(
       )
       values (
         public.current_tenant_id(),
-        $1,
-        $2,
+        $1::uuid,
+        $2::uuid,
         $3,
         $4,
         $5,
@@ -5030,21 +5032,21 @@ async function createExpenseFromWhatsappReceipt(
         $11,
         $12,
         $13,
-        $14,
+        $14::uuid,
         'whatsapp',
         'whatsapp_ai',
         $15,
         $16::jsonb,
         $17,
-        $18,
+        $18::uuid,
         $19,
         $20,
         $21,
-        case when $21 = 'rejected' then $1 else null end,
-        case when $21 = 'rejected' then now() else null end,
-        case when $21 = 'rejected' then $19 else null end,
-        $1,
-        $1
+        case when $21::text = 'rejected' then $1::uuid else null end,
+        case when $21::text = 'rejected' then now() else null end,
+        case when $21::text = 'rejected' then $19::text else null end,
+        $1::uuid,
+        $1::uuid
       )
       returning id, status, amount::float as amount, currency
     `,
@@ -5925,8 +5927,8 @@ async function createTexEmployeeProfileFromWhatsapp(
         $2,
         $3,
         true,
-        $4,
-        $4
+        $4::uuid,
+        $4::uuid
       )
       on conflict (tenant_id, phone_number)
       do update set
@@ -6362,8 +6364,8 @@ async function insertResolvedWhatsappExpense(
       )
       values (
         public.current_tenant_id(),
-        $1,
-        $2,
+        $1::uuid,
+        $2::uuid,
         $3,
         $4,
         $5,
@@ -6377,20 +6379,20 @@ async function insertResolvedWhatsappExpense(
         $12,
         $13,
         $14,
-        $15,
+        $15::uuid,
         'pending',
         'whatsapp',
         'whatsapp_ai',
         $16,
         $17::jsonb,
         $18,
-        $19,
+        $19::uuid,
         $20,
         true,
         $21,
         true,
-        $1,
-        $1
+        $1::uuid,
+        $1::uuid
       )
       returning id, status, amount::float as amount, currency
     `,

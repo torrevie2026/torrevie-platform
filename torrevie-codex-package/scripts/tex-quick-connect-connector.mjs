@@ -553,6 +553,7 @@ async function handleInboundMessage(session, sock, message) {
   });
   const acknowledgement = await sendQuickConnectAcknowledgement(session, sock, {
     hasMedia,
+    mediaError,
     messageId,
     remoteJid,
     replyText: processing.replyText
@@ -626,7 +627,7 @@ async function sendQuickConnectAcknowledgement(session, sock, input) {
     return { error: acknowledgementLimit.reason, status: "rate_limited" };
   }
 
-  const text = input.replyText?.trim() || fallbackQuickConnectReply(input.hasMedia);
+  const text = input.replyText?.trim() || fallbackQuickConnectReply(input.hasMedia, input.mediaError);
 
   try {
     const result = await sock.sendMessage(input.remoteJid, { text });
