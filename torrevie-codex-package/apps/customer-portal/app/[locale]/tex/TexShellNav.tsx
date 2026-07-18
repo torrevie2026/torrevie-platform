@@ -20,7 +20,7 @@ type TexShellNavProps = {
   locale: string;
   planKey: "trial" | "lite" | "growth" | "enterprise";
   roles: readonly string[];
-  tenantId: string;
+  tenantName: string;
 };
 
 const texNavItems = [
@@ -42,7 +42,7 @@ const planRank = {
   enterprise: 3
 } as const;
 
-export function TexShellNav({ email, locale, planKey, roles, tenantId }: TexShellNavProps) {
+export function TexShellNav({ email, locale, planKey, roles, tenantName }: TexShellNavProps) {
   const pathname = usePathname();
   const basePath = `/${locale}/tex`;
   const visibleNavItems = texNavItems.filter(
@@ -59,7 +59,7 @@ export function TexShellNav({ email, locale, planKey, roles, tenantId }: TexShel
             <small>Travel and Expense</small>
           </span>
         </Link>
-        <div className="tex-company-chip">{tenantId}</div>
+        <div className="tex-company-chip" title={tenantName}>{tenantName}</div>
       </div>
 
       <nav className="tex-nav">

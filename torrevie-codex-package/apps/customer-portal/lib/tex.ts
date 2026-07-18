@@ -25,6 +25,7 @@ export type TexActorContext = ResolvedTenantContext & {
   roles: readonly RoleKey[];
   entitledProducts: readonly ProductKey[];
   texPlan: TexPlanContext;
+  tenantName?: string;
   moduleAdminProducts?: readonly ProductKey[];
   integrationPermissions?: readonly PermissionKey[];
 };
@@ -741,7 +742,15 @@ export async function resolveTexActorContext(
       throw new Error("The user is deactivated.");
     }
 
-    const [roles, entitledProducts, texPlan] = await Promise.all([
+    const [tenant, roles, entitledProducts, texPlan] = await Promise.all([
+      client.query<TexTenantRow>(
+        `
+          select name
+          from public.tenants
+          where id = public.current_tenant_id()
+          limit 1
+        `
+      ),
       client.query<TexRoleRow>(
         `
           select r.key
@@ -800,12 +809,14 @@ export async function resolveTexActorContext(
     const resolvedRoles = roles.rows.map((row) => row.key).filter(isRoleKey);
     const resolvedProducts = entitledProducts.rows.map((row) => row.key).filter(isProductKey);
     const resolvedTexPlan = mapTexPlanContext(texPlan.rows[0]);
+    const tenantName = tenant.rows[0]?.name?.trim() || context.tenantId;
 
     return {
       ...context,
       roles: resolvedRoles,
       entitledProducts: resolvedProducts,
       texPlan: resolvedTexPlan,
+      tenantName,
       moduleAdminProducts: resolvedRoles.includes("customer_module_admin") ? resolvedProducts : []
     };
   });
@@ -7447,6 +7458,10 @@ type TexDuplicateCandidateRow = {
 type TexMembershipValidationRow = {
   membership_status: "active" | "invited" | "disabled";
   user_status: "active" | "deactivated";
+};
+
+type TexTenantRow = {
+  name: string | null;
 };
 
 type TexRoleRow = {
