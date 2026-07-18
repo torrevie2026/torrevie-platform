@@ -25,20 +25,25 @@ export type EmailDispatchInput = {
   subject: string;
   text: string;
   html?: string | null;
-  provider?: "postmark" | null;
+  provider?: EmailProvider;
   from?: string | null;
   postmarkServerToken?: string | null;
   postmarkMessageStream?: string | null;
+  resendApiKey?: string | null;
 };
 
 export type EmailDispatchResult = {
   ok: boolean;
-  provider: "postmark" | null;
+  provider: EmailProvider;
   status: "sent" | "skipped" | "failed";
   messageId: string | null;
   error: string | null;
   httpStatus: number | null;
 };
+
+type EmailProvider = "postmark" | "resend" | null;
+
+const defaultEmailFrom = "Torrevie <noreply@torrevie.com>";
 
 export type NotificationFetch = (
   input: string | URL | Request,
@@ -78,17 +83,35 @@ export async function dispatchEmailNotification(
   const recipients = normalizeEmailRecipients(input.to);
   const subject = input.subject.trim();
   const text = input.text.trim();
-  const provider =
-    input.provider ?? (process.env.EMAIL_PROVIDER === "postmark" ? "postmark" : null);
-  const token = input.postmarkServerToken?.trim() || process.env.POSTMARK_SERVER_TOKEN?.trim();
+  const provider = input.provider ?? readEmailProviderFromEnv();
 
   if (!recipients.length || !subject || !text) {
     return skippedEmail(provider, "Recipient, subject, and text body are required.");
   }
 
-  if (provider !== "postmark" && !token) {
+  if (provider === "resend") {
+    return sendResendEmail(input, recipients, subject, text, fetcher);
+  }
+
+  if (provider === "postmark") {
+    return sendPostmarkEmail(input, recipients, subject, text, fetcher);
+  }
+
+  if (!provider) {
     return skippedEmail(null, "Email provider is not configured.");
   }
+
+  return skippedEmail(null, "Email provider is not configured.");
+}
+
+async function sendPostmarkEmail(
+  input: EmailDispatchInput,
+  recipients: string[],
+  subject: string,
+  text: string,
+  fetcher: NotificationFetch
+): Promise<EmailDispatchResult> {
+  const token = input.postmarkServerToken?.trim() || process.env.POSTMARK_SERVER_TOKEN?.trim();
 
   if (!token) {
     return skippedEmail("postmark", "Postmark server token is not configured.");
@@ -105,8 +128,9 @@ export async function dispatchEmailNotification(
       From:
         input.from?.trim() ||
         process.env.EMAIL_FROM ||
+        process.env.RESEND_FROM_EMAIL ||
         process.env.EMAIL_FROM_ADDRESS ||
-        "Torrevie <no-reply@torrevie.com>",
+        defaultEmailFrom,
       To: recipients.join(","),
       Subject: subject,
       HtmlBody: input.html?.trim() || text,
@@ -137,6 +161,79 @@ export async function dispatchEmailNotification(
     error: null,
     httpStatus: response.status
   };
+}
+
+async function sendResendEmail(
+  input: EmailDispatchInput,
+  recipients: string[],
+  subject: string,
+  text: string,
+  fetcher: NotificationFetch
+): Promise<EmailDispatchResult> {
+  const token =
+    input.resendApiKey?.trim() ||
+    process.env.RESEND_API_KEY?.trim() ||
+    process.env.EMAIL_PROVIDER_API_KEY?.trim();
+
+  if (!token) {
+    return skippedEmail("resend", "Resend API key is not configured.");
+  }
+
+  const response = await fetcher("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from:
+        input.from?.trim() ||
+        process.env.RESEND_FROM_EMAIL ||
+        process.env.EMAIL_FROM ||
+        process.env.EMAIL_FROM_ADDRESS ||
+        defaultEmailFrom,
+      to: recipients,
+      subject,
+      html: input.html?.trim() || text,
+      text
+    })
+  });
+  const body = await safeJson(response);
+  const error = readError(body);
+
+  if (!response.ok || error) {
+    return {
+      ok: false,
+      provider: "resend",
+      status: "failed",
+      messageId: null,
+      error: error ?? `HTTP ${response.status}`,
+      httpStatus: response.status
+    };
+  }
+
+  return {
+    ok: true,
+    provider: "resend",
+    status: "sent",
+    messageId: firstPathString(body, ["id", "data.id"]),
+    error: null,
+    httpStatus: response.status
+  };
+}
+
+function readEmailProviderFromEnv(): EmailProvider {
+  const provider = process.env.EMAIL_PROVIDER?.trim().toLowerCase();
+
+  if (provider === "resend" || process.env.RESEND_API_KEY?.trim()) {
+    return "resend";
+  }
+
+  if (provider === "postmark" || process.env.POSTMARK_SERVER_TOKEN?.trim()) {
+    return "postmark";
+  }
+
+  return null;
 }
 
 export function normalizeWhatsAppRecipient(value: string | null | undefined) {
@@ -304,7 +401,7 @@ function skipped(provider: WhatsAppProvider, error: string): WhatsAppDispatchRes
   };
 }
 
-function skippedEmail(provider: "postmark" | null, error: string): EmailDispatchResult {
+function skippedEmail(provider: EmailProvider, error: string): EmailDispatchResult {
   return {
     ok: false,
     provider,
