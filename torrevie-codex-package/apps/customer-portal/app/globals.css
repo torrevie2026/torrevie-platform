@@ -303,6 +303,14 @@ a {
   display: none;
 }
 
+.tex-mobile-more-backdrop {
+  display: none;
+}
+
+.tex-mobile-more-panel {
+  display: none;
+}
+
 .tex-dashboard-hero {
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.92)),
@@ -4329,6 +4337,31 @@ form.member-row {
     border-block-start: 1px solid var(--color-border);
   }
 
+  .tex-whatsapp-table {
+    gap: 10px;
+    overflow: visible;
+  }
+
+  .tex-whatsapp-row {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .tex-whatsapp-row + .tex-whatsapp-row {
+    border-block-start: 1px solid var(--color-border);
+  }
+
+  .tex-compact-dl {
+    grid-template-columns: 1fr;
+  }
+
+  .tex-whatsapp-actions .tex-primary-button,
+  .tex-whatsapp-actions .tex-secondary-button,
+  .tex-whatsapp-actions .tex-inline-button {
+    min-block-size: 44px;
+  }
+
   .tex-dashboard-hero {
     min-block-size: auto;
     padding: 20px;
@@ -4394,6 +4427,44 @@ form.member-row {
     text-align: start;
   }
 
+  .tex-expense-card {
+    align-items: stretch;
+    gap: 9px;
+  }
+
+  .tex-expense-card .tex-row-checkbox {
+    justify-content: flex-start;
+  }
+
+  .tex-card-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tex-card-actions button,
+  .tex-card-actions a {
+    justify-content: center;
+    min-block-size: 42px;
+    min-inline-size: 0;
+  }
+
+  .tex-card-actions .tex-receipt-link,
+  .tex-card-actions span {
+    grid-column: 1 / -1;
+    justify-content: center;
+    white-space: normal;
+  }
+
+  .tex-segmented-control {
+    overflow-x: auto;
+    padding-block-end: 2px;
+  }
+
+  .tex-segmented-control button {
+    flex: 0 0 auto;
+    min-block-size: 40px;
+  }
+
   .tex-trip-card header,
   .tex-trip-card footer,
   .tex-trip-meta {
@@ -4403,6 +4474,19 @@ form.member-row {
 
   .tex-trip-card strong {
     text-align: start;
+  }
+
+  .tex-trip-card footer,
+  .tex-action-bar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    inline-size: 100%;
+  }
+
+  .tex-trip-card footer button,
+  .tex-action-bar button {
+    inline-size: 100%;
+    min-block-size: 42px;
   }
 
   .tex-finance-row b {
@@ -4470,7 +4554,7 @@ form.member-row {
   }
 
   .tex-main {
-    padding-block-end: 92px;
+    padding-block-end: 104px;
     padding-inline: 16px;
   }
 
@@ -4520,6 +4604,7 @@ form.member-row {
   .tex-mobile-nav {
     background: var(--color-bg-primary);
     border-block-start: 1px solid var(--color-border);
+    box-shadow: 0 -12px 28px color-mix(in srgb, var(--color-text-primary) 10%, transparent);
     display: grid;
     gap: 4px;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -4531,8 +4616,11 @@ form.member-row {
     z-index: 20;
   }
 
-  .tex-mobile-nav a {
+  .tex-mobile-nav a,
+  .tex-mobile-nav button {
     align-items: center;
+    background: transparent;
+    border: 0;
     border-radius: 6px;
     color: var(--color-text-muted);
     display: grid;
@@ -4544,8 +4632,109 @@ form.member-row {
     padding-block: 4px;
   }
 
-  .tex-mobile-nav a[aria-current="page"] {
+  .tex-mobile-nav a[aria-current="page"],
+  .tex-mobile-nav button[aria-current="page"] {
+    background: var(--color-bg-surface);
     color: var(--color-text-primary);
+  }
+
+  .tex-mobile-nav button[aria-current="page"] .tex-nav-icon {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-text-inverse);
+  }
+
+  .tex-mobile-more-backdrop {
+    align-items: flex-end;
+    background: color-mix(in srgb, var(--color-text-primary) 32%, transparent);
+    display: flex;
+    inset: 0;
+    padding: 12px;
+    padding-block-end: 86px;
+    position: fixed;
+    z-index: 30;
+  }
+
+  .tex-mobile-more-panel {
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    box-shadow: 0 18px 44px color-mix(in srgb, var(--color-text-primary) 18%, transparent);
+    display: grid;
+    gap: 12px;
+    inline-size: 100%;
+    max-block-size: min(70vh, 560px);
+    overflow: auto;
+    padding: 14px;
+  }
+
+  .tex-mobile-more-header {
+    align-items: center;
+    border-block-end: 1px solid var(--color-border);
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    padding-block-end: 10px;
+  }
+
+  .tex-mobile-more-header div {
+    display: grid;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .tex-mobile-more-header strong,
+  .tex-mobile-more-header small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tex-mobile-more-header small {
+    color: var(--color-text-muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .tex-mobile-more-header button {
+    align-items: center;
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    display: inline-flex;
+    flex: 0 0 42px;
+    inline-size: 42px;
+    justify-content: center;
+    min-block-size: 42px;
+  }
+
+  .tex-mobile-more-header button svg {
+    block-size: 18px;
+    inline-size: 18px;
+  }
+
+  .tex-mobile-more-links {
+    display: grid;
+    gap: 6px;
+  }
+
+  .tex-mobile-more-links a {
+    align-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    display: flex;
+    font-weight: 800;
+    gap: 10px;
+    min-block-size: 46px;
+    padding-block: 8px;
+    padding-inline: 10px;
+  }
+
+  .tex-mobile-more-links a[aria-current="page"] {
+    background: var(--color-bg-surface);
+    border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
   }
 
   .tex-drawer-backdrop {
@@ -4556,6 +4745,20 @@ form.member-row {
     border-block: 0;
     border-inline-end: 0;
     border-radius: 0;
+    inline-size: 100%;
+    padding-block-end: 88px;
+  }
+
+  .tex-drawer-submit-row {
+    background: var(--color-bg-primary);
+    border-block-start: 1px solid var(--color-border);
+    inset-block-end: 0;
+    margin-inline: -16px;
+    padding: 12px 16px;
+    position: sticky;
+  }
+
+  .tex-drawer-submit-row .tex-primary-button {
     inline-size: 100%;
   }
 
