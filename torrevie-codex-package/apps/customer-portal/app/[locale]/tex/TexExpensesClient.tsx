@@ -268,7 +268,7 @@ export function TexExpensesClient({ categories, employees, trips, initialExpense
           parseMessage = errorMessage(caught);
         }
       } else {
-        parseMessage = "OCR currently supports image receipts only, so please fill in the fields manually.";
+        parseMessage = "OCR could not read this receipt, so please fill in the fields manually.";
       }
 
       try {

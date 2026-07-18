@@ -3329,8 +3329,8 @@ export async function parseTexReceiptUpload(
   input: Pick<TexReceiptUploadInput, "contentType" | "dataBase64">
 ): Promise<TexReceiptExtraction> {
   const contentType = cleanContentType(input.contentType);
-  if (!contentType.startsWith("image/")) {
-    throw new Error("OCR currently supports image receipts only.");
+  if (!isOcrSupportedReceiptType(contentType)) {
+    throw new Error("OCR currently supports image and PDF receipts only.");
   }
 
   const buffer = receiptBufferFromBase64(input.dataBase64);
@@ -4854,8 +4854,8 @@ async function extractStoredReceiptWithAI(client: TenantQueryClient, receiptFile
   );
   const row = requireSingleRow(result.rows, "receipt file");
   const contentType = cleanContentType(row.content_type);
-  if (!contentType.startsWith("image/")) {
-    throw new Error("OCR currently supports image receipts only.");
+  if (!isOcrSupportedReceiptType(contentType)) {
+    throw new Error("OCR currently supports image and PDF receipts only.");
   }
 
   const buffer = await downloadReceiptObject(row.storage_path);
@@ -5137,6 +5137,10 @@ function isAllowedReceiptType(contentType: string) {
     "image/heif",
     "application/pdf"
   ].includes(contentType);
+}
+
+function isOcrSupportedReceiptType(contentType: string) {
+  return contentType.startsWith("image/") || contentType === "application/pdf";
 }
 
 function receiptBufferFromBase64(value: string) {

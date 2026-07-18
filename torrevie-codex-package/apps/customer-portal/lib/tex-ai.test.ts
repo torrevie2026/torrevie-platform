@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { extractReceiptWithAI } from "./tex-ai";
+import { extractReceiptWithAI, extractReceiptWithOpenAI } from "./tex-ai";
 
 async function main() {
   const previousEnv = {
@@ -64,6 +64,52 @@ async function main() {
     assert.equal(extraction.vendor, "Airport Cafe");
     assert.equal(extraction.currency, "AED");
     assert.equal(extraction.amount, 120);
+
+    globalThis.fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        contents?: Array<{ parts?: Array<{ inlineData?: { mimeType?: string; data?: string } }> }>;
+      };
+      assert.equal(body.contents?.[0]?.parts?.[1]?.inlineData?.mimeType, "application/pdf");
+      assert.equal(body.contents?.[0]?.parts?.[1]?.inlineData?.data, "JVBERi0xLjQ=");
+
+      return new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      vendor: "PDF Parking",
+                      expenseDate: "2026-07-14",
+                      amount: 55,
+                      currency: "AED",
+                      category: "Parking",
+                      taxAmount: 0,
+                      taxIdNumber: null,
+                      confidence: 0.86,
+                      notes: "PDF receipt"
+                    })
+                  }
+                ]
+              }
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    };
+
+    const pdfExtraction = await extractReceiptWithAI("data:application/pdf;base64,JVBERi0xLjQ=");
+    assert.equal(pdfExtraction.vendor, "PDF Parking");
+    assert.equal(pdfExtraction.amount, 55);
+
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    await assert.rejects(
+      () => extractReceiptWithOpenAI("data:application/pdf;base64,JVBERi0xLjQ="),
+      /image inputs only/
+    );
+    delete process.env.OPENAI_API_KEY;
 
     process.env.GEMINI_RECEIPT_MODELS = "retired-model, gemini-3.5-flash";
     const requestedModels: string[] = [];

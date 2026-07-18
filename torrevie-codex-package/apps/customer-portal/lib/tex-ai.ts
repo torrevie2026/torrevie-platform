@@ -54,6 +54,10 @@ export async function extractReceiptWithOpenAI(mediaUrl: string): Promise<TexRec
     throw new Error("OPENAI_API_KEY is not configured.");
   }
 
+  if (mediaMimeType(mediaUrl) === "application/pdf") {
+    throw new Error("OpenAI receipt extraction path currently supports image inputs only.");
+  }
+
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -250,7 +254,7 @@ async function receiptMediaForGemini(mediaUrl: string) {
   const dataUrl = mediaUrl.match(/^data:([^;,]+);base64,(.+)$/);
 
   if (dataUrl) {
-    return { mimeType: dataUrl[1] ?? "image/jpeg", dataBase64: dataUrl[2] ?? "" };
+    return { mimeType: cleanMediaMimeType(dataUrl[1]), dataBase64: dataUrl[2] ?? "" };
   }
 
   const response = await fetch(mediaUrl);
@@ -259,10 +263,19 @@ async function receiptMediaForGemini(mediaUrl: string) {
     throw new Error(`Could not download receipt media for Gemini: ${response.status}`);
   }
 
-  const mimeType = response.headers.get("content-type")?.split(";")[0]?.trim() || "image/jpeg";
+  const mimeType = cleanMediaMimeType(response.headers.get("content-type"));
   const buffer = Buffer.from(await response.arrayBuffer());
 
   return { mimeType, dataBase64: buffer.toString("base64") };
+}
+
+function mediaMimeType(mediaUrl: string) {
+  const dataUrl = mediaUrl.match(/^data:([^;,]+);base64,/);
+  return cleanMediaMimeType(dataUrl?.[1] ?? null);
+}
+
+function cleanMediaMimeType(value: string | null | undefined) {
+  return value?.split(";")[0]?.trim().toLowerCase() || "image/jpeg";
 }
 
 function parseJsonObject(value: string): Partial<TexReceiptExtraction> {
