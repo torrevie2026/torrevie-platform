@@ -2485,6 +2485,36 @@ form.member-row {
   grid-template-columns: 1fr;
 }
 
+.tex-leg-form-sections {
+  display: grid;
+  gap: 10px;
+}
+
+.tex-leg-form-section {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+}
+
+.tex-leg-form-section h5 {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.tex-leg-quick-actions,
+.tex-leg-row-actions {
+  justify-content: flex-start;
+}
+
+.tex-leg-drawer-actions {
+  justify-content: flex-end;
+}
+
 .tex-notice,
 .tex-error {
   border-radius: 6px;
@@ -4685,6 +4715,16 @@ form.member-row {
     flex-direction: column;
   }
 
+  .tex-trip-card {
+    gap: 12px;
+  }
+
+  .tex-trip-card h4,
+  .tex-trip-card p,
+  .tex-trip-meta span {
+    overflow-wrap: anywhere;
+  }
+
   .tex-trip-card strong {
     text-align: start;
   }
@@ -4700,6 +4740,52 @@ form.member-row {
   .tex-action-bar button {
     inline-size: 100%;
     min-block-size: 42px;
+  }
+
+  .tex-leg-card {
+    padding: 12px;
+  }
+
+  .tex-leg-form-section {
+    background: var(--color-bg-primary);
+    padding: 10px;
+  }
+
+  .tex-leg-form-section h5 {
+    font-size: 12px;
+  }
+
+  .tex-leg-quick-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .tex-leg-quick-actions .tex-checkbox-row {
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    min-block-size: 42px;
+    padding-inline: 10px;
+  }
+
+  .tex-leg-row-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tex-leg-drawer-actions {
+    background: var(--color-bg-primary);
+    border-block-start: 1px solid var(--color-border);
+    bottom: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-inline: -16px;
+    padding: 12px 16px;
+    position: sticky;
+    z-index: 1;
+  }
+
+  .tex-leg-drawer-actions button {
+    inline-size: 100%;
+    min-block-size: 44px;
   }
 
   .tex-finance-row b {
