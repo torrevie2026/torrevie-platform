@@ -31,7 +31,7 @@ export default async function CustomerUsersPage({
   searchParams
 }: {
   params: Promise<{ locale: string }>;
-  searchParams?: Promise<{ integration?: string; users?: string; message?: string }>;
+  searchParams?: Promise<{ integration?: string; invite?: string; users?: string; message?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const status = await searchParams;
@@ -92,6 +92,7 @@ export default async function CustomerUsersPage({
           {status?.users === "password_reset" ? <p className="tex-notice">Password reset email sent.</p> : null}
           {status?.users === "deleted" ? <p className="tex-notice">Tenant web user removed.</p> : null}
           {status?.users === "failed" ? <p className="tex-error">{status.message ?? "Tenant web user update failed."}</p> : null}
+          {status?.invite === "open" ? <InviteUserDrawer locale={locale} usageLimits={usageLimits} /> : null}
 
           <section className="tenant-limit-strip" aria-label="Plan limits">
             <LimitCard label="Web users" used={usageLimits.webUsersUsed} limit={usageLimits.webUsersLimit} />
@@ -109,30 +110,23 @@ export default async function CustomerUsersPage({
               <p className="admin-panel-copy">
                 Tenant admins create customer portal users here. Invitations count against the active tier user limit.
               </p>
-              <form action={inviteCustomerUserAction} className="tenant-integration-form invite-user-form">
-                <input type="hidden" name="locale" value={locale} />
-                <label>
-                  Email
-                  <input name="email" type="email" required dir="ltr" placeholder="employee@customer.com" />
-                </label>
-                <label>
-                  Name
-                  <input name="displayName" placeholder="Full name" />
-                </label>
-                <label>
-                  Role
-                  <select name="role" defaultValue="customer_standard_user">
-                    {assignableCustomerRoles.map((role) => (
-                      <option key={role} value={role}>
-                        {formatRole(role)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button type="submit" disabled={usageLimits.webUsersLimit !== null && usageLimits.webUsersUsed >= usageLimits.webUsersLimit}>
+              <div className="admin-action-row">
+                <a
+                  className={
+                    usageLimits.webUsersLimit !== null && usageLimits.webUsersUsed >= usageLimits.webUsersLimit
+                      ? "tex-secondary-button admin-action-disabled"
+                      : "tex-primary-button"
+                  }
+                  href={
+                    usageLimits.webUsersLimit !== null && usageLimits.webUsersUsed >= usageLimits.webUsersLimit
+                      ? `/${locale}/admin/users`
+                      : `/${locale}/admin/users?invite=open`
+                  }
+                  aria-disabled={usageLimits.webUsersLimit !== null && usageLimits.webUsersUsed >= usageLimits.webUsersLimit}
+                >
                   Invite web user
-                </button>
-              </form>
+                </a>
+              </div>
 
               <div className="member-table" role="table" aria-label={admin.tenantUsers}>
                 <div role="row" className="member-row member-row-head">
@@ -388,6 +382,67 @@ export default async function CustomerUsersPage({
 
     throw error;
   }
+}
+
+function InviteUserDrawer({
+  locale,
+  usageLimits
+}: {
+  locale: Locale;
+  usageLimits: Awaited<ReturnType<typeof getTenantUsageLimits>>;
+}) {
+  const isLimitReached = usageLimits.webUsersLimit !== null && usageLimits.webUsersUsed >= usageLimits.webUsersLimit;
+
+  return (
+    <div className="tex-drawer-backdrop admin-drawer-backdrop" role="presentation">
+      <aside className="tex-drawer admin-user-drawer" role="dialog" aria-modal="true" aria-labelledby="invite-user-title">
+        <div className="section-heading-row">
+          <div>
+            <p className="eyebrow">Web access</p>
+            <h2 id="invite-user-title">Invite web user</h2>
+            <p className="admin-panel-copy">Create the user membership and send the invitation email from Torrevie.</p>
+          </div>
+          <a className="tex-secondary-button" href={`/${locale}/admin/users`}>
+            Close
+          </a>
+        </div>
+
+        {isLimitReached ? (
+          <p className="tex-error">This tenant has reached its web user limit. Disable a user or upgrade the plan before inviting another user.</p>
+        ) : null}
+
+        <form action={inviteCustomerUserAction} className="tenant-integration-form admin-drawer-form">
+          <input type="hidden" name="locale" value={locale} />
+          <label>
+            Email
+            <input name="email" type="email" required dir="ltr" placeholder="employee@customer.com" disabled={isLimitReached} />
+          </label>
+          <label>
+            Name
+            <input name="displayName" placeholder="Full name" disabled={isLimitReached} />
+          </label>
+          <label>
+            Role
+            <select name="role" defaultValue="customer_standard_user" disabled={isLimitReached}>
+              {assignableCustomerRoles.map((role) => (
+                <option key={role} value={role}>
+                  {formatRole(role)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="tex-drawer-submit-row">
+            <a className="tex-secondary-button" href={`/${locale}/admin/users`}>
+              Cancel
+            </a>
+            <button type="submit" disabled={isLimitReached}>
+              Send invitation
+            </button>
+          </div>
+        </form>
+      </aside>
+    </div>
+  );
 }
 
 function SecretInput({
