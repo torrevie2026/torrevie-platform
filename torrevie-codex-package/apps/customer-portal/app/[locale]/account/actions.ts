@@ -2,6 +2,7 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { getTenantClaimsFromJwt, requireSupabaseBrowserEnv } from "@torrevie/auth";
+import { resolveTenantContext } from "@torrevie/tenant-context";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { PostgresTenantQueryClient } from "../../../lib/server/tenant-query-client";
@@ -122,15 +123,20 @@ async function requireCustomerSession(locale: "en" | "ar") {
   }
 
   const claims = getTenantClaimsFromJwt(authSession.access_token);
+  let tenantId = claims.tenant_id;
 
-  if (!claims.tenant_id) {
-    redirect("/login");
+  if (!tenantId) {
+    try {
+      tenantId = (await resolveTenantContext(new PostgresTenantQueryClient(authSession.user.id), authSession.user.id)).tenantId;
+    } catch {
+      redirect("/login");
+    }
   }
 
   return {
     supabase,
     userId: authSession.user.id,
-    tenantId: claims.tenant_id,
+    tenantId,
     locale
   };
 }
