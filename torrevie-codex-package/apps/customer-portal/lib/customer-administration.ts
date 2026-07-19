@@ -1098,7 +1098,7 @@ async function createCustomerInviteIdentity(email: string): Promise<CustomerInvi
     type: "invite",
     email,
     options: {
-      redirectTo: `${customerPortalUrl()}/login?email=${encodeURIComponent(email)}`
+      redirectTo: customerPasswordSetupCallbackUrl()
     }
   });
 
@@ -1113,7 +1113,7 @@ async function createCustomerInviteIdentity(email: string): Promise<CustomerInvi
         type: "recovery",
         email,
         options: {
-          redirectTo: `${customerPortalUrl()}/login?email=${encodeURIComponent(email)}`
+          redirectTo: customerPasswordSetupCallbackUrl()
         }
       });
 
@@ -1150,7 +1150,7 @@ async function createCustomerPasswordResetLink(email: string) {
     type: "recovery",
     email,
     options: {
-      redirectTo: `${customerPortalUrl()}/login?email=${encodeURIComponent(email)}`
+      redirectTo: customerPasswordSetupCallbackUrl()
     }
   });
 
@@ -1206,7 +1206,7 @@ async function getCustomerUserEmail(client: TenantQueryClient, userId: string) {
 
 async function sendCustomerInviteEmail(input: CustomerInviteEmailInput) {
   const title = input.kind === "existing_user" ? "Torrevie access granted" : "Torrevie invitation";
-  const cta = input.kind === "existing_user" ? "Open your workspace" : "Accept invitation";
+  const cta = input.kind === "existing_user" ? "Open your workspace" : "Set your password";
   const result = await dispatchEmailNotification({
     to: input.email,
     subject: `${input.tenantName} Torrevie access`,
@@ -1280,7 +1280,21 @@ function normalizePortalUrl(value: string | undefined) {
     return null;
   }
 
-  return /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+  const url = /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+
+  return isAdminPortalUrl(url) ? null : url;
+}
+
+function customerPasswordSetupCallbackUrl() {
+  return `${customerPortalUrl()}/auth/callback?next=${encodeURIComponent("/en/account?setup=password")}`;
+}
+
+function isAdminPortalUrl(value: string) {
+  try {
+    return new URL(value).hostname.toLowerCase() === "admin.torrevie.com";
+  } catch {
+    return false;
+  }
 }
 
 function isAlreadyRegisteredError(message: string) {

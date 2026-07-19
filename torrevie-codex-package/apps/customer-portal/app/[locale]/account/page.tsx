@@ -21,6 +21,7 @@ const profileMessages: Record<string, string> = {
 };
 
 const passwordMessages: Record<string, string> = {
+  required: "Set your password before continuing.",
   too_short: "Use at least 8 characters.",
   mismatch: "The new passwords do not match.",
   failed: "Password update failed.",
@@ -32,7 +33,7 @@ export default async function CustomerAccountPage({
   searchParams
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ profile?: string; password?: string }>;
+  searchParams: Promise<{ profile?: string; password?: string; setup?: string }>;
 }) {
   const { locale: rawLocale } = await params;
 
@@ -51,6 +52,60 @@ export default async function CustomerAccountPage({
   const tenantContext = await resolveCustomerTenantContext(client, session);
   const requirements = await getCustomerAccessRequirements(client, tenantContext);
   const messages = await searchParams;
+  const showPasswordSetupFirst =
+    messages.setup === "password" || requirements.requirePasswordChange || messages.password === "required";
+  const passwordPanel = (
+    <section className="tex-form-panel" aria-label="Password">
+      <h2>{showPasswordSetupFirst ? "Set your password" : "Password"}</h2>
+      {messages.password ? <p className="tex-notice">{passwordMessages[messages.password] ?? "Password update failed."}</p> : null}
+      <form action={changeCustomerPasswordAction} className="customer-account-form">
+        <input type="hidden" name="locale" value={locale} />
+        <label>
+          New password
+          <input name="newPassword" type="password" minLength={8} autoComplete="new-password" required />
+        </label>
+        <label>
+          Confirm new password
+          <input name="confirmPassword" type="password" minLength={8} autoComplete="new-password" required />
+        </label>
+        <button type="submit" className="tex-primary-button">
+          {showPasswordSetupFirst ? "Set password" : "Update password"}
+        </button>
+      </form>
+    </section>
+  );
+  const profilePanel = (
+    <section className="tex-form-panel" aria-label="Profile">
+      <h2>Profile</h2>
+      {messages.profile ? <p className="tex-notice">{profileMessages[messages.profile] ?? "Profile update failed."}</p> : null}
+      <form action={updateCustomerProfileAction} className="customer-account-form">
+        <input type="hidden" name="locale" value={locale} />
+        <label>
+          First name
+          <input name="firstName" defaultValue={requirements.firstName} required />
+        </label>
+        <label>
+          Last name
+          <input name="lastName" defaultValue={requirements.lastName} required />
+        </label>
+        <label>
+          Display name
+          <input name="displayName" defaultValue={requirements.displayName} required />
+        </label>
+        <label>
+          Mobile number
+          <input name="mobileNumber" defaultValue={requirements.mobileNumber} required />
+        </label>
+        <label>
+          Recovery email
+          <input name="recoveryEmail" type="email" defaultValue={requirements.recoveryEmail} required />
+        </label>
+        <button type="submit" className="tex-primary-button">
+          Save profile
+        </button>
+      </form>
+    </section>
+  );
 
   return (
     <main className="customer-shell" lang={locale} dir={dirForLocale(locale)}>
@@ -82,55 +137,8 @@ export default async function CustomerAccountPage({
         </header>
 
         <section className="customer-account-grid">
-          <section className="tex-form-panel" aria-label="Profile">
-            <h2>Profile</h2>
-            {messages.profile ? <p className="tex-notice">{profileMessages[messages.profile] ?? "Profile update failed."}</p> : null}
-            <form action={updateCustomerProfileAction} className="customer-account-form">
-              <input type="hidden" name="locale" value={locale} />
-              <label>
-                First name
-                <input name="firstName" defaultValue={requirements.firstName} required />
-              </label>
-              <label>
-                Last name
-                <input name="lastName" defaultValue={requirements.lastName} required />
-              </label>
-              <label>
-                Display name
-                <input name="displayName" defaultValue={requirements.displayName} required />
-              </label>
-              <label>
-                Mobile number
-                <input name="mobileNumber" defaultValue={requirements.mobileNumber} required />
-              </label>
-              <label>
-                Recovery email
-                <input name="recoveryEmail" type="email" defaultValue={requirements.recoveryEmail} required />
-              </label>
-              <button type="submit" className="tex-primary-button">
-                Save profile
-              </button>
-            </form>
-          </section>
-
-          <section className="tex-form-panel" aria-label="Password">
-            <h2>Password</h2>
-            {messages.password ? <p className="tex-notice">{passwordMessages[messages.password] ?? "Password update failed."}</p> : null}
-            <form action={changeCustomerPasswordAction} className="customer-account-form">
-              <input type="hidden" name="locale" value={locale} />
-              <label>
-                New password
-                <input name="newPassword" type="password" minLength={8} required />
-              </label>
-              <label>
-                Confirm new password
-                <input name="confirmPassword" type="password" minLength={8} required />
-              </label>
-              <button type="submit" className="tex-primary-button">
-                Update password
-              </button>
-            </form>
-          </section>
+          {showPasswordSetupFirst ? passwordPanel : profilePanel}
+          {showPasswordSetupFirst ? profilePanel : passwordPanel}
 
           <section className="tex-form-panel" aria-label="MFA">
             <h2>Authenticator MFA</h2>
