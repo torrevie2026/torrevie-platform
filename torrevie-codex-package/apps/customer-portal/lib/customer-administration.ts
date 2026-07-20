@@ -165,6 +165,10 @@ export function setCustomerPasswordResetEmailDispatcherForTests(
   customerPasswordResetEmailDispatcher = dispatcher ?? sendCustomerPasswordResetEmail;
 }
 
+export function resolveCustomerPasswordSetupCallbackUrlForTests() {
+  return customerPasswordSetupCallbackUrl();
+}
+
 export async function listCustomerMembers(
   client: TenantQueryClient,
   actor: CustomerAdminContext
@@ -1241,32 +1245,39 @@ function getSupabaseAdminClient() {
 
 function customerPortalUrl() {
   return (
-    normalizePortalUrl(process.env.CUSTOMER_PORTAL_URL) ||
-    normalizePortalUrl(process.env.NEXT_PUBLIC_CUSTOMER_PORTAL_URL) ||
-    normalizePortalUrl(process.env.NEXT_PUBLIC_APP_URL) ||
-    normalizePortalUrl(process.env.VERCEL_PROJECT_PRODUCTION_URL) ||
+    normalizeCustomerPortalUrl(process.env.CUSTOMER_PORTAL_URL) ||
+    normalizeCustomerPortalUrl(process.env.NEXT_PUBLIC_CUSTOMER_PORTAL_URL) ||
+    normalizeCustomerPortalUrl(process.env.NEXT_PUBLIC_APP_URL) ||
+    normalizeCustomerPortalUrl(process.env.VERCEL_PROJECT_PRODUCTION_URL) ||
     "https://app.torrevie.com"
   );
 }
 
-function normalizePortalUrl(value: string | undefined) {
-  const clean = value?.trim().replace(/\/$/, "");
+function normalizeCustomerPortalUrl(value: string | undefined) {
+  const clean = value?.trim().replace(/^['"]|['"]$/g, "").replace(/\/$/, "");
   if (!clean) {
     return null;
   }
 
   const url = /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
 
-  return isAdminPortalUrl(url) ? null : url;
+  return isCustomerPortalUrl(url) ? url : null;
 }
 
 function customerPasswordSetupCallbackUrl() {
   return `${customerPortalUrl()}/auth/callback?next=${encodeURIComponent("/en/account?setup=password")}`;
 }
 
-function isAdminPortalUrl(value: string) {
+function isCustomerPortalUrl(value: string) {
   try {
-    return new URL(value).hostname.toLowerCase() === "admin.torrevie.com";
+    const hostname = new URL(value).hostname.toLowerCase();
+    return (
+      hostname === "app.torrevie.com" ||
+      hostname === "torrevie-customer-portal-production.vercel.app" ||
+      hostname === "torrevie-customer-portal-staging.vercel.app" ||
+      hostname.endsWith("-torrevie-customer-portal-production.vercel.app") ||
+      hostname.endsWith("-torrevie-customer-portal-staging.vercel.app")
+    );
   } catch {
     return false;
   }
