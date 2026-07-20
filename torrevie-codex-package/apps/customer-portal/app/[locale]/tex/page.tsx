@@ -1,4 +1,5 @@
 import { CheckCircle2, Clock, MapPin, Receipt, WalletCards } from "lucide-react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   getTexOnboardingStatus,
@@ -16,33 +17,27 @@ import { isTexSessionError, requireTexRequestContext } from "./tex-request-conte
 
 export const runtime = "nodejs";
 
-export default async function TexPage({
-  params
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function TexPage({ params }: { params: Promise<{ locale: string }> }) {
   try {
     const { locale } = await params;
-    const { actor, client, session } = await requireTexRequestContext(locale === "ar" ? "ar" : "en", "/tex");
+    const { actor, client, session } = await requireTexRequestContext(
+      locale === "ar" ? "ar" : "en",
+      "/tex"
+    );
     const now = new Date();
     const growthFeaturesEnabled = actor.texPlan.growthFeaturesEnabled;
     const bootstrap = await listTexBootstrap(client, actor);
     const expenses = await listTexExpenses(client, actor);
     const onboarding = await getTexOnboardingStatus(client, actor, { markDashboardViewed: true });
-    const trips = growthFeaturesEnabled ? await listTexTrips(client, actor) : [];
-    const financeReview = growthFeaturesEnabled
-      ? await listTexFinanceReview(client, actor, now.getUTCMonth() + 1, now.getUTCFullYear())
-      : emptyFinanceReview(now);
-    const reportWorkspace = await listTexReportWorkspace(client, actor).catch(() => null);
-    const reportExpenses = reportWorkspace?.expenses ?? [];
     const pendingCount = expenses.filter((expense) => expense.status === "pending").length;
     const approvedCount = expenses.filter((expense) => expense.status === "approved").length;
-    const openTripCount = trips.filter((trip) => trip.status === "open").length;
-    const paidCount = reportExpenses.filter((expense) => expense.status === "paid").length;
-    const rejectedCount = reportExpenses.filter((expense) => expense.status === "rejected").length;
-    const categorySpend = buildCategorySpend(reportExpenses);
-    const maxCategorySpend = Math.max(...categorySpend.map((item) => item.amount), 1);
-    const onboardingTasks = buildOnboardingTasks(locale, onboarding, bootstrap, expenses, growthFeaturesEnabled);
+    const onboardingTasks = buildOnboardingTasks(
+      locale,
+      onboarding,
+      bootstrap,
+      expenses,
+      growthFeaturesEnabled
+    );
     const requiredOnboardingTasks = onboardingTasks.filter((task) => task.required);
     const completedTasks = requiredOnboardingTasks.filter((task) => task.completed).length;
     const onboardingProgress = Math.round((completedTasks / requiredOnboardingTasks.length) * 100);
@@ -63,7 +58,9 @@ export default async function TexPage({
             <div className="customer-context tex-context" aria-label="TEX context">
               <span>Tenant scoped by RLS</span>
               <span>TEX entitlement active</span>
-              <span>{bootstrap.integrationSettings?.whatsappProvider ?? "No WhatsApp provider"}</span>
+              <span>
+                {bootstrap.integrationSettings?.whatsappProvider ?? "No WhatsApp provider"}
+              </span>
             </div>
           </header>
 
@@ -77,12 +74,26 @@ export default async function TexPage({
       );
     }
 
+    const trips = growthFeaturesEnabled ? await listTexTrips(client, actor) : [];
+    const financeReview = growthFeaturesEnabled
+      ? await listTexFinanceReview(client, actor, now.getUTCMonth() + 1, now.getUTCFullYear())
+      : emptyFinanceReview(now);
+    const reportWorkspace = await listTexReportWorkspace(client, actor).catch(() => null);
+    const reportExpenses = reportWorkspace?.expenses ?? [];
+    const openTripCount = trips.filter((trip) => trip.status === "open").length;
+    const paidCount = reportExpenses.filter((expense) => expense.status === "paid").length;
+    const rejectedCount = reportExpenses.filter((expense) => expense.status === "rejected").length;
+    const categorySpend = buildCategorySpend(reportExpenses);
+    const maxCategorySpend = Math.max(...categorySpend.map((item) => item.amount), 1);
+
     return (
       <>
         <header className="customer-topbar tex-topbar">
           <div>
             <p className="eyebrow">TEX workspace</p>
-            <h1>{growthFeaturesEnabled ? "Travel and expense operations" : "TEX expense workspace"}</h1>
+            <h1>
+              {growthFeaturesEnabled ? "Travel and expense operations" : "TEX expense workspace"}
+            </h1>
             <p>
               {growthFeaturesEnabled
                 ? "Start from the role dashboard, then use the TEX menu to move into expenses, trips, finance review, people, reports, integrations, and settings."
@@ -117,7 +128,7 @@ export default async function TexPage({
           </div>
           <div className="tex-onboarding-steps">
             {onboardingTasks.map((task) => (
-              <a
+              <Link
                 aria-current={nextOnboardingTask?.key === task.key ? "step" : undefined}
                 className={`tex-onboarding-step${task.completed ? " tex-onboarding-step-complete" : ""}`}
                 href={task.href}
@@ -127,8 +138,14 @@ export default async function TexPage({
                   <strong>{task.label}</strong>
                   <small>{task.detail}</small>
                 </span>
-                <b>{task.completed ? "Completed" : nextOnboardingTask?.key === task.key ? "Next" : "Pending"}</b>
-              </a>
+                <b>
+                  {task.completed
+                    ? "Completed"
+                    : nextOnboardingTask?.key === task.key
+                      ? "Next"
+                      : "Pending"}
+                </b>
+              </Link>
             ))}
           </div>
         </section>
@@ -155,8 +172,14 @@ export default async function TexPage({
               <MapPin />
             </span>
             <span>{growthFeaturesEnabled ? "Open trips" : "Employees"}</span>
-            <strong>{growthFeaturesEnabled ? openTripCount : bootstrap.employeeProfiles.length}</strong>
-            <small>{growthFeaturesEnabled ? "Active trip budgets and legs" : "People in this TEX workspace"}</small>
+            <strong>
+              {growthFeaturesEnabled ? openTripCount : bootstrap.employeeProfiles.length}
+            </strong>
+            <small>
+              {growthFeaturesEnabled
+                ? "Active trip budgets and legs"
+                : "People in this TEX workspace"}
+            </small>
           </article>
           <article className="tex-kpi-card tex-kpi-gold">
             <span className="tex-kpi-icon" aria-hidden="true">
@@ -175,7 +198,7 @@ export default async function TexPage({
                 <p className="eyebrow">Expense flow</p>
                 <h2>Status distribution</h2>
               </div>
-              <a href={`/${locale}/tex/reports`}>Open reports</a>
+              <Link href={`/${locale}/tex/reports`}>Open reports</Link>
             </div>
             <div className="tex-status-chart" aria-label="Expense status chart">
               {[
@@ -276,12 +299,18 @@ function TexTrialOnboardingGate({
   tasks: ReturnType<typeof buildOnboardingTasks>;
 }) {
   return (
-    <section className="tex-analytics-panel tex-onboarding-gate" aria-label="TEX starter onboarding">
+    <section
+      className="tex-analytics-panel tex-onboarding-gate"
+      aria-label="TEX starter onboarding"
+    >
       <div className="section-heading-row">
         <div>
           <p className="eyebrow">Starter onboarding</p>
           <h2>Prepare your TEX workspace</h2>
-          <p>Follow these steps in order so receipts, employees, and approvals are ready before the dashboard opens.</p>
+          <p>
+            Follow these steps in order so receipts, employees, and approvals are ready before the
+            dashboard opens.
+          </p>
         </div>
         <strong>{progress}%</strong>
       </div>
@@ -306,13 +335,13 @@ function TexTrialOnboardingGate({
                 <strong>{task.label}</strong>
                 <small>{task.detail}</small>
               </span>
-              <a
+              <Link
                 aria-disabled={!task.completed && !isNext}
                 className={isNext ? "tex-primary-link" : "tex-secondary-link"}
                 href={task.completed || isNext ? task.href : "#"}
               >
                 {task.completed ? "Review" : isNext ? "Start" : "Next"}
-              </a>
+              </Link>
             </article>
           );
         })}
@@ -331,7 +360,9 @@ function buildOnboardingTasks(
   const hasWhatsappRoute = Boolean(
     onboarding.whatsappConnectedAt || bootstrap.integrationSettings?.whatsappProvider
   );
-  const hasAdditionalEmployee = bootstrap.employeeProfiles.some((employee) => employee.userId === null);
+  const hasAdditionalEmployee = bootstrap.employeeProfiles.some(
+    (employee) => employee.userId === null
+  );
   const hasReceipt = Boolean(
     onboarding.firstReceiptReceivedAt || expenses.some((expense) => expense.receiptFileId)
   );
@@ -344,7 +375,9 @@ function buildOnboardingTasks(
     {
       key: "whatsapp",
       label: "Connect WhatsApp",
-      detail: hasWhatsappRoute ? "Receipt intake route is ready" : "Scan Quick Connect and send a test receipt",
+      detail: hasWhatsappRoute
+        ? "Receipt intake route is ready"
+        : "Scan Quick Connect and send a test receipt",
       href: `/${locale}/tex/integrations`,
       completed: hasWhatsappRoute,
       required: true
@@ -352,7 +385,9 @@ function buildOnboardingTasks(
     {
       key: "people",
       label: "Add employees",
-      detail: hasAdditionalEmployee ? "Driver or employee profile exists" : "Add at least one sender profile",
+      detail: hasAdditionalEmployee
+        ? "Driver or employee profile exists"
+        : "Add at least one sender profile",
       href: `/${locale}/tex/people`,
       completed: hasAdditionalEmployee,
       required: true
@@ -376,7 +411,9 @@ function buildOnboardingTasks(
     {
       key: "modules",
       label: growthFeaturesEnabled ? "Open trips" : "Growth modules",
-      detail: growthFeaturesEnabled ? "Plan trips and driver payouts" : "Upgrade when trips and finance are needed",
+      detail: growthFeaturesEnabled
+        ? "Plan trips and driver payouts"
+        : "Upgrade when trips and finance are needed",
       href: growthFeaturesEnabled ? `/${locale}/tex/trips` : `/${locale}/tex?upgrade=growth`,
       completed: growthFeaturesEnabled,
       required: false

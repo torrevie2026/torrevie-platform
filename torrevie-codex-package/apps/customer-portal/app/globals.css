@@ -610,6 +610,49 @@ a {
   font-weight: 800;
 }
 
+.tex-skeleton {
+  animation: tex-skeleton-pulse 1.2s ease-in-out infinite;
+  background: linear-gradient(90deg, #eef2f7 25%, #f7f9fb 50%, #eef2f7 75%);
+  background-size: 220% 100%;
+  border-radius: 6px;
+  display: block;
+}
+
+.tex-skeleton-pill {
+  block-size: 34px;
+  inline-size: 34px;
+}
+
+.tex-skeleton-line {
+  block-size: 13px;
+  inline-size: min(100%, 220px);
+}
+
+.tex-skeleton-metric {
+  block-size: 32px;
+  inline-size: 86px;
+}
+
+.tex-skeleton-title {
+  block-size: 22px;
+  inline-size: min(60%, 260px);
+}
+
+.tex-skeleton-block {
+  block-size: 190px;
+  inline-size: 100%;
+}
+
+@keyframes tex-skeleton-pulse {
+  0% {
+    background-position: 220% 0;
+  }
+
+  100% {
+    background-position: -220% 0;
+  }
+}
+
 .tex-bar-list {
   display: grid;
   gap: 14px;
@@ -1047,7 +1090,9 @@ a {
   border-block-start: 1px solid var(--color-border);
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(220px, 2fr) minmax(96px, 0.8fr) minmax(150px, 1fr) minmax(108px, 0.7fr) minmax(260px, auto);
+  grid-template-columns:
+    minmax(220px, 2fr) minmax(96px, 0.8fr) minmax(150px, 1fr) minmax(108px, 0.7fr)
+    minmax(260px, auto);
   min-block-size: 64px;
   padding-block: 10px;
 }
