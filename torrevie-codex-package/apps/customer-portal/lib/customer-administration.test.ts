@@ -7,6 +7,7 @@ import {
   inviteCustomerUser,
   listCustomerMembers,
   removeCustomerUser,
+  resolveCustomerPasswordSetupCallbackUrlForTests,
   sendCustomerPasswordReset,
   setCustomerMembershipStatus,
   setCustomerInviteEmailDispatcherForTests,
@@ -486,6 +487,40 @@ async function main() {
         mfaEnrolled: false
       }
     ]);
+  }
+
+  {
+    const previousEnv = {
+      CUSTOMER_PORTAL_URL: process.env.CUSTOMER_PORTAL_URL,
+      NEXT_PUBLIC_CUSTOMER_PORTAL_URL: process.env.NEXT_PUBLIC_CUSTOMER_PORTAL_URL,
+      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+      VERCEL_PROJECT_PRODUCTION_URL: process.env.VERCEL_PROJECT_PRODUCTION_URL
+    };
+
+    try {
+      delete process.env.CUSTOMER_PORTAL_URL;
+      delete process.env.NEXT_PUBLIC_CUSTOMER_PORTAL_URL;
+      process.env.NEXT_PUBLIC_APP_URL = "https://admin.torrevie.com";
+      process.env.VERCEL_PROJECT_PRODUCTION_URL = "torrevie-admin-portal-production.vercel.app";
+      assert.equal(
+        resolveCustomerPasswordSetupCallbackUrlForTests(),
+        "https://app.torrevie.com/auth/callback?next=%2Fen%2Faccount%3Fsetup%3Dpassword"
+      );
+
+      process.env.CUSTOMER_PORTAL_URL = '"https://app.torrevie.com/"';
+      assert.equal(
+        resolveCustomerPasswordSetupCallbackUrlForTests(),
+        "https://app.torrevie.com/auth/callback?next=%2Fen%2Faccount%3Fsetup%3Dpassword"
+      );
+    } finally {
+      for (const [key, value] of Object.entries(previousEnv)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    }
   }
 
   console.log("Customer administration tests passed.");
