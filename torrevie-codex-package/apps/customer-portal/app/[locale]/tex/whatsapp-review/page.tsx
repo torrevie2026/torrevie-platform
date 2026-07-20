@@ -8,9 +8,15 @@ import { isTexSessionError, requireTexRequestContext } from "../tex-request-cont
 
 export const runtime = "nodejs";
 
-export default async function TexWhatsappReviewPage() {
+export default async function TexWhatsappReviewPage({
+  params
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+
   try {
-    const { actor, client } = await requireTexRequestContext();
+    const { actor, client } = await requireTexRequestContext(locale === "ar" ? "ar" : "en", "/tex/whatsapp-review");
     const bootstrap = await listTexBootstrap(client, actor);
     const whatsappSubmissions = await listTexUnregisteredWhatsappSubmissions(client, actor, "open").catch(() => []);
 

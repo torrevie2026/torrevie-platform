@@ -23,7 +23,7 @@ export default async function TexPage({
 }) {
   try {
     const { locale } = await params;
-    const { actor, client, session } = await requireTexRequestContext();
+    const { actor, client, session } = await requireTexRequestContext(locale === "ar" ? "ar" : "en", "/tex");
     const now = new Date();
     const growthFeaturesEnabled = actor.texPlan.growthFeaturesEnabled;
     const bootstrap = await listTexBootstrap(client, actor);

@@ -14,7 +14,7 @@ export default async function TexPeoplePage({
   const { locale } = await params;
 
   try {
-    const { actor, client } = await requireTexRequestContext();
+    const { actor, client } = await requireTexRequestContext(locale === "ar" ? "ar" : "en", "/tex/people");
     const bootstrap = await listTexBootstrap(client, actor);
     const canManagePeople = hasPermission({
       entitledProducts: actor.entitledProducts,

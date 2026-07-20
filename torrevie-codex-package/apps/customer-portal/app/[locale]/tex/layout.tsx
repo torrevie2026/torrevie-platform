@@ -22,7 +22,7 @@ export default async function TexLayout({
   const locale = rawLocale as Locale;
 
   try {
-    const { actor, session } = await requireTexRequestContext();
+    const { actor, session } = await requireTexRequestContext(locale, "/tex");
 
     return (
       <main className="customer-shell tex-shell" data-visual-check="tex-platform">

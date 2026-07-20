@@ -13,7 +13,7 @@ export default async function TexFinanceReviewPage({
   const { locale } = await params;
 
   try {
-    const { actor, client } = await requireTexRequestContext();
+    const { actor, client } = await requireTexRequestContext(locale === "ar" ? "ar" : "en", "/tex/finance-review");
     if (!actor.texPlan.growthFeaturesEnabled) {
       redirect(`/${locale}/tex?upgrade=growth`);
     }
