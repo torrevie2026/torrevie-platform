@@ -2,6 +2,7 @@ import { dirForLocale, isLocale, type Locale } from "@torrevie/localization";
 import { notFound, redirect } from "next/navigation";
 import {
   getCustomerAccessRequirements,
+  getCustomerMfaAssurance,
   requireVerifiedCustomerSession,
   resolveCustomerAccountTenantContext
 } from "../../../lib/server/customer-session";
@@ -28,12 +29,16 @@ const passwordMessages: Record<string, string> = {
   updated: "Password updated."
 };
 
+const mfaMessages: Record<string, string> = {
+  required: "Set up authenticator MFA before continuing."
+};
+
 export default async function CustomerAccountPage({
   params,
   searchParams
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ profile?: string; password?: string; setup?: string }>;
+  searchParams: Promise<{ mfa?: string; profile?: string; password?: string; setup?: string }>;
 }) {
   const { locale: rawLocale } = await params;
 
@@ -52,8 +57,19 @@ export default async function CustomerAccountPage({
   const tenantContext = await resolveCustomerAccountTenantContext(client, session);
   const requirements = await getCustomerAccessRequirements(client, tenantContext);
   const messages = await searchParams;
+  const isPasswordSetup = messages.setup === "password";
+  const isMfaSetup = messages.mfa === "required";
+
+  if (!isPasswordSetup && !isMfaSetup && requirements.requireMfa && requirements.mfaEnrolled) {
+    const mfaAssurance = await getCustomerMfaAssurance();
+
+    if (mfaAssurance.requiresChallenge) {
+      redirect(`/${locale}/mfa?next=${encodeURIComponent(`/${locale}/account`)}`);
+    }
+  }
+
   const showPasswordSetupFirst =
-    messages.setup === "password" || requirements.requirePasswordChange || messages.password === "required";
+    isPasswordSetup || requirements.requirePasswordChange || messages.password === "required";
   const passwordPanel = (
     <section className="tex-form-panel" aria-label="Password">
       <h2>{showPasswordSetupFirst ? "Set your password" : "Password"}</h2>
@@ -142,6 +158,7 @@ export default async function CustomerAccountPage({
 
           <section className="tex-form-panel" aria-label="MFA">
             <h2>Authenticator MFA</h2>
+            {messages.mfa ? <p className="tex-notice">{mfaMessages[messages.mfa] ?? "Authenticator MFA is required."}</p> : null}
             <p>Optional unless your tenant admin requires it.</p>
             <CustomerMfaSettings />
           </section>

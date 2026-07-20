@@ -3,6 +3,7 @@ import { withTenantContext, type ResolvedTenantContext } from "@torrevie/tenant-
 import { notFound, redirect } from "next/navigation";
 import {
   getCustomerAccessRequirements,
+  getCustomerMfaAssurance,
   isCustomerSessionError,
   requireVerifiedCustomerSession,
   resolveCustomerTenantContext
@@ -122,6 +123,14 @@ export default async function CustomerPortalShell({
 
     if (requirements.requireMfa && !requirements.mfaEnrolled) {
       redirect(`/${locale}/account?mfa=required`);
+    }
+
+    if (requirements.requireMfa) {
+      const mfaAssurance = await getCustomerMfaAssurance();
+
+      if (mfaAssurance.requiresChallenge) {
+        redirect(`/${locale}/mfa?next=${encodeURIComponent(`/${locale}`)}`);
+      }
     }
 
     const launcher = await listLauncherData(client, tenantContext, locale);

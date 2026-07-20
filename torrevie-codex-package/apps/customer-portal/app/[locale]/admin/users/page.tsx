@@ -10,6 +10,8 @@ import {
   type CustomerAdminContext
 } from "../../../../lib/customer-administration";
 import {
+  getCustomerAccessRequirements,
+  getCustomerMfaAssurance,
   isCustomerSessionError,
   requireVerifiedCustomerSession,
   resolveCustomerTenantContext
@@ -45,7 +47,7 @@ export default async function CustomerUsersPage({
   const admin = t.adminUsers;
 
   try {
-    const { actor, client, tenantName } = await resolveActor();
+    const { actor, client, tenantName } = await resolveActor(locale);
     const members = await listCustomerMembers(client, actor);
     const whatsappSettings = await getTenantWhatsappSettings(client, actor);
     const usageLimits = await getTenantUsageLimits(client, actor);
@@ -503,10 +505,32 @@ function formatRole(role: string) {
     .join(" ");
 }
 
-async function resolveActor() {
+async function resolveActor(locale: Locale) {
   const session = await requireVerifiedCustomerSession();
   const client = new PostgresTenantQueryClient(session.userId);
   const tenantContext = await resolveCustomerTenantContext(client, session);
+  const requirements = await getCustomerAccessRequirements(client, tenantContext);
+
+  if (requirements.requireProfileCompletion && !requirements.profileComplete) {
+    redirect(`/${locale}/account?profile=required`);
+  }
+
+  if (requirements.requirePasswordChange) {
+    redirect(`/${locale}/account?password=required`);
+  }
+
+  if (requirements.requireMfa && !requirements.mfaEnrolled) {
+    redirect(`/${locale}/account?mfa=required`);
+  }
+
+  if (requirements.requireMfa) {
+    const mfaAssurance = await getCustomerMfaAssurance();
+
+    if (mfaAssurance.requiresChallenge) {
+      redirect(`/${locale}/mfa?next=${encodeURIComponent(`/${locale}/admin/users`)}`);
+    }
+  }
+
   const rolesResult = await client.query<{ key: string }>(
     `
       select r.key

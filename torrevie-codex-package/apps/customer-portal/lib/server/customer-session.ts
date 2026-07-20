@@ -27,6 +27,12 @@ export type CustomerAccessRequirements = {
   mfaEnrolled: boolean;
 };
 
+export type CustomerMfaAssurance = {
+  currentLevel: string | null;
+  nextLevel: string | null;
+  requiresChallenge: boolean;
+};
+
 export async function requireVerifiedCustomerSession(): Promise<VerifiedCustomerSession> {
   const cookieStore = await cookies();
   const { url, anonKey } = requireSupabaseBrowserEnv();
@@ -172,6 +178,36 @@ export async function getCustomerAccessRequirements(
     requirePasswordChange: profile?.require_password_change ?? false,
     requireMfa: profile?.require_mfa ?? false,
     mfaEnrolled: user?.mfa_enrolled ?? false
+  };
+}
+
+export async function getCustomerMfaAssurance(): Promise<CustomerMfaAssurance> {
+  const cookieStore = await cookies();
+  const { url, anonKey } = requireSupabaseBrowserEnv();
+  const supabase = createServerClient(url, anonKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll() {
+        return;
+      }
+    }
+  });
+  const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+
+  if (error) {
+    return {
+      currentLevel: null,
+      nextLevel: null,
+      requiresChallenge: true
+    };
+  }
+
+  return {
+    currentLevel: data.currentLevel ?? null,
+    nextLevel: data.nextLevel ?? null,
+    requiresChallenge: data.nextLevel === "aal2" && data.currentLevel !== "aal2"
   };
 }
 

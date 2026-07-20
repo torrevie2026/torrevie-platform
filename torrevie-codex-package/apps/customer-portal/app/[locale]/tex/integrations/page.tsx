@@ -13,7 +13,7 @@ export default async function TexIntegrationsPage({
   const { locale } = await params;
 
   try {
-    const { actor, client } = await requireTexRequestContext();
+    const { actor, client } = await requireTexRequestContext(locale === "ar" ? "ar" : "en", "/tex/integrations");
     const integrationWorkspace = await listTexIntegrationWorkspace(client, actor).catch(() => null);
 
     return (

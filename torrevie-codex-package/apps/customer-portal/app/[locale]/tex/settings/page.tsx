@@ -5,9 +5,15 @@ import { isTexSessionError, requireTexRequestContext } from "../tex-request-cont
 
 export const runtime = "nodejs";
 
-export default async function TexSettingsPage() {
+export default async function TexSettingsPage({
+  params
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+
   try {
-    const { actor, client } = await requireTexRequestContext();
+    const { actor, client } = await requireTexRequestContext(locale === "ar" ? "ar" : "en", "/tex/settings");
     const now = new Date();
     const settingsWorkspace = await listTexSettingsWorkspace(
       client,

@@ -5,6 +5,7 @@ import { businessSegments, fsmPlanTiers, segmentLabels, suggestedPlanForSegment 
 import { term } from "../../../config/terminology";
 import {
   getCustomerAccessRequirements,
+  getCustomerMfaAssurance,
   isCustomerSessionError,
   requireVerifiedCustomerSession,
   resolveCustomerTenantContext
@@ -67,6 +68,14 @@ export default async function FsmPage({
 
     if (requirements.requireMfa && !requirements.mfaEnrolled) {
       redirect(`/${locale}/account?mfa=required`);
+    }
+
+    if (requirements.requireMfa) {
+      const mfaAssurance = await getCustomerMfaAssurance();
+
+      if (mfaAssurance.requiresChallenge) {
+        redirect(`/${locale}/mfa?next=${encodeURIComponent(`/${locale}/fsm`)}`);
+      }
     }
 
     const workspace = await resolveFsmWorkspace(client, tenantContext, locale);

@@ -5,9 +5,15 @@ import { isTexSessionError, requireTexRequestContext } from "../tex-request-cont
 
 export const runtime = "nodejs";
 
-export default async function TexReportsPage() {
+export default async function TexReportsPage({
+  params
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+
   try {
-    const { actor, client } = await requireTexRequestContext();
+    const { actor, client } = await requireTexRequestContext(locale === "ar" ? "ar" : "en", "/tex/reports");
     const reportWorkspace = await listTexReportWorkspace(client, actor).catch(() => null);
 
     return (
