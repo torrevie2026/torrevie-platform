@@ -1015,6 +1015,14 @@ async function main() {
 
   {
     const client = new RecordingTexClient();
+    await listTexExpenses(client, standardActor);
+    assert.equal(client.hasSql("e.submitter_user_id = $2"), true);
+    assert.equal(client.hasSql("ep.user_id = $2"), true);
+    assert.equal(client.valuesContain(standardActor.userId), true);
+  }
+
+  {
+    const client = new RecordingTexClient();
     const report = await listTexReportWorkspace(client, actor, {
       dateFrom: "2026-07-01",
       dateTo: "2026-07-31"

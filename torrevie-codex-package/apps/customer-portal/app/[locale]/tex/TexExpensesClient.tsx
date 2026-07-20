@@ -11,10 +11,13 @@ import type {
 import { prepareReceiptUpload, readTexJsonResponse } from "./TexReceiptUploadClient";
 
 type TexExpensesClientProps = {
+  canApprove: boolean;
+  canMarkPaid: boolean;
   categories: TexBootstrap["categories"];
   employees: TexBootstrap["employeeProfiles"];
-  trips: TexTripListItem[];
   initialExpenses: TexExpenseListItem[];
+  ownExpenseView: boolean;
+  trips: TexTripListItem[];
 };
 
 type ExpenseFormState = {
@@ -99,10 +102,13 @@ function expenseToForm(expense: TexExpenseListItem): ExpenseFormState {
 }
 
 export function TexExpensesClient({
+  canApprove,
+  canMarkPaid,
   categories,
   employees,
-  trips,
-  initialExpenses
+  initialExpenses,
+  ownExpenseView,
+  trips
 }: TexExpensesClientProps) {
   const [expenses, setExpenses] = useState(initialExpenses);
   const [form, setForm] = useState<ExpenseFormState>(blankForm);
@@ -182,7 +188,7 @@ export function TexExpensesClient({
 
     try {
       const body = {
-        employeeProfileId: form.employeeProfileId || null,
+        employeeProfileId: ownExpenseView ? null : form.employeeProfileId || null,
         vendor: form.vendor || null,
         expenseDate: form.expenseDate,
         amount: Number(form.amount),
@@ -347,7 +353,7 @@ export function TexExpensesClient({
   async function bulkUpdateStatus(status: Exclude<TexExpenseStatus, "pending">) {
     const targetIds = selectedExpenses
       .filter((expense) =>
-        status === "approved" ? expense.status === "pending" : expense.status === "approved"
+        status === "approved" ? canApprove && expense.status === "pending" : canMarkPaid && expense.status === "approved"
       )
       .map((expense) => expense.id);
 
@@ -434,22 +440,29 @@ export function TexExpensesClient({
             />
 
             <div className="tex-form-grid">
-              <label className={fieldClass(autoFilledFields, "employeeProfileId")}>
-                Employee
-                <select
-                  value={form.employeeProfileId}
-                  onChange={(event) =>
-                    setFormValue(setForm, "employeeProfileId", event.target.value)
-                  }
-                >
-                  <option value="">Signed-in user</option>
-                  {activeEmployees.map((employee) => (
-                    <option key={employee.id} value={employee.id}>
-                      {employee.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {ownExpenseView ? (
+                <label>
+                  Employee
+                  <input value="Signed-in user" readOnly />
+                </label>
+              ) : (
+                <label className={fieldClass(autoFilledFields, "employeeProfileId")}>
+                  Employee
+                  <select
+                    value={form.employeeProfileId}
+                    onChange={(event) =>
+                      setFormValue(setForm, "employeeProfileId", event.target.value)
+                    }
+                  >
+                    <option value="">Signed-in user</option>
+                    {activeEmployees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>
+                        {employee.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label className={fieldClass(autoFilledFields, "expenseDate")}>
                 Date
                 <input
@@ -638,7 +651,7 @@ export function TexExpensesClient({
                 Edit
               </button>
             </div>
-            {selectedExpense.status === "pending" ? (
+            {selectedExpense.status === "pending" && canApprove ? (
               <div className="tex-hero-actions">
                 <button
                   type="button"
@@ -658,7 +671,7 @@ export function TexExpensesClient({
                 </button>
               </div>
             ) : null}
-            {selectedExpense.status === "approved" ? (
+            {selectedExpense.status === "approved" && canMarkPaid ? (
               <div className="tex-hero-actions">
                 <button
                   type="button"
@@ -682,7 +695,11 @@ export function TexExpensesClient({
         <div className="section-heading-row">
           <div>
             <h3 id="tex-expense-list-title">Expense queue</h3>
-            <p>Review OCR receipts, status, and approvals in one list.</p>
+            <p>
+              {ownExpenseView
+                ? "Submit receipts and track your own expense status."
+                : "Review OCR receipts, status, and approvals in one list."}
+            </p>
           </div>
           <div className="tex-panel-actions">
             <button type="button" className="tex-primary-button" onClick={openNewExpenseDrawer}>
@@ -707,22 +724,26 @@ export function TexExpensesClient({
             ))}
           </div>
           <div className="tex-panel-actions">
-            <button
-              type="button"
-              className="tex-secondary-button"
-              disabled={busyExpenseId === "bulk" || selectedPendingCount === 0}
-              onClick={() => bulkUpdateStatus("approved")}
-            >
-              Approve selected
-            </button>
-            <button
-              type="button"
-              className="tex-secondary-button"
-              disabled={busyExpenseId === "bulk" || selectedApprovedCount === 0}
-              onClick={() => bulkUpdateStatus("paid")}
-            >
-              Mark paid selected
-            </button>
+            {canApprove ? (
+              <button
+                type="button"
+                className="tex-secondary-button"
+                disabled={busyExpenseId === "bulk" || selectedPendingCount === 0}
+                onClick={() => bulkUpdateStatus("approved")}
+              >
+                Approve selected
+              </button>
+            ) : null}
+            {canMarkPaid ? (
+              <button
+                type="button"
+                className="tex-secondary-button"
+                disabled={busyExpenseId === "bulk" || selectedApprovedCount === 0}
+                onClick={() => bulkUpdateStatus("paid")}
+              >
+                Mark paid selected
+              </button>
+            ) : null}
             <span>{visibleExpenses.length} shown</span>
           </div>
         </div>
@@ -742,16 +763,18 @@ export function TexExpensesClient({
                     : `tex-expense-card tex-expense-card-duplicate-${expense.duplicateStatus}`
                 }
               >
-                <label
-                  className="tex-row-checkbox"
-                  aria-label={`Select ${expense.vendor ?? "expense"}`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedExpenseIds.has(expense.id)}
-                    onChange={() => toggleExpenseSelection(expense.id)}
-                  />
-                </label>
+                {canApprove || canMarkPaid ? (
+                  <label
+                    className="tex-row-checkbox"
+                    aria-label={`Select ${expense.vendor ?? "expense"}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedExpenseIds.has(expense.id)}
+                      onChange={() => toggleExpenseSelection(expense.id)}
+                    />
+                  </label>
+                ) : null}
                 <div className="tex-expense-card-main">
                   <div className="tex-expense-card-badges">
                     <span className={`tex-status tex-status-${expense.status}`}>
@@ -779,7 +802,7 @@ export function TexExpensesClient({
                   <button type="button" onClick={() => openEditExpense(expense)}>
                     Edit
                   </button>
-                  {expense.status === "pending" ? (
+                  {expense.status === "pending" && canApprove ? (
                     <>
                       <button
                         type="button"
@@ -796,7 +819,7 @@ export function TexExpensesClient({
                         Reject
                       </button>
                     </>
-                  ) : expense.status === "approved" ? (
+                  ) : expense.status === "approved" && canMarkPaid ? (
                     <button
                       type="button"
                       disabled={busyExpenseId === expense.id}
@@ -818,7 +841,7 @@ export function TexExpensesClient({
                     <button type="button" onClick={() => openEditExpense(expense)}>
                       Edit
                     </button>
-                    {expense.status === "pending" ? (
+                    {expense.status === "pending" && canApprove ? (
                       <>
                         <button
                           type="button"
@@ -835,7 +858,7 @@ export function TexExpensesClient({
                           Reject
                         </button>
                       </>
-                    ) : expense.status === "approved" ? (
+                    ) : expense.status === "approved" && canMarkPaid ? (
                       <button
                         type="button"
                         disabled={busyExpenseId === expense.id}

@@ -1244,6 +1244,7 @@ export async function listTexExpenses(
   actor: TexActorContext
 ): Promise<TexExpenseListItem[]> {
   assertTexPermission(actor, "tex.expense.read");
+  const scopeToOwnExpenses = isTexStandardUserOnly(actor);
 
   return withTenantContext(client, actor, async () => {
     const result = await client.query<TexExpenseListRow>(
@@ -1277,9 +1278,15 @@ export async function listTexExpenses(
           on t.tenant_id = e.tenant_id
          and t.id = e.trip_id
         where e.tenant_id = public.current_tenant_id()
+          and (
+            $1::boolean = false
+            or e.submitter_user_id = $2
+            or ep.user_id = $2
+          )
         order by e.created_at desc
         limit 100
-      `
+      `,
+      [scopeToOwnExpenses, actor.userId]
     );
 
     return result.rows.map(mapExpenseListItem);
@@ -3374,6 +3381,7 @@ export async function getTexReceiptDownload(
 ): Promise<TexReceiptDownload> {
   assertTexPermission(actor, "tex.expense.read");
   assertUuid(receiptId, "receipt id");
+  const scopeToOwnExpenses = isTexStandardUserOnly(actor);
 
   return withTenantContext(client, actor, async () => {
     const result = await client.query<{
@@ -3387,9 +3395,22 @@ export async function getTexReceiptDownload(
         from public.files
         where tenant_id = public.current_tenant_id()
           and id = $1
+          and (
+            $2::boolean = false
+            or exists (
+              select 1
+              from public.tex_expenses e
+              left join public.tex_employee_profiles ep
+                on ep.tenant_id = e.tenant_id
+               and ep.id = e.employee_profile_id
+              where e.tenant_id = public.current_tenant_id()
+                and e.receipt_file_id = public.files.id
+                and (e.submitter_user_id = $3 or ep.user_id = $3)
+            )
+          )
         limit 1
       `,
-      [receiptId]
+      [receiptId, scopeToOwnExpenses, actor.userId]
     );
     const row = requireSingleRow(result.rows, "receipt file");
     const buffer = await downloadReceiptObject(row.storage_path);
@@ -3424,6 +3445,8 @@ export async function createTexExpense(
   const expense = sanitizeExpense(input);
 
   return withTenantContext(client, actor, async () => {
+    await assertStandardUserExpenseProfileScope(client, actor, expense.employeeProfileId);
+
     const result = await client.query<TexExpenseRow>(
       `
         insert into public.tex_expenses (
@@ -3523,8 +3546,11 @@ export async function updateTexExpense(
   assertTexPermission(actor, "tex.expense.submit");
   assertUuid(expenseId, "expense id");
   const expense = sanitizeExpenseUpdate(input);
+  const scopeToOwnExpenses = isTexStandardUserOnly(actor);
 
   return withTenantContext(client, actor, async () => {
+    await assertStandardUserExpenseProfileScope(client, actor, expense.employeeProfileId);
+
     const result = await client.query<TexExpenseRow>(
       `
         update public.tex_expenses
@@ -3547,6 +3573,17 @@ export async function updateTexExpense(
                updated_by = $16
          where tenant_id = public.current_tenant_id()
            and id = $17
+           and (
+             $18::boolean = false
+             or submitter_user_id = $16
+             or exists (
+               select 1
+               from public.tex_employee_profiles ep
+               where ep.tenant_id = public.current_tenant_id()
+                 and ep.id = public.tex_expenses.employee_profile_id
+                 and ep.user_id = $16
+             )
+           )
          returning id, status, amount::float as amount, currency
       `,
       [
@@ -3566,7 +3603,8 @@ export async function updateTexExpense(
         expense.extractionConfidence,
         JSON.stringify(expense.extractionPayload ?? {}),
         actor.userId,
-        expenseId
+        expenseId,
+        scopeToOwnExpenses
       ]
     );
     const row = requireSingleRow(result.rows, "expense");
@@ -6015,6 +6053,36 @@ function canReadBroadcastTexNotifications(actor: TexActorContext) {
       "torrevie_platform_admin"
     ].includes(role)
   );
+}
+
+function isTexStandardUserOnly(actor: TexActorContext) {
+  return actor.roles.includes("customer_standard_user") && actor.roles.every((role) => role === "customer_standard_user");
+}
+
+async function assertStandardUserExpenseProfileScope(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  employeeProfileId: string | null
+) {
+  if (!isTexStandardUserOnly(actor) || !employeeProfileId) {
+    return;
+  }
+
+  const result = await client.query<{ id: string }>(
+    `
+      select id
+      from public.tex_employee_profiles
+      where tenant_id = public.current_tenant_id()
+        and id = $1
+        and user_id = $2
+      limit 1
+    `,
+    [employeeProfileId, actor.userId]
+  );
+
+  if (!result.rows[0]) {
+    throw new Error("Standard users can submit expenses only for their own profile.");
+  }
 }
 
 function sanitizeSubmissionStatusFilter(value: "open" | "resolved" | "ignored" | "all") {
