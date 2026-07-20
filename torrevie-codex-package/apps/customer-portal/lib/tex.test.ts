@@ -729,6 +729,16 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("insert into public.tex_quick_connect_outbox")) {
+      return {
+        rows: [
+          {
+            id: "00000000-0000-4000-8000-000000020001"
+          }
+        ] as Row[]
+      };
+    }
+
     if (
       sql.includes("update public.tex_unregistered_whatsapp_submissions") &&
       sql.includes("returning id, status")
@@ -755,8 +765,8 @@ class RecordingTexClient implements TenantQueryClient {
             sender_raw: "971500000001@c.us",
             sender_phone: "+971500000001",
             whatsapp_chat_jid: "971500000001@c.us",
+            session_id: "00000000-0000-4000-8000-000000010001",
             message_id: "wamid.unregistered.receipt",
-            session_id: "session-a",
             message_text: null,
             receipt_file_id: "00000000-0000-4000-8000-000000019001",
             media_url: null,
@@ -1202,8 +1212,10 @@ async function main() {
     assert.equal(updated.status, "approved");
     assert.equal(client.hasSql("approved_by = case"), true);
     assert.equal(client.valuesContain("tex.expense.approved"), true);
+    assert.equal(client.hasSql("insert into public.tex_quick_connect_outbox"), true);
+    assert.equal(client.valuesContain("tex.quick_connect.outbound_queued"), true);
     assert.equal(
-      whatsappMessages.includes("Receipt approved: Airport Cafe / 2026-07-12 / 120 AED. Status: approved and pending payment."),
+      client.valuesContain("Receipt approved: Airport Cafe / 2026-07-12 / 120 AED. Status: approved and pending payment."),
       true
     );
   }
@@ -1219,8 +1231,9 @@ async function main() {
     assert.equal(updated.status, "paid");
     assert.equal(client.hasSql("paid_by = case"), true);
     assert.equal(client.valuesContain("tex.expense.paid"), true);
+    assert.equal(client.hasSql("insert into public.tex_quick_connect_outbox"), true);
     assert.equal(
-      whatsappMessages.includes("Receipt paid: Airport Cafe / 2026-07-12 / 120 AED. Status: paid."),
+      client.valuesContain("Receipt paid: Airport Cafe / 2026-07-12 / 120 AED. Status: paid."),
       true
     );
   }

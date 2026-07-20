@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import { dispatchEmailNotification } from "@torrevie/notifications";
 import { assertPermission, roleKeys, type RoleKey } from "@torrevie/permissions";
 import { withTenantContext, type ResolvedTenantContext, type TenantQueryClient } from "@torrevie/tenant-context";
@@ -1104,11 +1104,6 @@ async function createCustomerInviteIdentity(email: string): Promise<CustomerInvi
 
   if (error) {
     if (isAlreadyRegisteredError(error.message)) {
-      const existingUser = await findAuthUserByEmail(client, email);
-      if (!existingUser?.id) {
-        throw new Error("Supabase reported an existing Auth user, but the user could not be found.");
-      }
-
       const recovery = await client.auth.admin.generateLink({
         type: "recovery",
         email,
@@ -1123,8 +1118,12 @@ async function createCustomerInviteIdentity(email: string): Promise<CustomerInvi
         );
       }
 
+      if (!recovery.data.user?.id) {
+        throw new Error("Supabase did not return the existing Auth user for the access link.");
+      }
+
       return {
-        userId: existingUser.id,
+        userId: recovery.data.user.id,
         actionLink: recovery.data.properties.action_link,
         kind: "existing_user"
       };
@@ -1159,30 +1158,6 @@ async function createCustomerPasswordResetLink(email: string) {
   }
 
   return data.properties.action_link;
-}
-
-async function findAuthUserByEmail(client: SupabaseClient, email: string) {
-  for (let page = 1; page <= 20; page += 1) {
-    const { data, error } = await client.auth.admin.listUsers({
-      page,
-      perPage: 1000
-    });
-
-    if (error) {
-      throw new Error(`Unable to find existing Supabase Auth user: ${error.message}`);
-    }
-
-    const existingUser = data.users?.find((user) => user.email?.toLowerCase() === email);
-    if (existingUser) {
-      return existingUser;
-    }
-
-    if ((data.users ?? []).length < 1000) {
-      return null;
-    }
-  }
-
-  throw new Error("Unable to find existing Supabase Auth user after scanning 20000 users.");
 }
 
 async function getCustomerUserEmail(client: TenantQueryClient, userId: string) {

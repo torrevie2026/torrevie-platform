@@ -8,9 +8,11 @@ export const runtime = "nodejs";
 export default async function TexExpensesPage() {
   try {
     const { actor, client } = await requireTexRequestContext();
-    const bootstrap = await listTexBootstrap(client, actor);
-    const expenses = await listTexExpenses(client, actor);
-    const trips = await listTexTrips(client, actor);
+    const [bootstrap, expenses, trips] = await Promise.all([
+      listTexBootstrap(client, actor),
+      listTexExpenses(client, actor),
+      listTexTrips(client, actor)
+    ]);
 
     return (
       <>

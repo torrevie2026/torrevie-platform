@@ -112,6 +112,7 @@ while (!shuttingDown) {
   try {
     if (!manualMode) {
       await pollPendingSessions();
+      await pollPendingOutboundMessages();
     }
   } catch (error) {
     logger.error({ error: errorMessage(error) }, "Quick Connect polling failed");
@@ -158,6 +159,58 @@ async function pollPendingSessions() {
       );
       await markFailed(session, errorMessage(error));
     });
+  }
+}
+
+async function pollPendingOutboundMessages() {
+  const messages = await getPendingOutboundMessages();
+
+  for (const message of messages) {
+    const runtime = activeSessions.get(message.tenant_id);
+    const remoteJid = message.whatsapp_chat_jid || jidFromPhone(message.recipient_phone);
+    if (!runtime?.sock || !remoteJid) {
+      continue;
+    }
+
+    const outboundLimit = reserveAcknowledgementSlot(message.tenant_id, remoteJid);
+    if (!outboundLimit.allowed) {
+      await markQuickConnectOutboxFailed(message, outboundLimit.reason);
+      continue;
+    }
+
+    try {
+      const result = await runtime.sock.sendMessage(remoteJid, { text: message.message_text });
+      await markQuickConnectOutboxSent(message);
+      await insertQuickConnectEvent(
+        {
+          id: message.session_id || runtime.sessionId,
+          tenant_id: message.tenant_id
+        },
+        {
+          eventType: "quick_connect.outbound_sent",
+          status: "connected",
+          message: "Quick Connect sent a queued TEX outbound WhatsApp message.",
+          metadata: {
+            expense_id: message.expense_id ?? "",
+            outbox_id: message.id,
+            outbound_message_id: result?.key?.id ?? "",
+            remote_jid: remoteJid,
+            submission_id: message.submission_id ?? ""
+          }
+        }
+      );
+      logger.info(
+        { outboxId: message.id, tenantId: message.tenant_id },
+        "Quick Connect outbound message sent"
+      );
+    } catch (error) {
+      const errorText = errorMessage(error);
+      await markQuickConnectOutboxFailed(message, errorText);
+      logger.warn(
+        { error: errorText, outboxId: message.id, tenantId: message.tenant_id },
+        "Quick Connect outbound message failed"
+      );
+    }
   }
 }
 
@@ -890,6 +943,123 @@ async function getPendingSessions() {
   );
 }
 
+async function getPendingOutboundMessages() {
+  const select =
+    "id,tenant_id,session_id,submission_id,expense_id,recipient_phone,whatsapp_chat_jid,message_text,attempts";
+
+  if (!databaseUrl) {
+    const params = new URLSearchParams({
+      attempts: "lt.3",
+      limit: "20",
+      order: "created_at.asc",
+      select,
+      status: "in.(pending,failed)"
+    });
+    if (tenantFilter) {
+      params.set("tenant_id", `eq.${tenantFilter}`);
+    }
+
+    return supabaseFetch(`/rest/v1/tex_quick_connect_outbox?${params.toString()}`);
+  }
+
+  return queryRows(
+    `
+      select
+        id,
+        tenant_id,
+        session_id,
+        submission_id,
+        expense_id,
+        recipient_phone,
+        whatsapp_chat_jid,
+        message_text,
+        attempts
+      from public.tex_quick_connect_outbox
+      where status in ('pending', 'failed')
+        and attempts < 3
+        and ($1::uuid is null or tenant_id = $1::uuid)
+      order by created_at asc
+      limit 20
+    `,
+    [tenantFilter]
+  );
+}
+
+async function markQuickConnectOutboxSent(message) {
+  const patch = {
+    attempts: Number(message.attempts ?? 0) + 1,
+    last_error: null,
+    sent_at: new Date().toISOString(),
+    status: "sent",
+    updated_at: new Date().toISOString()
+  };
+
+  if (!databaseUrl) {
+    await supabaseFetch(
+      `/rest/v1/tex_quick_connect_outbox?id=eq.${message.id}&tenant_id=eq.${message.tenant_id}`,
+      {
+        body: JSON.stringify(patch),
+        headers: {
+          Prefer: "return=minimal"
+        },
+        method: "PATCH"
+      }
+    );
+    return;
+  }
+
+  await queryRows(
+    `
+      update public.tex_quick_connect_outbox
+         set attempts = attempts + 1,
+             last_error = null,
+             sent_at = now(),
+             status = 'sent',
+             updated_at = now()
+       where id = $1
+         and tenant_id = $2
+    `,
+    [message.id, message.tenant_id]
+  );
+}
+
+async function markQuickConnectOutboxFailed(message, error) {
+  const attempts = Number(message.attempts ?? 0) + 1;
+  const patch = {
+    attempts,
+    last_error: error.slice(0, 500),
+    status: attempts >= 3 ? "failed" : "pending",
+    updated_at: new Date().toISOString()
+  };
+
+  if (!databaseUrl) {
+    await supabaseFetch(
+      `/rest/v1/tex_quick_connect_outbox?id=eq.${message.id}&tenant_id=eq.${message.tenant_id}`,
+      {
+        body: JSON.stringify(patch),
+        headers: {
+          Prefer: "return=minimal"
+        },
+        method: "PATCH"
+      }
+    );
+    return;
+  }
+
+  await queryRows(
+    `
+      update public.tex_quick_connect_outbox
+         set attempts = attempts + 1,
+             last_error = $3,
+             status = case when attempts + 1 >= 3 then 'failed' else 'pending' end,
+             updated_at = now()
+       where id = $1
+         and tenant_id = $2
+    `,
+    [message.id, message.tenant_id, error.slice(0, 500)]
+  );
+}
+
 async function updateQuickConnectSession(session, patch) {
   if (manualMode) {
     if (patch.qr_code_data && process.env.TEX_QUICK_CONNECT_QR_OUTPUT_FILE) {
@@ -1280,6 +1450,11 @@ function jidToPhone(jid) {
   }
 
   return jid.replace(/@(c|s)\.whatsapp\.net$/i, "").replace(/\D/g, "") || null;
+}
+
+function jidFromPhone(phone) {
+  const digits = String(phone ?? "").replace(/\D/g, "");
+  return digits ? `${digits}@s.whatsapp.net` : null;
 }
 
 function authDirectoryFor(tenantId) {
