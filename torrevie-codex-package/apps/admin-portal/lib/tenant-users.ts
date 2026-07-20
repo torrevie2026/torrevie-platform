@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
-import { customerPasswordSetupCallbackUrl } from "./customer-portal-url";
+import { customerPasswordSetupCallbackUrl, enforceCustomerPasswordSetupActionLink } from "./customer-portal-url";
 
 export const customerRoleKeys = [
   "customer_admin",
@@ -271,7 +271,7 @@ export async function sendTenantPasswordReset(client: SupabaseClient, tenantId: 
   await sendPasswordResetEmail({
     email: user.email,
     tenantName: tenant.name,
-    actionLink: data.properties.action_link
+    actionLink: enforceCustomerPasswordSetupActionLink(data.properties.action_link)
   });
   await writeTenantUserAuditEvent(client, tenantId, actorUserId, "tenant.user.password_reset_sent", userId, {
     email: user.email
@@ -314,7 +314,7 @@ async function createInviteLink(client: SupabaseClient, email: string) {
 
   return {
     userId: data.user.id,
-    actionLink: data.properties.action_link
+    actionLink: enforceCustomerPasswordSetupActionLink(data.properties.action_link)
   };
 }
 
