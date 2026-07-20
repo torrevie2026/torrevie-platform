@@ -7,6 +7,7 @@ import {
   inviteCustomerUser,
   listCustomerMembers,
   removeCustomerUser,
+  resolveCustomerPasswordSetupActionLinkForTests,
   resolveCustomerPasswordSetupCallbackUrlForTests,
   sendCustomerPasswordReset,
   setCustomerMembershipStatus,
@@ -504,6 +505,14 @@ async function main() {
       process.env.VERCEL_PROJECT_PRODUCTION_URL = "torrevie-admin-portal-production.vercel.app";
       assert.equal(
         resolveCustomerPasswordSetupCallbackUrlForTests(),
+        "https://app.torrevie.com/auth/callback?next=%2Fen%2Faccount%3Fsetup%3Dpassword"
+      );
+
+      const repairedActionLink = resolveCustomerPasswordSetupActionLinkForTests(
+        "https://rhntonxblbhxsvdpmius.supabase.co/auth/v1/verify?token=abc&type=recovery&redirect_to=https://admin.torrevie.com"
+      );
+      assert.equal(
+        new URL(repairedActionLink).searchParams.get("redirect_to"),
         "https://app.torrevie.com/auth/callback?next=%2Fen%2Faccount%3Fsetup%3Dpassword"
       );
 

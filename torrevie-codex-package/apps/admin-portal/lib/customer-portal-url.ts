@@ -12,6 +12,16 @@ export function customerPasswordSetupCallbackUrl() {
   return `${customerPortalUrl()}/auth/callback?next=${encodeURIComponent("/en/account?setup=password")}`;
 }
 
+export function enforceCustomerPasswordSetupActionLink(actionLink: string) {
+  try {
+    const url = new URL(actionLink);
+    url.searchParams.set("redirect_to", customerPasswordSetupCallbackUrl());
+    return url.toString();
+  } catch {
+    return actionLink;
+  }
+}
+
 function normalizeCustomerPortalUrl(value: string | undefined) {
   const clean = value?.trim().replace(/^['"]|['"]$/g, "").replace(/\/+$/, "");
   if (!clean) {

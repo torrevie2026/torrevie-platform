@@ -169,6 +169,10 @@ export function resolveCustomerPasswordSetupCallbackUrlForTests() {
   return customerPasswordSetupCallbackUrl();
 }
 
+export function resolveCustomerPasswordSetupActionLinkForTests(actionLink: string) {
+  return enforceCustomerPasswordSetupRedirect(actionLink);
+}
+
 export async function listCustomerMembers(
   client: TenantQueryClient,
   actor: CustomerAdminContext
@@ -1128,7 +1132,7 @@ async function createCustomerInviteIdentity(email: string): Promise<CustomerInvi
 
       return {
         userId: recovery.data.user.id,
-        actionLink: recovery.data.properties.action_link,
+        actionLink: enforceCustomerPasswordSetupRedirect(recovery.data.properties.action_link),
         kind: "existing_user"
       };
     }
@@ -1142,7 +1146,7 @@ async function createCustomerInviteIdentity(email: string): Promise<CustomerInvi
 
   return {
     userId: data.user.id,
-    actionLink: data.properties.action_link,
+    actionLink: enforceCustomerPasswordSetupRedirect(data.properties.action_link),
     kind: "new_invitation"
   };
 }
@@ -1161,7 +1165,7 @@ async function createCustomerPasswordResetLink(email: string) {
     throw new Error(`Unable to create password reset link: ${error?.message ?? "missing action link"}`);
   }
 
-  return data.properties.action_link;
+  return enforceCustomerPasswordSetupRedirect(data.properties.action_link);
 }
 
 async function getCustomerUserEmail(client: TenantQueryClient, userId: string) {
@@ -1266,6 +1270,16 @@ function normalizeCustomerPortalUrl(value: string | undefined) {
 
 function customerPasswordSetupCallbackUrl() {
   return `${customerPortalUrl()}/auth/callback?next=${encodeURIComponent("/en/account?setup=password")}`;
+}
+
+function enforceCustomerPasswordSetupRedirect(actionLink: string) {
+  try {
+    const url = new URL(actionLink);
+    url.searchParams.set("redirect_to", customerPasswordSetupCallbackUrl());
+    return url.toString();
+  } catch {
+    return actionLink;
+  }
 }
 
 function isCustomerPortalUrl(value: string) {

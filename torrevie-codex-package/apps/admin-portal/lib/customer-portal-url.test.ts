@@ -1,5 +1,9 @@
 import { strict as assert } from "node:assert";
-import { customerPasswordSetupCallbackUrl, customerPortalUrl } from "./customer-portal-url";
+import {
+  customerPasswordSetupCallbackUrl,
+  customerPortalUrl,
+  enforceCustomerPasswordSetupActionLink
+} from "./customer-portal-url";
 
 const originalEnv = {
   CUSTOMER_PORTAL_URL: process.env.CUSTOMER_PORTAL_URL,
@@ -28,6 +32,14 @@ try {
   assert.equal(customerPortalUrl(), "https://app.torrevie.com");
   assert.equal(
     customerPasswordSetupCallbackUrl(),
+    "https://app.torrevie.com/auth/callback?next=%2Fen%2Faccount%3Fsetup%3Dpassword"
+  );
+
+  const repairedActionLink = enforceCustomerPasswordSetupActionLink(
+    "https://rhntonxblbhxsvdpmius.supabase.co/auth/v1/verify?token=abc&type=recovery&redirect_to=https://admin.torrevie.com"
+  );
+  assert.equal(
+    new URL(repairedActionLink).searchParams.get("redirect_to"),
     "https://app.torrevie.com/auth/callback?next=%2Fen%2Faccount%3Fsetup%3Dpassword"
   );
 
