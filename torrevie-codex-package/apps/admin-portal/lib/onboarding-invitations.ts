@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { customerPasswordSetupCallbackUrl, customerPortalUrl } from "./customer-portal-url";
 
 export type TenantAdminInvitation = {
   tenantId: string;
@@ -95,12 +96,11 @@ async function getTenantForInvitation(client: SupabaseClient, tenantId: string) 
 }
 
 async function createSupabaseInviteLink(client: SupabaseClient, email: string) {
-  const redirectTo = `${customerPortalUrl()}/login`;
   const { data, error } = await client.auth.admin.generateLink({
     type: "invite",
     email,
     options: {
-      redirectTo
+      redirectTo: customerPasswordSetupCallbackUrl()
     }
   });
 
@@ -255,10 +255,6 @@ function renderInvitationText(invitation: TenantAdminInvitation) {
     `Accept invitation and set password: ${invitation.actionLink}`,
     `Customer portal: ${portalUrl}`
   ].join("\n");
-}
-
-function customerPortalUrl() {
-  return (process.env.NEXT_PUBLIC_CUSTOMER_PORTAL_URL ?? "https://app.torrevie.com").replace(/\/+$/, "");
 }
 
 function sanitizeEmail(value: string | null) {

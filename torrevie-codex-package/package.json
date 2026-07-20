@@ -15,7 +15,7 @@
     "test:observability": "tsx packages/observability/src/index.test.ts",
     "test:notifications": "tsx packages/notifications/src/index.test.ts",
     "test:ci-pipeline": "node scripts/ci-pipeline-smoke.mjs",
-    "test:admin-portal": "tsx apps/admin-portal/lib/access.test.ts",
+    "test:admin-portal": "tsx apps/admin-portal/lib/access.test.ts && tsx apps/admin-portal/lib/customer-portal-url.test.ts",
     "test:tenant-lifecycle": "tsx scripts/tenant-lifecycle-smoke.ts",
     "test:provisioning": "tsx packages/provisioning/src/index.test.ts",
     "test:subscriptions": "tsx scripts/subscription-management-smoke.ts",
