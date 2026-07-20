@@ -217,6 +217,14 @@ h1 {
   margin: 0 0 16px;
 }
 
+.panel-subtitle {
+  color: var(--torrevie-black);
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: -8px;
+}
+
 .tenant-form,
 .tenant-edit {
   display: grid;
@@ -277,6 +285,36 @@ h1 {
 .tenant-actions button,
 .tenant-export-link {
   background: var(--torrevie-steel-blue);
+}
+
+.support-access-form {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.support-access-form.compact {
+  display: inline-flex;
+}
+
+.support-access-form input {
+  border: 1px solid #d8dee8;
+  border-radius: 6px;
+  min-height: 40px;
+  min-width: 180px;
+  padding: 0 10px;
+}
+
+.support-access-form button {
+  background: var(--torrevie-navy);
+  border: 0;
+  border-radius: 6px;
+  color: var(--torrevie-white);
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 40px;
+  padding: 0 12px;
 }
 
 .tenant-export-link {

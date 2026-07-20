@@ -544,7 +544,10 @@ async function resolveActor(locale: Locale) {
   const tenantResult = await client.query<{ name: string }>("select name from public.tenants where id = $1", [tenantContext.tenantId]);
   const actor: CustomerAdminContext = {
     ...tenantContext,
-    roles: rolesResult.rows.map((row) => row.key).filter(isRoleKey)
+    roles:
+      tenantContext.roleScope === "platform"
+        ? ["torrevie_platform_admin"]
+        : rolesResult.rows.map((row) => row.key).filter(isRoleKey)
   };
 
   return {

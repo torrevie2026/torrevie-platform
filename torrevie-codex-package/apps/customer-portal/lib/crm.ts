@@ -353,8 +353,8 @@ function assertCrmPermission(
   permission: "crm.account.read" | "crm.account.write" | "crm.opportunity.read" | "crm.opportunity.write" | "crm.pipeline.manage",
   ownerUserId?: string
 ) {
-  if (actor.roleScope !== "customer") {
-    throw new Error("CRM access requires a customer tenant context.");
+  if (actor.roleScope !== "customer" && actor.roleScope !== "platform") {
+    throw new Error("CRM access requires a customer or support tenant context.");
   }
 
   assertPermission({
@@ -362,6 +362,7 @@ function assertCrmPermission(
     permission,
     entitledProducts: actor.entitledProducts,
     moduleAdminProducts: actor.moduleAdminProducts,
+    supportSessionActive: actor.roleScope === "platform",
     ownership: {
       actorUserId: actor.userId,
       ownerUserId

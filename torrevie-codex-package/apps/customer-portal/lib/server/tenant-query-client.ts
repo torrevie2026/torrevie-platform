@@ -60,6 +60,14 @@ export class PostgresTenantQueryClient implements TenantQueryClient {
   }
 }
 
+export async function queryServerDatabase<Row>(
+  sql: string,
+  values: readonly QueryValue[] = []
+): Promise<QueryResult<Row>> {
+  const result = await getPool().query<QueryResultRow>(sql, [...values]);
+  return toTenantResult<Row>(result);
+}
+
 function getPool() {
   if (!pool) {
     pool = new Pool({

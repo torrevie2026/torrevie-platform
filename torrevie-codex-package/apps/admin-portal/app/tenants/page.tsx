@@ -3,7 +3,13 @@ import { AdminSidebar } from "../components/AdminSidebar";
 import { getSupabaseAdminClient } from "../../lib/admin-client";
 import { getPlatformSession } from "../../lib/session";
 import { listTenants, tenantStatuses } from "../../lib/tenant-lifecycle";
-import { createTenantAction, hardDeleteTenantAction, setTenantStatusAction, updateTenantAction } from "./actions";
+import {
+  createTenantAction,
+  hardDeleteTenantAction,
+  launchTenantSupportAccessAction,
+  setTenantStatusAction,
+  updateTenantAction
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -131,6 +137,7 @@ export default async function TenantsPage({
                   <StatusAction tenantId={tenant.id} status="suspended" label="Suspend" />
                   <StatusAction tenantId={tenant.id} status="active" label="Reactivate" />
                   <StatusAction tenantId={tenant.id} status="archived" label="Archive" />
+                  <SupportAccessAction tenantId={tenant.id} />
                 </div>
                 <form action={hardDeleteTenantAction} className="tenant-delete-form">
                   <input type="hidden" name="tenantId" value={tenant.id} />
@@ -146,6 +153,16 @@ export default async function TenantsPage({
         </section>
       </section>
     </main>
+  );
+}
+
+function SupportAccessAction({ tenantId }: { tenantId: string }) {
+  return (
+    <form action={launchTenantSupportAccessAction} className="support-access-form compact">
+      <input type="hidden" name="tenantId" value={tenantId} />
+      <input name="reason" placeholder="Support reason" required minLength={3} />
+      <button type="submit">Launch app</button>
+    </form>
   );
 }
 

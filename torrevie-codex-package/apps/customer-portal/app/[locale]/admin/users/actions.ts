@@ -177,7 +177,10 @@ async function resolveActor() {
   );
   const actor: CustomerAdminContext = {
     ...tenantContext,
-    roles: rolesResult.rows.map((row) => row.key).filter(isRoleKey)
+    roles:
+      tenantContext.roleScope === "platform"
+        ? ["torrevie_platform_admin"]
+        : rolesResult.rows.map((row) => row.key).filter(isRoleKey)
   };
 
   return { client, actor };
