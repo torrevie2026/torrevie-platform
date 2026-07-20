@@ -750,27 +750,26 @@ export async function resolveTexActorContext(
       throw new Error("The user is deactivated.");
     }
 
-    const [tenant, roles, entitledProducts, texPlan] = await Promise.all([
-      client.query<TexTenantRow>(
-        `
+    const tenant = await client.query<TexTenantRow>(
+      `
           select name
           from public.tenants
           where id = public.current_tenant_id()
           limit 1
         `
-      ),
-      client.query<TexRoleRow>(
-        `
+    );
+    const roles = await client.query<TexRoleRow>(
+      `
           select r.key
           from public.user_role_assignments ura
           join public.roles r on r.id = ura.role_id
           where ura.tenant_id = public.current_tenant_id()
             and ura.user_id = $1
         `,
-        [context.userId]
-      ),
-      client.query<TexProductRow>(
-        `
+      [context.userId]
+    );
+    const entitledProducts = await client.query<TexProductRow>(
+      `
           select p.key
           from public.subscriptions s
           join public.products p on p.id = s.product_id
@@ -779,9 +778,9 @@ export async function resolveTexActorContext(
             and s.starts_at <= now()
             and (s.expires_at is null or s.expires_at > now())
         `
-      ),
-      client.query<TexPlanContextRow>(
-        `
+    );
+    const texPlan = await client.query<TexPlanContextRow>(
+      `
           select
             coalesce(tpc.plan_key::text, plans.key, 'trial') as plan_key,
             coalesce(
@@ -812,8 +811,7 @@ export async function resolveTexActorContext(
           order by s.created_at desc
           limit 1
         `
-      )
-    ]);
+    );
     const resolvedRoles = roles.rows.map((row) => row.key).filter(isRoleKey);
     const resolvedProducts = entitledProducts.rows.map((row) => row.key).filter(isProductKey);
     const resolvedTexPlan = mapTexPlanContext(texPlan.rows[0]);
@@ -837,18 +835,16 @@ export async function listTexBootstrap(
   assertTexPermission(actor, "tex.expense.read");
 
   return withTenantContext(client, actor, async () => {
-    const [categories, employeeProfiles, managerUsers, teams, integrationSettings] =
-      await Promise.all([
-        client.query<TexExpenseCategoryRow>(
-          `
+    const categories = await client.query<TexExpenseCategoryRow>(
+      `
           select id, name, is_active, is_system, sort_order
           from public.tex_expense_categories
           where tenant_id = public.current_tenant_id()
           order by sort_order asc, name asc
         `
-        ),
-        client.query<TexEmployeeProfileRow>(
-          `
+    );
+    const employeeProfiles = await client.query<TexEmployeeProfileRow>(
+      `
           select
             ep.id,
             ep.user_id,
@@ -870,9 +866,9 @@ export async function listTexBootstrap(
           where ep.tenant_id = public.current_tenant_id()
           order by ep.name asc
         `
-        ),
-        client.query<TexManagerUserRow>(
-          `
+    );
+    const managerUsers = await client.query<TexManagerUserRow>(
+      `
           select
             u.id,
             u.email,
@@ -893,9 +889,9 @@ export async function listTexBootstrap(
           group by u.id, u.email, up.display_name
           order by coalesce(up.display_name, u.email) asc
         `
-        ),
-        client.query<TexTeamRow>(
-          `
+    );
+    const teams = await client.query<TexTeamRow>(
+      `
           select
             t.id,
             t.name,
@@ -927,9 +923,9 @@ export async function listTexBootstrap(
           group by t.id, manager.name
           order by t.name asc
         `
-        ),
-        client.query<TexIntegrationSettingsRow>(
-          `
+    );
+    const integrationSettings = await client.query<TexIntegrationSettingsRow>(
+      `
           select
             whatsapp_provider,
             whatsapp_instance_id,
@@ -944,8 +940,7 @@ export async function listTexBootstrap(
           where tenant_id = public.current_tenant_id()
           limit 1
         `
-        )
-      ]);
+    );
 
     return {
       categories: categories.rows.map(mapCategory),
@@ -1018,9 +1013,8 @@ export async function listTexIntegrationWorkspace(
   assertTexPermission(actor, "tex.integration.manage");
 
   return withTenantContext(client, actor, async () => {
-    const [settings, providerProfiles, quickConnect] = await Promise.all([
-      client.query<TexIntegrationSettingsRow>(
-        `
+    const settings = await client.query<TexIntegrationSettingsRow>(
+      `
           select
             whatsapp_provider,
             whatsapp_instance_id,
@@ -1035,9 +1029,9 @@ export async function listTexIntegrationWorkspace(
           where tenant_id = public.current_tenant_id()
           limit 1
         `
-      ),
-      client.query<TexProviderProfileSummaryRow>(
-        `
+    );
+    const providerProfiles = await client.query<TexProviderProfileSummaryRow>(
+      `
           select
             id,
             label,
@@ -1051,9 +1045,8 @@ export async function listTexIntegrationWorkspace(
           where tenant_id = public.current_tenant_id()
           order by is_default desc, label asc
         `
-      ),
-      listTexQuickConnectWorkspace(client)
-    ]);
+    );
+    const quickConnect = await listTexQuickConnectWorkspace(client);
     const profiles = providerProfiles.rows.map(mapProviderProfileSummary);
 
     return {
@@ -2238,10 +2231,12 @@ export async function listTexReportWorkspace(
   const period = sanitizeReportPeriod(input.dateFrom, input.dateTo);
 
   return withTenantContext(client, actor, async () => {
-    const [expenses, previousExpenses] = await Promise.all([
-      queryTexReportExpenses(client, period.dateFrom, period.dateTo),
-      queryTexReportExpenses(client, period.previousDateFrom, period.previousDateTo)
-    ]);
+    const expenses = await queryTexReportExpenses(client, period.dateFrom, period.dateTo);
+    const previousExpenses = await queryTexReportExpenses(
+      client,
+      period.previousDateFrom,
+      period.previousDateTo
+    );
 
     return {
       ...period,
@@ -2366,9 +2361,8 @@ export async function listTexFxWorkspace(
   const rateDate = toIsoDate(new Date());
 
   return withTenantContext(client, actor, async () => {
-    const [rates, pegs] = await Promise.all([
-      client.query<TexFxRateRow>(
-        `
+    const rates = await client.query<TexFxRateRow>(
+      `
           select
             id,
             rate_date::text as rate_date,
@@ -2381,10 +2375,10 @@ export async function listTexFxWorkspace(
           where rate_date = $1::date
           order by from_currency asc
         `,
-        [rateDate]
-      ),
-      client.query<TexCurrencyPegRow>(
-        `
+      [rateDate]
+    );
+    const pegs = await client.query<TexCurrencyPegRow>(
+      `
           select
             from_currency,
             to_currency,
@@ -2394,8 +2388,7 @@ export async function listTexFxWorkspace(
           from public.tex_currency_pegs
           order by from_currency asc, effective_from desc
         `
-      )
-    ]);
+    );
 
     return {
       rateDate,
@@ -2903,18 +2896,16 @@ export async function listTexSettingsWorkspace(
   const normalizedYear = sanitizeYear(year);
 
   return withTenantContext(client, actor, async () => {
-    const [categoriesResult, policiesResult, budgetsResult, departmentsResult, processingResult] =
-      await Promise.all([
-        client.query<TexExpenseCategoryRow>(
-          `
+    const categoriesResult = await client.query<TexExpenseCategoryRow>(
+      `
           select id, name, is_active, is_system, sort_order
           from public.tex_expense_categories
           where tenant_id = public.current_tenant_id()
           order by sort_order asc, name asc
         `
-        ),
-        client.query<TexSpendPolicyRow>(
-          `
+    );
+    const policiesResult = await client.query<TexSpendPolicyRow>(
+      `
           select
             id,
             category,
@@ -2926,9 +2917,9 @@ export async function listTexSettingsWorkspace(
           where tenant_id = public.current_tenant_id()
           order by category asc
         `
-        ),
-        client.query<TexBudgetRow>(
-          `
+    );
+    const budgetsResult = await client.query<TexBudgetRow>(
+      `
           select
             b.id,
             b.department,
@@ -2954,10 +2945,10 @@ export async function listTexSettingsWorkspace(
             and b.year = $2
           order by b.department asc
         `,
-          [normalizedMonth, normalizedYear]
-        ),
-        client.query<{ department: string }>(
-          `
+      [normalizedMonth, normalizedYear]
+    );
+    const departmentsResult = await client.query<{ department: string }>(
+      `
           select distinct department
           from public.tex_employee_profiles
           where tenant_id = public.current_tenant_id()
@@ -2965,9 +2956,9 @@ export async function listTexSettingsWorkspace(
             and trim(department) <> ''
           order by department asc
         `
-        ),
-        client.query<TexProcessingSettingsRow>(
-          `
+    );
+    const processingResult = await client.query<TexProcessingSettingsRow>(
+      `
           select
             ai_receipt_extraction_enabled,
             duplicate_detection_enabled,
@@ -2977,8 +2968,7 @@ export async function listTexSettingsWorkspace(
           where tenant_id = public.current_tenant_id()
           limit 1
         `
-        )
-      ]);
+    );
 
     return {
       categories: categoriesResult.rows.map(mapCategory),
@@ -4227,9 +4217,8 @@ async function listTexQuickConnectWorkspace(
   client: TenantQueryClient
 ): Promise<TexIntegrationWorkspace["quickConnect"]> {
   try {
-    const [sessionResult, eventResult] = await Promise.all([
-      client.query<TexQuickConnectSessionRow>(
-        `
+    const sessionResult = await client.query<TexQuickConnectSessionRow>(
+      `
           select
             id,
             status,
@@ -4245,9 +4234,9 @@ async function listTexQuickConnectWorkspace(
           where tenant_id = public.current_tenant_id()
           limit 1
         `
-      ),
-      client.query<TexQuickConnectEventRow>(
-        `
+    );
+    const eventResult = await client.query<TexQuickConnectEventRow>(
+      `
           select
             id,
             event_type,
@@ -4261,8 +4250,7 @@ async function listTexQuickConnectWorkspace(
           order by occurred_at desc
           limit 8
         `
-      )
-    ]);
+    );
 
     return {
       available: true,
