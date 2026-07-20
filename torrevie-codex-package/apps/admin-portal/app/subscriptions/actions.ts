@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSupabaseAdminClient } from "../../lib/admin-client";
 import { sendTenantAdminInvitationEmail } from "../../lib/onboarding-invitations";
 import { getPlatformSession } from "../../lib/session";
+import { createSupportAccessLaunch } from "../../lib/support-access";
 import {
   assignSubscription,
   businessSegments,
@@ -45,6 +46,17 @@ export async function inviteTenantAdminAction(formData: FormData) {
   await sendTenantAdminInvitationEmail(getSupabaseAdminClient(), tenantId, session.userId);
   revalidatePath("/subscriptions");
   redirect(`/subscriptions?invited=1&tenantId=${encodeURIComponent(tenantId)}#subscriptions-top`);
+}
+
+export async function launchTenantSupportAccessAction(formData: FormData) {
+  const session = await requirePlatformSession();
+  const launch = await createSupportAccessLaunch(getSupabaseAdminClient(), {
+    tenantId: stringValue(formData, "tenantId"),
+    actorUserId: session.userId,
+    reason: stringValue(formData, "reason")
+  });
+
+  redirect(launch.url);
 }
 
 export async function updateFsmTenantControlsAction(formData: FormData) {

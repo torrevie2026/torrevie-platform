@@ -825,24 +825,26 @@ export async function sendCustomerPasswordReset(
 }
 
 function assertCustomerPermission(actor: CustomerAdminContext, permission: "tenant.user.invite" | "tenant.user.manage" | "tenant.role.assign") {
-  if (actor.roleScope !== "customer") {
-    throw new Error("Customer administration requires a customer tenant context.");
+  if (actor.roleScope !== "customer" && actor.roleScope !== "platform") {
+    throw new Error("Customer administration requires a customer or support tenant context.");
   }
 
   assertPermission({
     roles: actor.roles,
-    permission
+    permission,
+    supportSessionActive: actor.roleScope === "platform"
   });
 }
 
 function assertTenantSettingsPermission(actor: CustomerAdminContext) {
-  if (actor.roleScope !== "customer") {
-    throw new Error("Tenant integration setup requires a customer tenant context.");
+  if (actor.roleScope !== "customer" && actor.roleScope !== "platform") {
+    throw new Error("Tenant integration setup requires a customer or support tenant context.");
   }
 
   assertPermission({
     roles: actor.roles,
-    permission: "tenant.settings.manage"
+    permission: "tenant.settings.manage",
+    supportSessionActive: actor.roleScope === "platform"
   });
 }
 

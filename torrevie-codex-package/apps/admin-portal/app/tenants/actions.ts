@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { getSupabaseAdminClient } from "../../lib/admin-client";
 import { getPlatformSession } from "../../lib/session";
+import { createSupportAccessLaunch } from "../../lib/support-access";
 import { hardDeleteTenantData } from "../../lib/tenant-data-management";
 import {
   createTenant,
@@ -83,6 +84,17 @@ export async function hardDeleteTenantAction(formData: FormData) {
 
   revalidatePath("/tenants");
   redirect("/tenants?deleted=1");
+}
+
+export async function launchTenantSupportAccessAction(formData: FormData) {
+  const session = await requirePlatformSession();
+  const launch = await createSupportAccessLaunch(getSupabaseAdminClient(), {
+    tenantId: stringValue(formData, "tenantId"),
+    actorUserId: session.userId,
+    reason: stringValue(formData, "reason")
+  });
+
+  redirect(launch.url);
 }
 
 async function requirePlatformSession() {

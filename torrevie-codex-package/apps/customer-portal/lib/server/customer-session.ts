@@ -7,11 +7,17 @@ import {
   type TenantQueryClient
 } from "@torrevie/tenant-context";
 import { cookies } from "next/headers";
+import {
+  getActiveSupportAccessSession,
+  supportAccessTenantContext,
+  type SupportAccessSession
+} from "./support-access";
 
 export type VerifiedCustomerSession = {
   accessToken: string;
   userId: string;
   email: string | null;
+  supportAccess?: SupportAccessSession;
 };
 
 export type CustomerAccessRequirements = {
@@ -34,6 +40,17 @@ export type CustomerMfaAssurance = {
 };
 
 export async function requireVerifiedCustomerSession(): Promise<VerifiedCustomerSession> {
+  const supportAccess = await getActiveSupportAccessSession();
+
+  if (supportAccess) {
+    return {
+      accessToken: "support-access",
+      userId: supportAccess.actorUserId,
+      email: supportAccess.actorEmail,
+      supportAccess
+    };
+  }
+
   const cookieStore = await cookies();
   const { url, anonKey } = requireSupabaseBrowserEnv();
   const supabase = createServerClient(url, anonKey, {
@@ -74,6 +91,10 @@ export async function resolveCustomerTenantContext(
   client: TenantQueryClient,
   session: VerifiedCustomerSession
 ): Promise<ResolvedTenantContext> {
+  if (session.supportAccess) {
+    return supportAccessTenantContext(session.supportAccess);
+  }
+
   const claims = getTenantClaimsFromJwt(session.accessToken);
 
   if (claims.tenant_id) {
@@ -143,6 +164,21 @@ export async function getCustomerAccessRequirements(
   client: TenantQueryClient,
   context: ResolvedTenantContext
 ): Promise<CustomerAccessRequirements> {
+  if (context.roleScope === "platform") {
+    return {
+      displayName: "Torrevie Support",
+      firstName: "Torrevie",
+      lastName: "Support",
+      mobileNumber: "",
+      recoveryEmail: "",
+      profileComplete: true,
+      requireProfileCompletion: false,
+      requirePasswordChange: false,
+      requireMfa: false,
+      mfaEnrolled: true
+    };
+  }
+
   const userResult = await client.query<UserRequirementRow>(
     `
       select first_name, last_name, mobile_number, recovery_email, profile_completed_at, mfa_enrolled

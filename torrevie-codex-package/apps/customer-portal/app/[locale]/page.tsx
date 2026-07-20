@@ -187,6 +187,19 @@ export default async function CustomerPortalShell({
             </div>
           </header>
 
+          {session.supportAccess ? (
+            <section className="support-access-banner" aria-label="Active support access">
+              <div>
+                <strong>Torrevie support access active</strong>
+                <span>
+                  {session.supportAccess.actorEmail} is viewing {launcher.tenantName} until{" "}
+                  {formatDateTime(session.supportAccess.expiresAt)}.
+                </span>
+              </div>
+              <span>{session.supportAccess.reason}</span>
+            </section>
+          ) : null}
+
           <section className="metric-grid" aria-label="Customer metrics">
             <article>
               <span>Enrolled apps</span>
@@ -315,4 +328,12 @@ function metricForProduct(key: ProductKey, dashboard: DashboardRow | undefined, 
 
 function isProductKey(value: string): value is ProductKey {
   return value === "crm" || value === "fsm" || value === "tex" || value === "cme" || value === "lqs";
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("en-AE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Dubai"
+  }).format(new Date(value));
 }

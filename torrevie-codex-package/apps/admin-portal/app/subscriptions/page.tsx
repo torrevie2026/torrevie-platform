@@ -27,6 +27,7 @@ import {
 import {
   assignSubscriptionAction,
   inviteTenantAdminAction,
+  launchTenantSupportAccessAction,
   updateFsmTenantControlsAction,
   upsertFeatureOverrideAction
 } from "./actions";
@@ -160,6 +161,7 @@ export default async function SubscriptionsPage({
               <span>Invitation email: {selectedTenant.billing_email ?? "Set tenant billing email first"}</span>
             </div>
             <InviteTenantAdminForm tenantId={selectedTenant.id} disabled={!selectedTenant.billing_email} />
+            <SupportAccessForm tenantId={selectedTenant.id} compact={false} />
           </section>
         ) : null}
 
@@ -250,9 +252,10 @@ export default async function SubscriptionsPage({
                       <strong>{label(control.billing_status)}</strong>
                       <span>{control.renewal_date ? `Renews ${formatDate(control.renewal_date)}` : "No renewal date"}</span>
                     </div>
-                    <a className="row-link" href={`/subscriptions?section=tex&tenantId=${control.tenant_id}`}>
+                    <a className="row-link" href={`/subscriptions?section=tex&tenantId=${control.tenant_id}#tex-support-detail`}>
                       Support view
                     </a>
+                    <SupportAccessForm tenantId={control.tenant_id} compact />
                   </article>
                 ))}
               </div>
@@ -289,7 +292,7 @@ export default async function SubscriptionsPage({
                       <strong>{trial.first_receipt_received ? "Receipt received" : "No receipt"}</strong>
                       <span>{trial.first_expense_approved ? "Approval done" : "Approval pending"}</span>
                     </div>
-                    <a className="row-link" href={`/subscriptions?section=tex&tenantId=${trial.tenant_id}`}>
+                    <a className="row-link" href={`/subscriptions?section=tex&tenantId=${trial.tenant_id}#tex-support-detail`}>
                       Open
                     </a>
                   </article>
@@ -297,11 +300,14 @@ export default async function SubscriptionsPage({
               </div>
             </section>
 
-            <section className="panel" aria-label="TEX onboarding support">
+            <section className="panel" id="tex-support-detail" aria-label="TEX onboarding support">
               <div className="panel-heading">
                 <div>
                   <p className="eyebrow">TEX</p>
                   <h2>Onboarding support</h2>
+                  <span className="panel-subtitle">
+                    {tenantNames.get(selectedTenantId ?? "") ?? selectedTenantId ?? "Select a tenant"}
+                  </span>
                 </div>
               </div>
               {supportDetail ? <SupportDetail detail={supportDetail} /> : <p className="empty">Select a tracked TEX tenant.</p>}
@@ -679,6 +685,7 @@ function ProductSubscriptionGroup({
                 tenantId={subscription.tenant_id}
                 disabled={!tenantBillingEmails.get(subscription.tenant_id)}
               />
+              <SupportAccessForm tenantId={subscription.tenant_id} compact />
             </div>
           </article>
         ))}
@@ -801,6 +808,16 @@ function InviteTenantAdminForm({ tenantId, disabled }: { tenantId: string; disab
       <button type="submit" disabled={disabled}>
         Invite admin
       </button>
+    </form>
+  );
+}
+
+function SupportAccessForm({ tenantId, compact }: { tenantId: string; compact: boolean }) {
+  return (
+    <form action={launchTenantSupportAccessAction} className={compact ? "support-access-form compact" : "support-access-form"}>
+      <input type="hidden" name="tenantId" value={tenantId} />
+      <input name="reason" placeholder="Support reason" required minLength={3} />
+      <button type="submit">Launch app</button>
     </form>
   );
 }
