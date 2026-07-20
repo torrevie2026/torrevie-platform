@@ -4536,6 +4536,8 @@ async function deliverExpenseStatusWhatsappReply(
         s.sender_raw,
         s.sender_phone,
         s.whatsapp_chat_jid,
+        s.session_id,
+        s.payload,
         e.vendor,
         e.amount::float as amount,
         e.currency,
@@ -4556,6 +4558,12 @@ async function deliverExpenseStatusWhatsappReply(
     return null;
   }
 
+  const replyText = buildExpenseStatusReply(row, status);
+  if (isQuickConnectSubmissionPayload(row.payload)) {
+    await enqueueQuickConnectOutboundMessage(client, actor, row, replyText, expenseId);
+    return null;
+  }
+
   return deliverTexWhatsappReply(
     client,
     actor,
@@ -4564,8 +4572,69 @@ async function deliverExpenseStatusWhatsappReply(
       senderPhone: row.sender_phone,
       whatsappChatJid: row.whatsapp_chat_jid
     },
-    buildExpenseStatusReply(row, status),
+    replyText,
     row.submission_id
+  );
+}
+
+async function enqueueQuickConnectOutboundMessage(
+  client: TenantQueryClient,
+  actor: TexActorContext,
+  row: Pick<
+    TexWhatsappExpenseStatusReplyRow,
+    "submission_id" | "session_id" | "sender_phone" | "whatsapp_chat_jid"
+  >,
+  messageText: string,
+  expenseId: string
+) {
+  const result = await client.query<{ id: string }>(
+    `
+      insert into public.tex_quick_connect_outbox (
+        tenant_id,
+        session_id,
+        submission_id,
+        expense_id,
+        recipient_phone,
+        whatsapp_chat_jid,
+        message_text,
+        created_by,
+        updated_by
+      )
+      values (
+        public.current_tenant_id(),
+        $1::uuid,
+        $2::uuid,
+        $3::uuid,
+        $4,
+        $5,
+        $6,
+        $7::uuid,
+        $7::uuid
+      )
+      returning id
+    `,
+    [
+      row.session_id,
+      row.submission_id,
+      expenseId,
+      row.sender_phone,
+      row.whatsapp_chat_jid,
+      messageText,
+      actor.userId
+    ]
+  );
+  const outbox = requireSingleRow(result.rows, "Quick Connect outbox message");
+
+  await writeTexAuditEvent(
+    client,
+    actor,
+    "tex.quick_connect.outbound_queued",
+    "tex_unregistered_whatsapp_submission",
+    row.submission_id,
+    {
+      expense_id: expenseId,
+      outbox_id: outbox.id
+    }
   );
 }
 
@@ -6779,6 +6848,13 @@ function whatsappExpenseSummary(
     .join(" / ");
 }
 
+function isQuickConnectSubmissionPayload(payload: unknown) {
+  const record = readRecord(payload);
+  const provider = readString(record.provider)?.toLowerCase();
+  const source = readString(record.source)?.toLowerCase();
+  return provider === "quickconnect" || source === "quick_connect" || record.quick_connect === true;
+}
+
 function requireSingleRow<Row>(rows: readonly Row[], label: string) {
   const [row] = rows;
 
@@ -7536,6 +7612,8 @@ type TexWhatsappExpenseStatusReplyRow = {
   sender_raw: string | null;
   sender_phone: string | null;
   whatsapp_chat_jid: string | null;
+  session_id: string | null;
+  payload: unknown;
   vendor: string | null;
   amount: number;
   currency: string;
