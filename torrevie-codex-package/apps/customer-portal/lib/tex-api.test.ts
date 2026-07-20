@@ -47,6 +47,70 @@ class RecordingTexApiClient implements TenantQueryClient {
   async query<Row>(sql: string, values: readonly QueryValue[] = []): Promise<QueryResult<Row>> {
     this.calls.push({ sql, values });
 
+    if (sql.includes("as employee_profiles") && sql.includes("as integration_settings")) {
+      return {
+        rows: [
+          {
+            categories: [
+              {
+                id: "00000000-0000-4000-8000-000000003001",
+                name: "Meals",
+                is_active: true,
+                is_system: true,
+                sort_order: 10
+              }
+            ],
+            employee_profiles: [
+              {
+                id: "00000000-0000-4000-8000-000000004001",
+                user_id: null,
+                name: "Maya Haddad",
+                phone_number: "+971500000001",
+                department: "Operations",
+                monthly_salary: 12000,
+                manager_user_id: "00000000-0000-4000-8000-000000002002",
+                manager_name: "Omar Faris",
+                manager_email: "omar@example.test",
+                submission_frequency: "weekly",
+                is_active: true
+              }
+            ],
+            manager_users: [
+              {
+                id: "00000000-0000-4000-8000-000000002002",
+                email: "omar@example.test",
+                display_name: "Omar Faris",
+                roles: ["customer_manager"]
+              }
+            ],
+            teams: [
+              {
+                id: "00000000-0000-4000-8000-000000005001",
+                name: "Ops",
+                description: "Operations",
+                manager_employee_profile_id: "00000000-0000-4000-8000-000000004001",
+                manager_name: "Maya Haddad",
+                member_employee_profile_ids: "00000000-0000-4000-8000-000000004001",
+                member_names: "Maya Haddad",
+                member_count: 1
+              }
+            ],
+            integration_settings: {
+              whatsapp_provider: "wappfly",
+              whatsapp_instance_id: null,
+              wappfly_session_id: "session-a",
+              meta_phone_number_id: null,
+              meta_whatsapp_business_account_id: null,
+              ai_receipt_extraction_enabled: true,
+              duplicate_detection_enabled: true,
+              duplicate_auto_reject_enabled: false,
+              duplicate_similarity_threshold: 0.92
+            }
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("insert into public.tex_expense_categories")) {
       return {
         rows: [

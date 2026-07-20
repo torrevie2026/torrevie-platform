@@ -68,7 +68,10 @@ export async function requireVerifiedCustomerSession(): Promise<VerifiedCustomer
   } = await supabase.auth.getSession();
 
   if (!session) {
-    throw new CustomerSessionError("Authentication is required for customer portal access.", "unauthorized");
+    throw new CustomerSessionError(
+      "Authentication is required for customer portal access.",
+      "unauthorized"
+    );
   }
 
   const {
@@ -147,7 +150,9 @@ export async function resolveCustomerAccountTenantContext(
 
   const invitedRows = result.rows.filter((row) => row.membership_status === "invited");
   const activeRows = result.rows.filter((row) => row.membership_status === "active");
-  const chosen = [...(activeRows.length > 0 ? activeRows : invitedRows)].sort(compareMembershipRows)[0];
+  const chosen = [...(activeRows.length > 0 ? activeRows : invitedRows)].sort(
+    compareMembershipRows
+  )[0];
 
   if (!chosen) {
     return resolveTenantContext(client, session.userId);
@@ -179,27 +184,29 @@ export async function getCustomerAccessRequirements(
     };
   }
 
-  const userResult = await client.query<UserRequirementRow>(
-    `
-      select first_name, last_name, mobile_number, recovery_email, profile_completed_at, mfa_enrolled
-      from public.users
-      where id = $1
-    `,
-    [context.userId]
-  );
-  const profileResult = await client.query<ProfileRequirementRow>(
-    `
-      select
-        display_name,
-        require_profile_completion,
-        require_password_change,
-        require_mfa
-      from public.user_profiles
-      where tenant_id = $1
-        and user_id = $2
-    `,
-    [context.tenantId, context.userId]
-  );
+  const [userResult, profileResult] = await Promise.all([
+    client.query<UserRequirementRow>(
+      `
+        select first_name, last_name, mobile_number, recovery_email, profile_completed_at, mfa_enrolled
+        from public.users
+        where id = $1
+      `,
+      [context.userId]
+    ),
+    client.query<ProfileRequirementRow>(
+      `
+        select
+          display_name,
+          require_profile_completion,
+          require_password_change,
+          require_mfa
+        from public.user_profiles
+        where tenant_id = $1
+          and user_id = $2
+      `,
+      [context.tenantId, context.userId]
+    )
+  ]);
   const user = userResult.rows[0];
   const profile = profileResult.rows[0];
 

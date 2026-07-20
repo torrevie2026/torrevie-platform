@@ -92,6 +92,91 @@ class RecordingTexClient implements TenantQueryClient {
   async query<Row>(sql: string, values: readonly QueryValue[] = []): Promise<QueryResult<Row>> {
     this.calls.push({ sql, values });
 
+    if (sql.includes("as tenant_name") && sql.includes("as entitled_products")) {
+      return {
+        rows: [
+          {
+            tenant_name: "Demo Logistics",
+            roles: ["customer_manager"],
+            entitled_products: ["tex"],
+            tex_plan: {
+              plan_key: "trial",
+              plan_status: "trialing",
+              trial_start_date: null,
+              trial_end_date: null,
+              employee_limit: 5,
+              seat_count: 0,
+              whatsapp_provider_scope: "not_configured"
+            }
+          }
+        ] as Row[]
+      };
+    }
+
+    if (sql.includes("as employee_profiles") && sql.includes("as integration_settings")) {
+      return {
+        rows: [
+          {
+            categories: [
+              {
+                id: "00000000-0000-4000-8000-000000003001",
+                name: "Meals",
+                is_active: true,
+                is_system: true,
+                sort_order: 10
+              }
+            ],
+            employee_profiles: [
+              {
+                id: "00000000-0000-4000-8000-000000004001",
+                user_id: actor.userId,
+                name: "Maya Haddad",
+                phone_number: "+971500000001",
+                department: "Operations",
+                monthly_salary: 12000,
+                manager_user_id: "00000000-0000-4000-8000-000000002002",
+                manager_name: "Omar Faris",
+                manager_email: "omar@example.test",
+                submission_frequency: "weekly",
+                is_active: true
+              }
+            ],
+            manager_users: [
+              {
+                id: "00000000-0000-4000-8000-000000002002",
+                email: "omar@example.test",
+                display_name: "Omar Faris",
+                roles: ["customer_manager"]
+              }
+            ],
+            teams: [
+              {
+                id: "00000000-0000-4000-8000-000000005001",
+                name: "Ops",
+                description: "Operations",
+                manager_employee_profile_id: "00000000-0000-4000-8000-000000004001",
+                manager_name: "Maya Haddad",
+                member_employee_profile_ids: "00000000-0000-4000-8000-000000004001",
+                member_names: "Maya Haddad",
+                member_count: 1
+              }
+            ],
+            integration_settings: {
+              whatsapp_provider: "wappfly",
+              whatsapp_instance_id: null,
+              wappfly_session_id: "session-1",
+              meta_phone_number_id: null,
+              meta_whatsapp_business_account_id: null,
+              ai_receipt_extraction_enabled: true,
+              duplicate_detection_enabled: true,
+              duplicate_auto_reject_enabled: this.options.duplicateAutoRejectEnabled ?? false,
+              duplicate_similarity_threshold: 0.94
+            }
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("from public.tex_expense_categories")) {
       return {
         rows: [
@@ -1223,7 +1308,9 @@ async function main() {
     assert.equal(client.hasSql("insert into public.tex_quick_connect_outbox"), true);
     assert.equal(client.valuesContain("tex.quick_connect.outbound_queued"), true);
     assert.equal(
-      client.valuesContain("Receipt approved: Airport Cafe / 2026-07-12 / 120 AED. Status: approved and pending payment."),
+      client.valuesContain(
+        "Receipt approved: Airport Cafe / 2026-07-12 / 120 AED. Status: approved and pending payment."
+      ),
       true
     );
   }
@@ -1332,7 +1419,10 @@ async function main() {
     assert.equal(result.ocrStatus, "extracted");
     assert.equal(result.expense?.status, "pending");
     assert.equal(client.hasSql("$1::uuid"), true);
-    assert.equal(client.hasSql("case when $21::text = 'rejected' then $1::uuid else null end"), true);
+    assert.equal(
+      client.hasSql("case when $21::text = 'rejected' then $1::uuid else null end"),
+      true
+    );
     assert.equal(client.valuesContain("00000000-0000-4000-8000-000000004001"), true);
     assert.equal(client.valuesContain("100000000000003"), true);
   }
@@ -1393,7 +1483,9 @@ async function main() {
         call.values.some(
           (value) =>
             typeof value === "string" &&
-            value.includes("Receipt requires manager review because TEX could not read all key fields.")
+            value.includes(
+              "Receipt requires manager review because TEX could not read all key fields."
+            )
         )
       ),
       true

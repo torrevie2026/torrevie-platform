@@ -14,7 +14,6 @@ import type {
   TexOnboardingStatusRow,
   TexPlanContextRow,
   TexProductRow,
-  TexRoleRow,
   TexTeamRow,
   TexTenantRow
 } from "./db-types";
@@ -72,72 +71,73 @@ export async function resolveTexActorContext(
       throw new Error("The user is deactivated.");
     }
 
-    const tenant = await client.query<TexTenantRow>(
+    const contextResult = await client.query<TexActorContextWorkspaceRow>(
       `
-          select name
-          from public.tenants
-          where id = public.current_tenant_id()
-          limit 1
-        `
-    );
-    const roles = await client.query<TexRoleRow>(
-      `
-          select r.key
-          from public.user_role_assignments ura
-          join public.roles r on r.id = ura.role_id
-          where ura.tenant_id = public.current_tenant_id()
-            and ura.user_id = $1
-        `,
+        select
+          (
+            select name
+            from public.tenants
+            where id = public.current_tenant_id()
+            limit 1
+          ) as tenant_name,
+          coalesce((
+            select array_agg(r.key order by r.key)
+            from public.user_role_assignments ura
+            join public.roles r on r.id = ura.role_id
+            where ura.tenant_id = public.current_tenant_id()
+              and ura.user_id = $1
+          ), '{}') as roles,
+          coalesce((
+            select array_agg(p.key order by p.key)
+            from public.subscriptions s
+            join public.products p on p.id = s.product_id
+            where s.tenant_id = public.current_tenant_id()
+              and s.status in ('trial', 'active')
+              and s.starts_at <= now()
+              and (s.expires_at is null or s.expires_at > now())
+          ), '{}') as entitled_products,
+          (
+            select to_jsonb(plan_row)
+            from (
+              select
+                coalesce(tpc.plan_key::text, plans.key, 'trial') as plan_key,
+                coalesce(
+                  tpc.plan_status::text,
+                  case when s.status = 'trial' then 'trialing' else s.status end,
+                  'trialing'
+                ) as plan_status,
+                coalesce(tpc.trial_start_date::text, s.starts_at::date::text) as trial_start_date,
+                coalesce(tpc.trial_end_date::text, s.expires_at::date::text) as trial_end_date,
+                coalesce(tpc.employee_limit, pf.limit_value, 5)::int as employee_limit,
+                coalesce(tpc.seat_count, 0)::int as seat_count,
+                coalesce(tpc.whatsapp_provider_scope::text, 'not_configured') as whatsapp_provider_scope
+              from public.subscriptions s
+              join public.products products
+                on products.id = s.product_id
+              join public.plans plans
+                on plans.id = s.plan_id
+              left join public.tex_plan_controls tpc
+                on tpc.tenant_id = s.tenant_id
+              left join public.plan_features pf
+                on pf.plan_id = plans.id
+               and pf.feature_key = 'tex.employee_limit'
+              where s.tenant_id = public.current_tenant_id()
+                and products.key = 'tex'
+                and s.status in ('trial', 'active')
+                and s.starts_at <= now()
+                and (s.expires_at is null or s.expires_at > now())
+              order by s.created_at desc
+              limit 1
+            ) plan_row
+          ) as tex_plan
+      `,
       [context.userId]
     );
-    const entitledProducts = await client.query<TexProductRow>(
-      `
-          select p.key
-          from public.subscriptions s
-          join public.products p on p.id = s.product_id
-          where s.tenant_id = public.current_tenant_id()
-            and s.status in ('trial', 'active')
-            and s.starts_at <= now()
-            and (s.expires_at is null or s.expires_at > now())
-        `
-    );
-    const texPlan = await client.query<TexPlanContextRow>(
-      `
-          select
-            coalesce(tpc.plan_key::text, plans.key, 'trial') as plan_key,
-            coalesce(
-              tpc.plan_status::text,
-              case when s.status = 'trial' then 'trialing' else s.status end,
-              'trialing'
-            ) as plan_status,
-            coalesce(tpc.trial_start_date::text, s.starts_at::date::text) as trial_start_date,
-            coalesce(tpc.trial_end_date::text, s.expires_at::date::text) as trial_end_date,
-            coalesce(tpc.employee_limit, pf.limit_value, 5)::int as employee_limit,
-            coalesce(tpc.seat_count, 0)::int as seat_count,
-            coalesce(tpc.whatsapp_provider_scope::text, 'not_configured') as whatsapp_provider_scope
-          from public.subscriptions s
-          join public.products products
-            on products.id = s.product_id
-          join public.plans plans
-            on plans.id = s.plan_id
-          left join public.tex_plan_controls tpc
-            on tpc.tenant_id = s.tenant_id
-          left join public.plan_features pf
-            on pf.plan_id = plans.id
-           and pf.feature_key = 'tex.employee_limit'
-          where s.tenant_id = public.current_tenant_id()
-            and products.key = 'tex'
-            and s.status in ('trial', 'active')
-            and s.starts_at <= now()
-            and (s.expires_at is null or s.expires_at > now())
-          order by s.created_at desc
-          limit 1
-        `
-    );
-    const resolvedRoles = roles.rows.map((row) => row.key).filter(isRoleKey);
-    const resolvedProducts = entitledProducts.rows.map((row) => row.key).filter(isProductKey);
-    const resolvedTexPlan = mapTexPlanContext(texPlan.rows[0]);
-    const tenantName = tenant.rows[0]?.name?.trim() || context.tenantId;
+    const contextRow = contextResult.rows[0];
+    const resolvedRoles = (contextRow?.roles ?? []).filter(isRoleKey);
+    const resolvedProducts = (contextRow?.entitled_products ?? []).filter(isProductKey);
+    const resolvedTexPlan = mapTexPlanContext(contextRow?.tex_plan ?? undefined);
+    const tenantName = contextRow?.tenant_name?.trim() || context.tenantId;
 
     return {
       ...context,
@@ -157,120 +157,131 @@ export async function listTexBootstrap(
   assertTexPermission(actor, "tex.expense.read");
 
   return withTenantContext(client, actor, async () => {
-    const categories = await client.query<TexExpenseCategoryRow>(
+    const result = await client.query<TexBootstrapWorkspaceRow>(
       `
-          select id, name, is_active, is_system, sort_order
-          from public.tex_expense_categories
-          where tenant_id = public.current_tenant_id()
-          order by sort_order asc, name asc
-        `
-    );
-    const employeeProfiles = await client.query<TexEmployeeProfileRow>(
+        select
+          (
+            select coalesce(jsonb_agg(to_jsonb(category_row)), '[]'::jsonb)
+            from (
+              select id, name, is_active, is_system, sort_order
+              from public.tex_expense_categories
+              where tenant_id = public.current_tenant_id()
+              order by sort_order asc, name asc
+            ) category_row
+          ) as categories,
+          (
+            select coalesce(jsonb_agg(to_jsonb(employee_row)), '[]'::jsonb)
+            from (
+              select
+                ep.id,
+                ep.user_id,
+                ep.name,
+                ep.phone_number,
+                ep.department,
+                ep.monthly_salary::float as monthly_salary,
+                ep.manager_user_id,
+                manager_profile.display_name as manager_name,
+                manager_user.email as manager_email,
+                ep.submission_frequency,
+                ep.is_active
+              from public.tex_employee_profiles ep
+              left join public.users manager_user
+                on manager_user.id = ep.manager_user_id
+              left join public.user_profiles manager_profile
+                on manager_profile.tenant_id = ep.tenant_id
+               and manager_profile.user_id = ep.manager_user_id
+              where ep.tenant_id = public.current_tenant_id()
+              order by ep.name asc
+            ) employee_row
+          ) as employee_profiles,
+          (
+            select coalesce(jsonb_agg(to_jsonb(manager_row)), '[]'::jsonb)
+            from (
+              select
+                u.id,
+                u.email,
+                up.display_name,
+                coalesce(array_agg(r.key order by r.key) filter (where r.key is not null), '{}') as roles
+              from public.tenant_memberships tm
+              join public.users u on u.id = tm.user_id
+              left join public.user_profiles up
+                on up.tenant_id = tm.tenant_id
+               and up.user_id = tm.user_id
+              left join public.user_role_assignments ura
+                on ura.tenant_id = tm.tenant_id
+               and ura.user_id = tm.user_id
+              left join public.roles r on r.id = ura.role_id
+              where tm.tenant_id = public.current_tenant_id()
+                and tm.status = 'active'
+                and u.status = 'active'
+              group by u.id, u.email, up.display_name
+              order by coalesce(up.display_name, u.email) asc
+            ) manager_row
+          ) as manager_users,
+          (
+            select coalesce(jsonb_agg(to_jsonb(team_row)), '[]'::jsonb)
+            from (
+              select
+                t.id,
+                t.name,
+                t.description,
+                t.manager_employee_profile_id,
+                manager.name as manager_name,
+                coalesce(
+                  string_agg(member.id::text, ',' order by member.name)
+                    filter (where member.id is not null),
+                  ''
+                ) as member_employee_profile_ids,
+                coalesce(
+                  string_agg(member.name, '|' order by member.name)
+                    filter (where member.id is not null),
+                  ''
+                ) as member_names,
+                count(member.id)::int as member_count
+              from public.tex_teams t
+              left join public.tex_employee_profiles manager
+                on manager.tenant_id = t.tenant_id
+               and manager.id = t.manager_employee_profile_id
+              left join public.tex_team_members tm
+                on tm.tenant_id = t.tenant_id
+               and tm.team_id = t.id
+              left join public.tex_employee_profiles member
+                on member.tenant_id = tm.tenant_id
+               and member.id = tm.employee_profile_id
+              where t.tenant_id = public.current_tenant_id()
+              group by t.id, manager.name
+              order by t.name asc
+            ) team_row
+          ) as teams,
+          (
+            select to_jsonb(settings_row)
+            from (
+              select
+                whatsapp_provider,
+                whatsapp_instance_id,
+                wappfly_session_id,
+                meta_phone_number_id,
+                meta_whatsapp_business_account_id,
+                ai_receipt_extraction_enabled,
+                duplicate_detection_enabled,
+                duplicate_auto_reject_enabled,
+                duplicate_similarity_threshold::float as duplicate_similarity_threshold
+              from public.tex_integration_settings
+              where tenant_id = public.current_tenant_id()
+              limit 1
+            ) settings_row
+          ) as integration_settings
       `
-          select
-            ep.id,
-            ep.user_id,
-            ep.name,
-            ep.phone_number,
-            ep.department,
-            ep.monthly_salary::float as monthly_salary,
-            ep.manager_user_id,
-            manager_profile.display_name as manager_name,
-            manager_user.email as manager_email,
-            ep.submission_frequency,
-            ep.is_active
-          from public.tex_employee_profiles ep
-          left join public.users manager_user
-            on manager_user.id = ep.manager_user_id
-          left join public.user_profiles manager_profile
-            on manager_profile.tenant_id = ep.tenant_id
-           and manager_profile.user_id = ep.manager_user_id
-          where ep.tenant_id = public.current_tenant_id()
-          order by ep.name asc
-        `
     );
-    const managerUsers = await client.query<TexManagerUserRow>(
-      `
-          select
-            u.id,
-            u.email,
-            up.display_name,
-            coalesce(array_agg(r.key order by r.key) filter (where r.key is not null), '{}') as roles
-          from public.tenant_memberships tm
-          join public.users u on u.id = tm.user_id
-          left join public.user_profiles up
-            on up.tenant_id = tm.tenant_id
-           and up.user_id = tm.user_id
-          left join public.user_role_assignments ura
-            on ura.tenant_id = tm.tenant_id
-           and ura.user_id = tm.user_id
-          left join public.roles r on r.id = ura.role_id
-          where tm.tenant_id = public.current_tenant_id()
-            and tm.status = 'active'
-            and u.status = 'active'
-          group by u.id, u.email, up.display_name
-          order by coalesce(up.display_name, u.email) asc
-        `
-    );
-    const teams = await client.query<TexTeamRow>(
-      `
-          select
-            t.id,
-            t.name,
-            t.description,
-            t.manager_employee_profile_id,
-            manager.name as manager_name,
-            coalesce(
-              string_agg(member.id::text, ',' order by member.name)
-                filter (where member.id is not null),
-              ''
-            ) as member_employee_profile_ids,
-            coalesce(
-              string_agg(member.name, '|' order by member.name)
-                filter (where member.id is not null),
-              ''
-            ) as member_names,
-            count(member.id)::int as member_count
-          from public.tex_teams t
-          left join public.tex_employee_profiles manager
-            on manager.tenant_id = t.tenant_id
-           and manager.id = t.manager_employee_profile_id
-          left join public.tex_team_members tm
-            on tm.tenant_id = t.tenant_id
-           and tm.team_id = t.id
-          left join public.tex_employee_profiles member
-            on member.tenant_id = tm.tenant_id
-           and member.id = tm.employee_profile_id
-          where t.tenant_id = public.current_tenant_id()
-          group by t.id, manager.name
-          order by t.name asc
-        `
-    );
-    const integrationSettings = await client.query<TexIntegrationSettingsRow>(
-      `
-          select
-            whatsapp_provider,
-            whatsapp_instance_id,
-            wappfly_session_id,
-            meta_phone_number_id,
-            meta_whatsapp_business_account_id,
-            ai_receipt_extraction_enabled,
-            duplicate_detection_enabled,
-            duplicate_auto_reject_enabled,
-            duplicate_similarity_threshold::float as duplicate_similarity_threshold
-          from public.tex_integration_settings
-          where tenant_id = public.current_tenant_id()
-          limit 1
-        `
-    );
+    const workspace = normalizeTexBootstrapWorkspace(result.rows[0]);
 
     return {
-      categories: categories.rows.map(mapCategory),
-      employeeProfiles: employeeProfiles.rows.map(mapEmployeeProfile),
-      managerUsers: managerUsers.rows.map(mapManagerUser),
-      teams: teams.rows.map(mapTeam),
-      integrationSettings: integrationSettings.rows[0]
-        ? mapIntegrationSettings(integrationSettings.rows[0])
+      categories: workspace.categories.map(mapCategory),
+      employeeProfiles: workspace.employee_profiles.map(mapEmployeeProfile),
+      managerUsers: workspace.manager_users.map(mapManagerUser),
+      teams: workspace.teams.map(mapTeam),
+      integrationSettings: workspace.integration_settings
+        ? mapIntegrationSettings(workspace.integration_settings)
         : null
     };
   });
@@ -394,4 +405,31 @@ async function resolveTexSupportContext(
       tenantName: tenant.rows[0]?.name?.trim() || context.tenantId
     };
   });
+}
+
+type TexActorContextWorkspaceRow = {
+  tenant_name: string | null;
+  roles: string[];
+  entitled_products: string[];
+  tex_plan: TexPlanContextRow | null;
+};
+
+type TexBootstrapWorkspaceRow = {
+  categories: TexExpenseCategoryRow[];
+  employee_profiles: TexEmployeeProfileRow[];
+  manager_users: TexManagerUserRow[];
+  teams: TexTeamRow[];
+  integration_settings: TexIntegrationSettingsRow | null;
+};
+
+function normalizeTexBootstrapWorkspace(
+  row: Partial<TexBootstrapWorkspaceRow> | undefined
+): TexBootstrapWorkspaceRow {
+  return {
+    categories: row?.categories ?? [],
+    employee_profiles: row?.employee_profiles ?? [],
+    manager_users: row?.manager_users ?? [],
+    teams: row?.teams ?? [],
+    integration_settings: row?.integration_settings ?? null
+  };
 }
