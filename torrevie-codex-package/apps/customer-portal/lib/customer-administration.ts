@@ -1,3 +1,4 @@
+import { createAuthActionShortLink } from "@torrevie/auth/server";
 import { createClient } from "@supabase/supabase-js";
 import { dispatchEmailNotification } from "@torrevie/notifications";
 import { assertPermission, roleKeys, type RoleKey } from "@torrevie/permissions";
@@ -1132,7 +1133,11 @@ async function createCustomerInviteIdentity(email: string): Promise<CustomerInvi
 
       return {
         userId: recovery.data.user.id,
-        actionLink: enforceCustomerPasswordSetupRedirect(recovery.data.properties.action_link),
+        actionLink: await createCustomerAuthActionShortLink(
+          client,
+          enforceCustomerPasswordSetupRedirect(recovery.data.properties.action_link),
+          "recovery"
+        ),
         kind: "existing_user"
       };
     }
@@ -1146,7 +1151,11 @@ async function createCustomerInviteIdentity(email: string): Promise<CustomerInvi
 
   return {
     userId: data.user.id,
-    actionLink: enforceCustomerPasswordSetupRedirect(data.properties.action_link),
+    actionLink: await createCustomerAuthActionShortLink(
+      client,
+      enforceCustomerPasswordSetupRedirect(data.properties.action_link),
+      "invite"
+    ),
     kind: "new_invitation"
   };
 }
@@ -1165,7 +1174,11 @@ async function createCustomerPasswordResetLink(email: string) {
     throw new Error(`Unable to create password reset link: ${error?.message ?? "missing action link"}`);
   }
 
-  return enforceCustomerPasswordSetupRedirect(data.properties.action_link);
+  return createCustomerAuthActionShortLink(
+    client,
+    enforceCustomerPasswordSetupRedirect(data.properties.action_link),
+    "recovery"
+  );
 }
 
 async function getCustomerUserEmail(client: TenantQueryClient, userId: string) {
@@ -1280,6 +1293,18 @@ function enforceCustomerPasswordSetupRedirect(actionLink: string) {
   } catch {
     return actionLink;
   }
+}
+
+async function createCustomerAuthActionShortLink(
+  client: ReturnType<typeof getSupabaseAdminClient>,
+  actionLink: string,
+  actionType: "invite" | "recovery"
+) {
+  return createAuthActionShortLink(client, {
+    actionLink,
+    actionType,
+    baseUrl: customerPortalUrl()
+  });
 }
 
 function isCustomerPortalUrl(value: string) {

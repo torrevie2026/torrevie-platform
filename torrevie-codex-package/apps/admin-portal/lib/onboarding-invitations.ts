@@ -1,9 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import {
+  createCustomerAuthActionShortLink,
   customerPasswordSetupCallbackUrl,
-  customerPortalUrl,
-  enforceCustomerPasswordSetupActionLink
+  customerPortalUrl
 } from "./customer-portal-url";
 
 export type TenantAdminInvitation = {
@@ -121,7 +121,7 @@ async function createSupabaseInviteLink(client: SupabaseClient, email: string) {
 
   return {
     userId,
-    actionLink: enforceCustomerPasswordSetupActionLink(actionLink)
+    actionLink: await createCustomerAuthActionShortLink(client, actionLink, "invite")
   };
 }
 

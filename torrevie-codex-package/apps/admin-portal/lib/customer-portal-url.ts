@@ -1,3 +1,6 @@
+import { createAuthActionShortLink } from "@torrevie/auth/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 export function customerPortalUrl() {
   return (
     normalizeCustomerPortalUrl(process.env.CUSTOMER_PORTAL_URL) ||
@@ -20,6 +23,18 @@ export function enforceCustomerPasswordSetupActionLink(actionLink: string) {
   } catch {
     return actionLink;
   }
+}
+
+export async function createCustomerAuthActionShortLink(
+  client: SupabaseClient,
+  actionLink: string,
+  actionType: "invite" | "recovery"
+) {
+  return createAuthActionShortLink(client, {
+    actionLink: enforceCustomerPasswordSetupActionLink(actionLink),
+    actionType,
+    baseUrl: customerPortalUrl()
+  });
 }
 
 function normalizeCustomerPortalUrl(value: string | undefined) {
