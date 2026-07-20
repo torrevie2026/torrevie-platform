@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import type { ResolvedTenantContext } from "@torrevie/tenant-context";
+import { queryServerDatabase } from "./tenant-query-client";
 
 export const supportAccessCookieName = "torrevie_support_access";
 
@@ -115,21 +116,22 @@ async function findActiveSupportAccessSession(token: string): Promise<SupportAcc
 }
 
 async function writeSupportAuditEvent(session: SupportAccessSession, action: string) {
-  const { error } = await getSupabaseServiceClient().from("audit_events").insert({
-    tenant_id: session.tenantId,
-    actor_user_id: session.actorUserId,
-    action,
-    target_type: "support_access_session",
-    target_id: session.id,
-    metadata: {
-      reason: session.reason,
-      expires_at: session.expiresAt
-    }
-  });
-
-  if (error) {
-    throw new Error(`Unable to write support access audit event: ${error.message}`);
-  }
+  await queryServerDatabase(
+    `
+      insert into public.audit_events (tenant_id, actor_user_id, action, target_type, target_id, metadata)
+      values ($1, $2, $3, 'support_access_session', $4, $5::jsonb)
+    `,
+    [
+      session.tenantId,
+      session.actorUserId,
+      action,
+      session.id,
+      JSON.stringify({
+        reason: session.reason,
+        expires_at: session.expiresAt
+      })
+    ]
+  );
 }
 
 function hashToken(token: string) {
