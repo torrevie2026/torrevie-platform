@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
+import { customerPasswordSetupCallbackUrl } from "./customer-portal-url";
 
 export const customerRoleKeys = [
   "customer_admin",
@@ -258,7 +259,7 @@ export async function sendTenantPasswordReset(client: SupabaseClient, tenantId: 
     type: "recovery",
     email: user.email,
     options: {
-      redirectTo: `${customerPortalUrl()}/login`
+      redirectTo: customerPasswordSetupCallbackUrl()
     }
   });
 
@@ -303,7 +304,7 @@ async function createInviteLink(client: SupabaseClient, email: string) {
     type: "invite",
     email,
     options: {
-      redirectTo: `${customerPortalUrl()}/login`
+      redirectTo: customerPasswordSetupCallbackUrl()
     }
   });
 
@@ -610,10 +611,6 @@ async function sendEmail(input: { to: string; subject: string; html: string; tex
   if (error) {
     throw new Error(`Unable to send email: ${error.message}`);
   }
-}
-
-function customerPortalUrl() {
-  return (process.env.NEXT_PUBLIC_CUSTOMER_PORTAL_URL ?? "https://app.torrevie.com").replace(/\/+$/, "");
 }
 
 function sanitizeEmail(value: string) {
