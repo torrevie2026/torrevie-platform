@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import {
   getCustomerAccessRequirements,
   requireVerifiedCustomerSession,
-  resolveCustomerTenantContext
+  resolveCustomerAccountTenantContext
 } from "../../../lib/server/customer-session";
 import { PostgresTenantQueryClient } from "../../../lib/server/tenant-query-client";
 import { CustomerSessionActions } from "../CustomerSessionActions";
@@ -49,7 +49,7 @@ export default async function CustomerAccountPage({
   }
 
   const client = new PostgresTenantQueryClient(session.userId);
-  const tenantContext = await resolveCustomerTenantContext(client, session);
+  const tenantContext = await resolveCustomerAccountTenantContext(client, session);
   const requirements = await getCustomerAccessRequirements(client, tenantContext);
   const messages = await searchParams;
   const showPasswordSetupFirst =

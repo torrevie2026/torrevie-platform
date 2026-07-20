@@ -2,9 +2,9 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { getTenantClaimsFromJwt, requireSupabaseBrowserEnv } from "@torrevie/auth";
-import { resolveTenantContext } from "@torrevie/tenant-context";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { resolveCustomerAccountTenantContext } from "../../../lib/server/customer-session";
 import { PostgresTenantQueryClient } from "../../../lib/server/tenant-query-client";
 
 export async function updateCustomerProfileAction(formData: FormData) {
@@ -81,6 +81,18 @@ export async function changeCustomerPasswordAction(formData: FormData) {
     `,
     [session.userId, session.tenantId]
   );
+  await client.query(
+    `
+      update public.tenant_memberships
+         set status = 'active',
+             joined_at = coalesce(joined_at, now()),
+             updated_by = $1
+       where tenant_id = $2
+         and user_id = $1
+         and status in ('active', 'invited')
+    `,
+    [session.userId, session.tenantId]
+  );
 
   redirect(`/${locale}/account?password=updated`);
 }
@@ -126,11 +138,17 @@ async function requireCustomerSession(locale: "en" | "ar") {
   let tenantId = claims.tenant_id;
 
   if (!tenantId) {
-    try {
-      tenantId = (await resolveTenantContext(new PostgresTenantQueryClient(authSession.user.id), authSession.user.id)).tenantId;
-    } catch {
+    const context = await resolveCustomerAccountTenantContext(new PostgresTenantQueryClient(authSession.user.id), {
+      accessToken: authSession.access_token,
+      userId: authSession.user.id,
+      email: authSession.user.email ?? null
+    }).catch(() => null);
+
+    if (!context) {
       redirect("/login");
     }
+
+    tenantId = context.tenantId;
   }
 
   return {
