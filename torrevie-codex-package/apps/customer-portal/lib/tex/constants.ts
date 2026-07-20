@@ -1,0 +1,23 @@
+export const TEX_FX_TARGET_CURRENCIES = [
+  "EUR",
+  "GBP",
+  "EGP",
+  "KES",
+  "NGN",
+  "ZAR",
+  "MAD",
+  "CHF",
+  "SEK",
+  "NOK",
+  "DKK",
+  "PLN",
+  "CZK",
+  "HUF",
+  "TRY",
+  "INR",
+  "PKR",
+  "CAD",
+  "AUD",
+  "JPY",
+  "CNY"
+] as const;
