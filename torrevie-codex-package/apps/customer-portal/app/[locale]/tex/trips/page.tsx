@@ -18,10 +18,8 @@ export default async function TexTripsPage({
       redirect(`/${locale}/tex?upgrade=growth`);
     }
 
-    const [bootstrap, trips] = await Promise.all([
-      listTexBootstrap(client, actor),
-      listTexTrips(client, actor)
-    ]);
+    const bootstrap = await listTexBootstrap(client, actor);
+    const trips = await listTexTrips(client, actor);
 
     return (
       <>

@@ -26,17 +26,14 @@ export default async function TexPage({
     const { actor, client, session } = await requireTexRequestContext();
     const now = new Date();
     const growthFeaturesEnabled = actor.texPlan.growthFeaturesEnabled;
-    const [bootstrap, expenses, onboarding, trips, financeReview, reportWorkspace] =
-      await Promise.all([
-        listTexBootstrap(client, actor),
-        listTexExpenses(client, actor),
-        getTexOnboardingStatus(client, actor, { markDashboardViewed: true }),
-        growthFeaturesEnabled ? listTexTrips(client, actor) : Promise.resolve([]),
-        growthFeaturesEnabled
-          ? listTexFinanceReview(client, actor, now.getUTCMonth() + 1, now.getUTCFullYear())
-          : Promise.resolve(emptyFinanceReview(now)),
-        listTexReportWorkspace(client, actor).catch(() => null)
-      ]);
+    const bootstrap = await listTexBootstrap(client, actor);
+    const expenses = await listTexExpenses(client, actor);
+    const onboarding = await getTexOnboardingStatus(client, actor, { markDashboardViewed: true });
+    const trips = growthFeaturesEnabled ? await listTexTrips(client, actor) : [];
+    const financeReview = growthFeaturesEnabled
+      ? await listTexFinanceReview(client, actor, now.getUTCMonth() + 1, now.getUTCFullYear())
+      : emptyFinanceReview(now);
+    const reportWorkspace = await listTexReportWorkspace(client, actor).catch(() => null);
     const reportExpenses = reportWorkspace?.expenses ?? [];
     const pendingCount = expenses.filter((expense) => expense.status === "pending").length;
     const approvedCount = expenses.filter((expense) => expense.status === "approved").length;

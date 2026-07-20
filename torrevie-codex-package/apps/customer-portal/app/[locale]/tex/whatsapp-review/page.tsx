@@ -11,10 +11,8 @@ export const runtime = "nodejs";
 export default async function TexWhatsappReviewPage() {
   try {
     const { actor, client } = await requireTexRequestContext();
-    const [bootstrap, whatsappSubmissions] = await Promise.all([
-      listTexBootstrap(client, actor),
-      listTexUnregisteredWhatsappSubmissions(client, actor, "open").catch(() => [])
-    ]);
+    const bootstrap = await listTexBootstrap(client, actor);
+    const whatsappSubmissions = await listTexUnregisteredWhatsappSubmissions(client, actor, "open").catch(() => []);
 
     return (
       <>
