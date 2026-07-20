@@ -1,6 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { getTenantClaimsFromJwt, requireSupabaseBrowserEnv } from "@torrevie/auth";
-import { resolveTenantContext, type ResolvedTenantContext, type TenantQueryClient } from "@torrevie/tenant-context";
+import {
+  resolveTenantContext,
+  type ResolvedTenantContext,
+  type TenantMembershipRow,
+  type TenantQueryClient
+} from "@torrevie/tenant-context";
 import { cookies } from "next/headers";
 
 export type VerifiedCustomerSession = {
@@ -76,6 +81,58 @@ export async function resolveCustomerTenantContext(
   return resolveTenantContext(client, session.userId);
 }
 
+export async function resolveCustomerAccountTenantContext(
+  client: TenantQueryClient,
+  session: VerifiedCustomerSession
+): Promise<ResolvedTenantContext> {
+  const claims = getTenantClaimsFromJwt(session.accessToken);
+
+  if (claims.tenant_id) {
+    return {
+      tenantId: claims.tenant_id,
+      userId: session.userId,
+      roleScope: claims.role_scope ?? "customer"
+    };
+  }
+
+  const result = await client.query<TenantMembershipRow>(
+    `
+      select
+        tm.tenant_id,
+        tm.user_id,
+        tm.status as membership_status,
+        u.status as user_status,
+        r.scope as role_scope,
+        tm.joined_at,
+        tm.created_at
+      from public.tenant_memberships tm
+      join public.users u on u.id = tm.user_id
+      left join public.user_role_assignments ura
+        on ura.tenant_id = tm.tenant_id
+       and ura.user_id = tm.user_id
+      left join public.roles r on r.id = ura.role_id
+      where tm.user_id = $1
+        and tm.status in ('active', 'invited')
+        and u.status = 'active'
+    `,
+    [session.userId]
+  );
+
+  const invitedRows = result.rows.filter((row) => row.membership_status === "invited");
+  const activeRows = result.rows.filter((row) => row.membership_status === "active");
+  const chosen = [...(activeRows.length > 0 ? activeRows : invitedRows)].sort(compareMembershipRows)[0];
+
+  if (!chosen) {
+    return resolveTenantContext(client, session.userId);
+  }
+
+  return {
+    tenantId: chosen.tenant_id,
+    userId: chosen.user_id,
+    roleScope: chosen.role_scope ?? "customer"
+  };
+}
+
 export async function getCustomerAccessRequirements(
   client: TenantQueryClient,
   context: ResolvedTenantContext
@@ -147,3 +204,16 @@ type ProfileRequirementRow = {
   require_password_change: boolean | null;
   require_mfa: boolean | null;
 };
+
+function compareMembershipRows(left: TenantMembershipRow, right: TenantMembershipRow) {
+  const leftPlatformRank = left.role_scope === "platform" ? 0 : 1;
+  const rightPlatformRank = right.role_scope === "platform" ? 0 : 1;
+
+  if (leftPlatformRank !== rightPlatformRank) {
+    return leftPlatformRank - rightPlatformRank;
+  }
+
+  const leftJoinedAt = Date.parse(left.joined_at ?? left.created_at);
+  const rightJoinedAt = Date.parse(right.joined_at ?? right.created_at);
+  return rightJoinedAt - leftJoinedAt;
+}
