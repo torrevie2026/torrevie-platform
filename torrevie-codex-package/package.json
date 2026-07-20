@@ -9,7 +9,7 @@
     "format": "prettier . --check",
     "typecheck": "pnpm -r --if-present typecheck:local",
     "test": "pnpm test:auth && pnpm test:tenant-context && pnpm test:permissions && pnpm test:observability && pnpm test:notifications && pnpm test:ci-pipeline && pnpm test:admin-portal && pnpm test:tenant-lifecycle && pnpm test:provisioning && pnpm test:subscriptions && pnpm test:fsm-entitlements && pnpm test:fsm-adaptive-ux && pnpm test:fsm-voice-core && pnpm test:fsm-roi && pnpm test:fsm-hardening && pnpm test:localization && pnpm test:customer-portal-shell && pnpm test:customer-admin && pnpm test:crm && pnpm test:tex",
-    "test:auth": "node scripts/auth-claim-smoke.mjs",
+    "test:auth": "tsx packages/auth/src/index.test.ts && node scripts/auth-claim-smoke.mjs",
     "test:tenant-context": "tsx packages/tenant-context/src/index.test.ts && tsx scripts/tenant-context-smoke.ts",
     "test:permissions": "tsx packages/permissions/src/index.test.ts",
     "test:observability": "tsx packages/observability/src/index.test.ts",
