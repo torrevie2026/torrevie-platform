@@ -428,6 +428,13 @@ function readError(body: Record<string, unknown>) {
     return typeof message === "string" ? message : "WhatsApp provider returned an error.";
   }
 
+  for (const key of ["message", "error_message", "name"]) {
+    const value = body[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
   return null;
 }
 
