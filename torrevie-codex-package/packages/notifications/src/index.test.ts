@@ -172,6 +172,46 @@ async function main() {
     assert.equal(body.To, "finance@example.test,ops@example.test");
   }
 
+  {
+    const previousEnv = {
+      EMAIL_PROVIDER: process.env.EMAIL_PROVIDER,
+      RESEND_API_KEY: process.env.RESEND_API_KEY
+    };
+    let result: Awaited<ReturnType<typeof dispatchEmailNotification>> | null = null;
+
+    try {
+      delete process.env.EMAIL_PROVIDER;
+      process.env.RESEND_API_KEY = "re-secret";
+      result = await dispatchEmailNotification(
+        {
+          to: "finance@example.test",
+          from: "Torrevie <noreply@torrevie.com>",
+          subject: "Reset password",
+          text: "Reset password"
+        },
+        async () =>
+          Response.json(
+            {
+              message: "The torrevie.com domain is not verified."
+            },
+            { status: 403 }
+          )
+      );
+    } finally {
+      for (const [key, value] of Object.entries(previousEnv)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    }
+
+    assert.equal(result?.ok, false);
+    assert.equal(result?.httpStatus, 403);
+    assert.match(result?.error ?? "", /domain is not verified/);
+  }
+
   console.log("Notification dispatch tests passed.");
 }
 

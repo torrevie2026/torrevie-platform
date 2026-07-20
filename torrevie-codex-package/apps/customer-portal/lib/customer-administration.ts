@@ -68,6 +68,8 @@ type CustomerPasswordResetEmailInput = {
   actionLink: string;
 };
 
+const torrevieEmailFrom = "Torrevie <noreply@torrevie.com>";
+
 export type WhatsappProvider = "ultramsg" | "wappfly" | "meta";
 
 export type TenantWhatsappSettings = {
@@ -1205,6 +1207,7 @@ async function sendCustomerInviteEmail(input: CustomerInviteEmailInput) {
   const cta = input.kind === "existing_user" ? "Open your workspace" : "Set your password";
   const result = await dispatchEmailNotification({
     to: input.email,
+    from: torrevieEmailFrom,
     subject: `${input.tenantName} Torrevie access`,
     html: `
       <div style="font-family: Inter, Arial, sans-serif; color: #162449; line-height: 1.5;">
@@ -1226,6 +1229,7 @@ async function sendCustomerInviteEmail(input: CustomerInviteEmailInput) {
 async function sendCustomerPasswordResetEmail(input: CustomerPasswordResetEmailInput) {
   const result = await dispatchEmailNotification({
     to: input.email,
+    from: torrevieEmailFrom,
     subject: `${input.tenantName} password reset`,
     html: `
       <div style="font-family: Inter, Arial, sans-serif; color: #162449; line-height: 1.5;">
