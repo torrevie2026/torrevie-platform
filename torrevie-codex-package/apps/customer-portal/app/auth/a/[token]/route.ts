@@ -1,20 +1,42 @@
 import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import { getTenantClaimsFromJwt, requireSupabaseBrowserEnv } from "@torrevie/auth";
 import { redeemAuthActionLink } from "@torrevie/auth/server";
+import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ token: string }> }) {
-  const { token } = await context.params;
+  const { token: shortLinkToken } = await context.params;
+  const requestUrl = new URL(request.url);
 
   try {
-    const actionLink = await redeemAuthActionLink(getSupabaseAdminClient(), token);
-    const actionUrl = new URL(actionLink);
-    actionUrl.searchParams.set("redirect_to", customerPasswordSetupCallbackUrl(request));
+    const actionLink = await redeemAuthActionLink(getSupabaseAdminClient(), shortLinkToken);
+    const authAction = parseSupabaseActionLink(actionLink);
+    const supabase = await getSupabaseServerClient();
+    const { error } = await supabase.auth.verifyOtp({
+      token_hash: authAction.tokenHash,
+      type: authAction.type
+    });
 
-    return NextResponse.redirect(actionUrl);
+    if (error) {
+      return NextResponse.redirect(new URL("/login?error=invalid_invite", requestUrl.origin));
+    }
+
+    const { data } = await supabase.auth.getSession();
+    const session = data.session;
+    const claims = session ? getTenantClaimsFromJwt(session.access_token) : {};
+
+    if (!session || claims.role_scope === "platform") {
+      await supabase.auth.signOut({ scope: "local" });
+
+      return NextResponse.redirect(new URL("/login?error=unauthorized", requestUrl.origin));
+    }
+
+    return NextResponse.redirect(new URL("/en/account?setup=password", requestUrl.origin));
   } catch {
-    return NextResponse.redirect(new URL("/login?error=invalid_invite", request.url));
+    return NextResponse.redirect(new URL("/login?error=invalid_invite", requestUrl.origin));
   }
 }
 
@@ -34,46 +56,32 @@ function getSupabaseAdminClient() {
   });
 }
 
-function customerPasswordSetupCallbackUrl(request: NextRequest) {
-  const origin = customerPortalOrigin(request);
-  return `${origin}/auth/callback?next=${encodeURIComponent("/en/account?setup=password")}`;
+async function getSupabaseServerClient() {
+  const cookieStore = await cookies();
+  const { url, anonKey } = requireSupabaseBrowserEnv();
+
+  return createServerClient(url, anonKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        for (const cookieToSet of cookiesToSet) {
+          cookieStore.set(cookieToSet.name, cookieToSet.value, cookieToSet.options);
+        }
+      }
+    }
+  });
 }
 
-function customerPortalOrigin(request: NextRequest) {
-  const requestOrigin = request.nextUrl.origin.replace(/\/+$/, "");
-  if (isCustomerPortalUrl(requestOrigin)) {
-    return requestOrigin;
+function parseSupabaseActionLink(actionLink: string) {
+  const actionUrl = new URL(actionLink);
+  const tokenHash = actionUrl.searchParams.get("token");
+  const type = actionUrl.searchParams.get("type");
+
+  if (!tokenHash || (type !== "invite" && type !== "recovery")) {
+    throw new Error("Invalid Torrevie auth action link.");
   }
 
-  return (
-    normalizeCustomerPortalUrl(process.env.CUSTOMER_PORTAL_URL) ||
-    normalizeCustomerPortalUrl(process.env.NEXT_PUBLIC_CUSTOMER_PORTAL_URL) ||
-    "https://app.torrevie.com"
-  );
-}
-
-function normalizeCustomerPortalUrl(value: string | undefined) {
-  const clean = value?.trim().replace(/^['"]|['"]$/g, "").replace(/\/+$/, "");
-  if (!clean) {
-    return null;
-  }
-
-  const url = /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
-
-  return isCustomerPortalUrl(url) ? url : null;
-}
-
-function isCustomerPortalUrl(value: string) {
-  try {
-    const hostname = new URL(value).hostname.toLowerCase();
-    return (
-      hostname === "app.torrevie.com" ||
-      hostname === "torrevie-customer-portal-production.vercel.app" ||
-      hostname === "torrevie-customer-portal-staging.vercel.app" ||
-      hostname.endsWith("-torrevie-customer-portal-production.vercel.app") ||
-      hostname.endsWith("-torrevie-customer-portal-staging.vercel.app")
-    );
-  } catch {
-    return false;
-  }
+  return { tokenHash, type };
 }
