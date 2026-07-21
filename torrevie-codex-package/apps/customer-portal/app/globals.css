@@ -251,7 +251,7 @@ a {
 }
 
 .tex-sidebar .tex-nav a[aria-current="page"] .tex-nav-icon,
-.tex-sidebar .tex-nav-primary .tex-nav-icon,
+.tex-sidebar .tex-nav-primary[aria-current="page"] .tex-nav-icon,
 .tex-mobile-nav a[aria-current="page"] .tex-nav-icon {
   background: var(--color-accent);
   border-color: var(--color-accent);
