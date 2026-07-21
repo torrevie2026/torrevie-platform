@@ -5,7 +5,6 @@ import { normalizeDuplicateVendor } from "./whatsapp-receipts";
 
 export async function findDuplicateExpense(
   client: TenantQueryClient,
-  employeeProfileId: string,
   extraction: TexReceiptExtraction
 ): Promise<TexDuplicateCandidateRow | null> {
   if (!extraction.expenseDate || !extraction.amount || !extraction.currency) {
@@ -17,21 +16,27 @@ export async function findDuplicateExpense(
   const amountTolerance = Math.max(0.01, Math.min(2, amount * 0.01));
   const result = await client.query<TexDuplicateCandidateRow>(
     `
-      select id, vendor, amount::float as amount, currency, expense_date::text as expense_date
+      select
+        id,
+        employee_profile_id,
+        employee_name,
+        vendor,
+        amount::float as amount,
+        currency,
+        expense_date::text as expense_date
       from public.tex_expenses
       where tenant_id = public.current_tenant_id()
-        and employee_profile_id = $1
-        and expense_date between ($2::date - interval '1 day') and ($2::date + interval '1 day')
-        and abs(amount - $3) <= $5
-        and upper(currency) = $4
+        and expense_date between ($1::date - interval '1 day') and ($1::date + interval '1 day')
+        and abs(amount - $2) <= $4
+        and upper(currency) = $3
         and status <> 'rejected'
       order by
-        case when expense_date = $2::date then 0 else 1 end,
-        abs(amount - $3) asc,
+        case when expense_date = $1::date then 0 else 1 end,
+        abs(amount - $2) asc,
         created_at desc
       limit 3
     `,
-    [employeeProfileId, extraction.expenseDate, amount, currency, amountTolerance]
+    [extraction.expenseDate, amount, currency, amountTolerance]
   );
 
   const vendorKey = normalizeDuplicateVendor(extraction.vendor);

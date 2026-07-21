@@ -357,6 +357,8 @@ export type TexProcessingSettingsRow = {
 
 export type TexDuplicateCandidateRow = {
   id: string;
+  employee_profile_id: string | null;
+  employee_name: string | null;
   vendor: string | null;
   amount: number;
   currency: string;

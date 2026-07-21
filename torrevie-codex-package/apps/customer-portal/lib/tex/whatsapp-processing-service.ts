@@ -186,7 +186,7 @@ export async function processTexWhatsappSubmission(
     const duplicateExtraction = hasCompleteExtraction ? extractionForProcessing : null;
     const duplicate =
       settings.duplicate_detection_enabled && duplicateExtraction
-        ? await findDuplicateExpense(client, employee.id, duplicateExtraction)
+        ? await findDuplicateExpense(client, duplicateExtraction)
         : null;
     const shouldAutoReject = Boolean(duplicate && settings.duplicate_auto_reject_enabled);
     const expense = await createExpenseFromWhatsappReceipt(client, actor, {
@@ -434,7 +434,7 @@ export async function resolveTexUnregisteredWhatsappSubmission(
         candidate?.expenseDate &&
         candidate.amount &&
         candidate.currency
-          ? await findDuplicateExpense(client, employee.id, candidate)
+          ? await findDuplicateExpense(client, candidate)
           : null;
       const shouldAutoReject = Boolean(duplicate && settings.duplicate_auto_reject_enabled);
       expenses.push(

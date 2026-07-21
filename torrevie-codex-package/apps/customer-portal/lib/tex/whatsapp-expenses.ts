@@ -34,7 +34,7 @@ export async function createExpenseFromWhatsappReceipt(
       : "suspected"
     : "clear";
   const duplicateReason = input.duplicate
-    ? `Matched ${input.duplicate.vendor ?? "existing receipt"} on employee, date, amount, and currency.`
+    ? `Matched ${duplicateDescription(input.duplicate)} on tenant, date, amount, and currency.`
     : null;
   const result = await client.query<TexExpenseRow>(
     `
@@ -153,7 +153,7 @@ export async function insertResolvedWhatsappExpense(
       : "suspected"
     : "clear";
   const duplicateReason = input.duplicate
-    ? `Possible duplicate of ${input.duplicate.vendor ?? "existing receipt"} on ${input.duplicate.expense_date} for ${input.duplicate.currency} ${input.duplicate.amount}.`
+    ? `Possible duplicate of ${duplicateDescription(input.duplicate)} on ${input.duplicate.expense_date} for ${input.duplicate.currency} ${input.duplicate.amount}.`
     : null;
   const policyReason = [
     "Receipt came from an unregistered WhatsApp number and was assigned by a reviewer.",
@@ -263,4 +263,10 @@ export async function insertResolvedWhatsappExpense(
   );
 
   return mapExpense(requireSingleRow(result.rows, "expense"));
+}
+
+function duplicateDescription(duplicate: TexDuplicateCandidateRow) {
+  const vendor = duplicate.vendor ?? "existing receipt";
+  const employee = duplicate.employee_name?.trim();
+  return employee ? `${vendor} submitted by ${employee}` : vendor;
 }

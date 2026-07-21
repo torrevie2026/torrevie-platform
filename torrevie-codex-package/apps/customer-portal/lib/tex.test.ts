@@ -499,11 +499,17 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
-    if (sql.includes("select id, vendor, amount::float as amount")) {
+    if (
+      sql.includes("from public.tex_expenses") &&
+      sql.includes("abs(amount - $2) <= $4") &&
+      sql.includes("limit 3")
+    ) {
       return {
         rows: [
           {
             id: "00000000-0000-4000-8000-000000006099",
+            employee_profile_id: "00000000-0000-4000-8000-000000004099",
+            employee_name: "Other Driver",
             vendor: "Airport Cafe",
             expense_date: "2026-07-12",
             amount: 120,
@@ -1469,9 +1475,20 @@ async function main() {
     assert.match(result.replyText, /possible duplicate/);
     assert.equal(result.delivery?.messageId, "test-whatsapp-message");
     assert.equal(result.expense?.currency, "AED");
-    assert.equal(client.hasSql("expense_date between ($2::date - interval '1 day')"), true);
-    assert.equal(client.hasSql("abs(amount - $3) <= $5"), true);
+    assert.equal(client.hasSql("and employee_profile_id = $1"), false);
+    assert.equal(client.hasSql("expense_date between ($1::date - interval '1 day')"), true);
+    assert.equal(client.hasSql("abs(amount - $2) <= $4"), true);
     assert.equal(client.valuesContain("suspected"), true);
+    assert.equal(
+      client.calls.some((call) =>
+        call.values.some(
+          (value) =>
+            typeof value === "string" &&
+            value.includes("Matched Airport Cafe submitted by Other Driver")
+        )
+      ),
+      true
+    );
     assert.equal(client.valuesContain(true), true);
   }
 
