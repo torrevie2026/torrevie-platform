@@ -65,6 +65,7 @@ const connectorInstanceId =
 const activeSessions = new Map();
 const acknowledgementWindows = new Map();
 const reconnectFailures = new Map();
+const outboundSkipEvents = new Map();
 const logger = pino({ level: process.env.TEX_QUICK_CONNECT_LOG_LEVEL || "info" });
 
 if (!manualMode && !databaseUrl && (!supabaseUrl || !supabaseServiceRoleKey)) {
@@ -168,7 +169,19 @@ async function pollPendingOutboundMessages() {
   for (const message of messages) {
     const runtime = activeSessions.get(message.tenant_id);
     const remoteJid = message.whatsapp_chat_jid || jidFromPhone(message.recipient_phone);
-    if (!runtime?.sock || !remoteJid) {
+    if (!remoteJid) {
+      await recordOutboundSkipped(message, "missing_recipient", {
+        recipient_phone: message.recipient_phone ?? "",
+        whatsapp_chat_jid: message.whatsapp_chat_jid ?? ""
+      });
+      continue;
+    }
+
+    if (!runtime?.sock) {
+      await recordOutboundSkipped(message, "socket_unavailable", {
+        recipient_phone: message.recipient_phone ?? "",
+        remote_jid: remoteJid
+      });
       continue;
     }
 
@@ -212,6 +225,49 @@ async function pollPendingOutboundMessages() {
       );
     }
   }
+}
+
+async function recordOutboundSkipped(message, reason, metadata = {}) {
+  const eventKey = `${message.id}:${reason}`;
+  const now = Date.now();
+  const lastEventAt = outboundSkipEvents.get(eventKey) ?? 0;
+
+  if (now - lastEventAt < 5 * 60 * 1000) {
+    return;
+  }
+
+  outboundSkipEvents.set(eventKey, now);
+  logger.warn(
+    {
+      outboxId: message.id,
+      reason,
+      tenantId: message.tenant_id
+    },
+    "Quick Connect outbound message skipped"
+  );
+
+  await insertQuickConnectEvent(
+    {
+      id: message.session_id,
+      tenant_id: message.tenant_id
+    },
+    {
+      eventType: "quick_connect.outbound_skipped",
+      status: "connected",
+      message:
+        reason === "missing_recipient"
+          ? "Quick Connect could not send a queued TEX outbound message because no WhatsApp recipient was available."
+          : "Quick Connect could not send a queued TEX outbound message because the linked-device socket was not active.",
+      metadata: {
+        ...metadata,
+        expense_id: message.expense_id ?? "",
+        instance_id: connectorInstanceId,
+        outbox_id: message.id,
+        reason,
+        submission_id: message.submission_id ?? ""
+      }
+    }
+  );
 }
 
 async function startTenantSocket(session) {
