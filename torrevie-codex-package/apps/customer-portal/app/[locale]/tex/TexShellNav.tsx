@@ -33,7 +33,12 @@ const texNavItems = [
   { href: "/finance-review", icon: ClipboardCheck, label: "Finance review", minimumPlan: "growth" },
   { href: "/people", icon: Users, label: "People", minimumPlan: "trial" },
   { href: "/reports", icon: BarChart3, label: "Reports", minimumPlan: "trial" },
-  { href: "/whatsapp-review", icon: MessageCircle, label: "WhatsApp receipts", minimumPlan: "trial" },
+  {
+    href: "/whatsapp-review",
+    icon: MessageCircle,
+    label: "WhatsApp receipts",
+    minimumPlan: "trial"
+  },
   { href: "/integrations", icon: Plug, label: "WhatsApp setup", minimumPlan: "trial" },
   { href: "/settings", icon: Settings, label: "Settings", minimumPlan: "trial" }
 ] as const;
@@ -75,19 +80,22 @@ export function TexShellNav({ email, locale, planKey, roles, tenantName }: TexSh
               <small>Travel and Expense</small>
             </span>
           </Link>
-          <div className="tex-company-chip" title={tenantName}>{tenantName}</div>
+          <div className="tex-company-chip" title={tenantName}>
+            {tenantName}
+          </div>
         </div>
 
         <nav className="tex-nav">
           {visibleNavItems.map((item) => {
             const href = `${basePath}${item.href}`;
             const isDashboard = item.href === "";
+            const isCurrent = isActive(item.href);
             const Icon = item.icon;
 
             return (
               <Link
-                aria-current={isActive(item.href) ? "page" : undefined}
-                className={isDashboard ? "tex-nav-primary" : undefined}
+                aria-current={isCurrent ? "page" : undefined}
+                className={isDashboard && isCurrent ? "tex-nav-primary" : undefined}
                 href={href}
                 key={item.href || "dashboard"}
               >
@@ -144,7 +152,11 @@ export function TexShellNav({ email, locale, planKey, roles, tenantName }: TexSh
       </nav>
 
       {isMoreOpen ? (
-        <div className="tex-mobile-more-backdrop" role="presentation" onClick={() => setIsMoreOpen(false)}>
+        <div
+          className="tex-mobile-more-backdrop"
+          role="presentation"
+          onClick={() => setIsMoreOpen(false)}
+        >
           <section
             aria-label="More TEX sections"
             className="tex-mobile-more-panel"
@@ -155,7 +167,11 @@ export function TexShellNav({ email, locale, planKey, roles, tenantName }: TexSh
                 <strong>{tenantName}</strong>
                 <small>{email ?? "TEX workspace"}</small>
               </div>
-              <button aria-label="Close more TEX sections" type="button" onClick={() => setIsMoreOpen(false)}>
+              <button
+                aria-label="Close more TEX sections"
+                type="button"
+                onClick={() => setIsMoreOpen(false)}
+              >
                 <X />
               </button>
             </div>
