@@ -1309,7 +1309,15 @@ async function main() {
     assert.equal(client.valuesContain("tex.quick_connect.outbound_queued"), true);
     assert.equal(
       client.valuesContain(
-        "Receipt approved: Airport Cafe / 2026-07-12 / 120 AED. Status: approved and pending payment."
+        [
+          "TEX receipt approved",
+          "",
+          "Merchant: Airport Cafe",
+          "Date: 2026-07-12",
+          "Amount: 120 AED",
+          "",
+          "Status: approved and pending payment."
+        ].join("\n")
       ),
       true
     );
@@ -1328,7 +1336,17 @@ async function main() {
     assert.equal(client.valuesContain("tex.expense.paid"), true);
     assert.equal(client.hasSql("insert into public.tex_quick_connect_outbox"), true);
     assert.equal(
-      client.valuesContain("Receipt paid: Airport Cafe / 2026-07-12 / 120 AED. Status: paid."),
+      client.valuesContain(
+        [
+          "TEX receipt paid",
+          "",
+          "Merchant: Airport Cafe",
+          "Date: 2026-07-12",
+          "Amount: 120 AED",
+          "",
+          "Status: paid."
+        ].join("\n")
+      ),
       true
     );
   }
@@ -1365,7 +1383,8 @@ async function main() {
     });
     assert.equal(result.ocrStatus, "manual_review");
     assert.equal(result.expense, null);
-    assert.match(result.replyText, /could not access the image or PDF attachment/i);
+    assert.match(result.replyText, /TEX receipt not attached/);
+    assert.match(result.replyText, /resend the receipt as a clear photo or PDF attachment/i);
     assert.equal(client.valuesContain("download timed out"), true);
   }
 
@@ -1378,7 +1397,7 @@ async function main() {
       payload: { provider: "meta" }
     });
     assert.equal(result.ocrStatus, "not_applicable");
-    assert.match(result.replyText, /Pending: 2/);
+    assert.match(result.replyText, /Pending approval: 2/);
     assert.equal(result.delivery?.status, "sent");
     assert.equal(client.valuesContain("status"), true);
     assert.equal(client.valuesContain("tex.notification.whatsapp_reply_sent"), true);
@@ -1393,7 +1412,7 @@ async function main() {
       payload: { provider: "meta" }
     });
     assert.equal(result.ocrStatus, "not_applicable");
-    assert.match(result.replyText, /Pending: 2/);
+    assert.match(result.replyText, /Pending approval: 2/);
   }
 
   {
@@ -1511,7 +1530,11 @@ async function main() {
     assert.equal(client.valuesContain("rejected"), true);
     assert.equal(client.valuesContain(false), true);
     assert.equal(
-      whatsappMessages.some((message) => message.includes("auto-rejected as likely duplicate")),
+      whatsappMessages.some(
+        (message) =>
+          message.includes("TEX receipt review complete") &&
+          message.includes("auto-rejected as likely duplicate")
+      ),
       true
     );
   }

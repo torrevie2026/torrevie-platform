@@ -24,35 +24,91 @@ export function buildWhatsappReceiptSubmittedReply(input: {
   shouldAutoReject: boolean;
 }) {
   if (input.shouldAutoReject) {
-    return `Receipt received but auto-rejected as a likely duplicate of ${input.duplicate?.vendor ?? "an existing expense"}.`;
+    return [
+      "TEX receipt auto-rejected",
+      "",
+      "This receipt was detected as a duplicate.",
+      `Matched receipt: ${duplicateSummary(input.duplicate)}`,
+      "",
+      "Status: rejected.",
+      "Please contact your manager if this is not correct."
+    ].join("\n");
   }
 
-  const fields = whatsappOcrSummary(input.extraction);
-  const duplicateText = input.duplicate
-    ? " It is flagged as a possible duplicate for manager review."
-    : "";
-  const reviewText = input.extractionError
-    ? " TEX could not read all receipt fields, so the manager must review the values."
-    : "";
+  if (input.duplicate) {
+    return [
+      "TEX possible duplicate",
+      "",
+      "This receipt looks similar to an existing expense.",
+      `Matched receipt: ${duplicateSummary(input.duplicate)}`,
+      "",
+      "Status: pending manager review.",
+      "Your manager will confirm whether it should be approved or rejected."
+    ].join("\n");
+  }
 
-  return `Receipt received. OCR: ${fields}. Status: pending manager approval.${duplicateText}${reviewText}`;
+  const hasReadableFields = Boolean(
+    input.extraction?.vendor || input.extraction?.expenseDate || input.extraction?.amount
+  );
+
+  if (!hasReadableFields || input.extractionError) {
+    return [
+      "TEX receipt received",
+      "",
+      "We received your receipt, but TEX could not read all key details from the file.",
+      "",
+      `Read: ${readableFieldsSummary(input.extraction)}`,
+      `Needs review: ${missingFieldsSummary(input.extraction)}`,
+      "",
+      "Status: pending manager review.",
+      "Your manager can correct the details in TEX before approval."
+    ].join("\n");
+  }
+
+  return [
+    "TEX receipt received",
+    "",
+    `Merchant: ${input.extraction?.vendor ?? "Needs review"}`,
+    `Date: ${input.extraction?.expenseDate ?? "Needs review"}`,
+    `Amount: ${amountSummary(input.extraction)}`,
+    `VAT/TRN: ${vatSummary(input.extraction)}`,
+    "",
+    "Status: pending manager approval.",
+    "You will receive another WhatsApp update after approval or rejection."
+  ].join("\n");
 }
 
 export function buildExpenseStatusReply(
-  row: Pick<TexWhatsappExpenseStatusReplyRow, "vendor" | "amount" | "currency" | "expense_date">,
+  row: Pick<
+    TexWhatsappExpenseStatusReplyRow,
+    "vendor" | "amount" | "currency" | "expense_date" | "rejected_reason"
+  >,
   status: Exclude<TexExpenseStatus, "pending">
 ) {
-  const receipt = whatsappExpenseSummary(row);
+  const receipt = receiptLines(row);
 
   if (status === "approved") {
-    return `Receipt approved: ${receipt}. Status: approved and pending payment.`;
+    return [
+      "TEX receipt approved",
+      "",
+      ...receipt,
+      "",
+      "Status: approved and pending payment."
+    ].join("\n");
   }
 
   if (status === "paid") {
-    return `Receipt paid: ${receipt}. Status: paid.`;
+    return ["TEX receipt paid", "", ...receipt, "", "Status: paid."].join("\n");
   }
 
-  return `Receipt rejected: ${receipt}. Please contact your manager for details.`;
+  return [
+    "TEX receipt rejected",
+    "",
+    ...receipt,
+    "",
+    "Status: rejected.",
+    `Reason: ${row.rejected_reason?.trim() || "Please contact your manager for details."}`
+  ].join("\n");
 }
 
 export function isQuickConnectSubmissionPayload(payload: unknown) {
@@ -62,24 +118,50 @@ export function isQuickConnectSubmissionPayload(payload: unknown) {
   return provider === "quickconnect" || source === "quick_connect" || record.quick_connect === true;
 }
 
-function whatsappOcrSummary(extraction: TexReceiptExtraction | null) {
-  return [
-    `vendor ${extraction?.vendor ?? "not read"}`,
-    `date ${extraction?.expenseDate ?? "not read"}`,
-    `amount ${
-      extraction?.amount != null
-        ? formatMoney(extraction.amount, extraction.currency?.trim().toUpperCase() || "AED")
-        : "not read"
-    }`,
-    `VAT ${extraction?.taxAmount != null ? extraction.taxAmount : "not read"}`,
-    `TRN ${extraction?.taxIdNumber ?? "not read"}`
-  ].join(", ");
+function amountSummary(extraction: TexReceiptExtraction | null) {
+  return extraction?.amount != null
+    ? formatMoney(extraction.amount, extraction.currency?.trim().toUpperCase() || "AED")
+    : "Needs review";
 }
 
-function whatsappExpenseSummary(
+function vatSummary(extraction: TexReceiptExtraction | null) {
+  const vat = extraction?.taxAmount != null ? `VAT ${extraction.taxAmount}` : null;
+  const trn = extraction?.taxIdNumber ? `TRN ${extraction.taxIdNumber}` : null;
+  return [vat, trn].filter(Boolean).join(" / ") || "Not read";
+}
+
+function readableFieldsSummary(extraction: TexReceiptExtraction | null) {
+  const fields = [
+    extraction?.vendor ? "merchant" : null,
+    extraction?.expenseDate ? "date" : null,
+    extraction?.amount != null ? "amount" : null,
+    extraction?.taxAmount != null ? "VAT" : null,
+    extraction?.taxIdNumber ? "TRN" : null
+  ].filter(Boolean);
+  return fields.join(", ") || "none";
+}
+
+function missingFieldsSummary(extraction: TexReceiptExtraction | null) {
+  const fields = [
+    extraction?.vendor ? null : "merchant",
+    extraction?.expenseDate ? null : "date",
+    extraction?.amount != null ? null : "amount",
+    extraction?.taxAmount != null ? null : "VAT",
+    extraction?.taxIdNumber ? null : "TRN"
+  ].filter(Boolean);
+  return fields.join(", ") || "none";
+}
+
+function duplicateSummary(duplicate: TexDuplicateCandidateRow | null) {
+  return duplicate?.vendor ?? "an existing expense";
+}
+
+function receiptLines(
   row: Pick<TexWhatsappExpenseStatusReplyRow, "vendor" | "amount" | "currency" | "expense_date">
 ) {
-  return [row.vendor ?? "receipt", row.expense_date, formatMoney(row.amount, row.currency)]
-    .filter(Boolean)
-    .join(" / ");
+  return [
+    `Merchant: ${row.vendor ?? "Receipt"}`,
+    `Date: ${row.expense_date}`,
+    `Amount: ${formatMoney(row.amount, row.currency)}`
+  ];
 }

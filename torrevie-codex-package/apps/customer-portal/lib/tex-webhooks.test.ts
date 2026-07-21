@@ -110,7 +110,7 @@ async function main() {
     });
 
     assert.equal(response.status, 200);
-    assert.match(JSON.stringify(response.body), /No TEX employee profile/);
+    assert.match(JSON.stringify(response.body), /TEX profile not found/);
     assert.equal(client.valuesContain("wappfly-session-1"), true);
     assert.equal(client.valuesContain("wamid.wappfly.1"), true);
     assert.equal(client.hasSql("insert into public.tex_unregistered_whatsapp_submissions"), true);

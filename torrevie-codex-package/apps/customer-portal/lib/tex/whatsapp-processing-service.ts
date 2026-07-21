@@ -76,8 +76,19 @@ export async function processTexWhatsappSubmission(
 
     if (!employee) {
       const replyText = missingReceiptAttachment
-        ? "Receipt message received, but TEX could not access the image or PDF attachment. Please resend the receipt as a photo or PDF attachment."
-        : "Receipt received, but this WhatsApp number is not enrolled for TEX. Please ask your tenant admin to enroll your number.";
+        ? [
+            "TEX receipt not attached",
+            "",
+            "We received your WhatsApp message, but no receipt image or PDF was available.",
+            "Please resend the receipt as a clear photo or PDF attachment."
+          ].join("\n")
+        : [
+            "TEX receipt received",
+            "",
+            "This WhatsApp number is not linked to an employee profile yet.",
+            "",
+            "Please ask your company admin to add your WhatsApp number in TEX, or wait for the finance team to assign this receipt manually."
+          ].join("\n");
       const row = await insertWhatsappSubmission(client, actor, submission, {
         messageType,
         ocrStatus: "manual_review",
@@ -93,8 +104,14 @@ export async function processTexWhatsappSubmission(
     }
 
     if (missingReceiptAttachment) {
-      const replyText =
-        "Receipt message received, but TEX could not access the image or PDF attachment. Please resend the receipt as a photo or PDF attachment. Status: waiting for receipt attachment.";
+      const replyText = [
+        "TEX receipt not attached",
+        "",
+        "We received your WhatsApp message, but no receipt image or PDF was available.",
+        "",
+        "Status: waiting for receipt attachment.",
+        "Please resend the receipt as a clear photo or PDF attachment."
+      ].join("\n");
       const row = await insertWhatsappSubmission(client, actor, submission, {
         messageType,
         ocrStatus: "manual_review",
@@ -109,8 +126,14 @@ export async function processTexWhatsappSubmission(
     }
 
     if (!settings.ai_receipt_extraction_enabled) {
-      const replyText =
-        "Receipt received. AI extraction is disabled for your company, so the finance team will review it manually.";
+      const replyText = [
+        "TEX receipt received",
+        "",
+        "We received your receipt.",
+        "",
+        "Status: pending finance review.",
+        "Automatic receipt reading is disabled for your company, so the finance team will review it manually."
+      ].join("\n");
       const row = await insertWhatsappSubmission(client, actor, submission, {
         messageType,
         ocrStatus: "manual_review",
@@ -125,7 +148,14 @@ export async function processTexWhatsappSubmission(
     }
 
     if (multipleReceipts) {
-      const replyText = `Receipt PDF received. TEX detected ${extractions.length} separate receipts and sent them for manager review before creating expenses.`;
+      const replyText = [
+        "TEX PDF received",
+        "",
+        `TEX detected ${extractions.length} receipt${extractions.length === 1 ? "" : "s"} in your PDF.`,
+        "",
+        "Status: pending manager review.",
+        "Your manager will review and create the related expenses."
+      ].join("\n");
       const row = await insertWhatsappSubmission(client, actor, submission, {
         messageType,
         ocrStatus: "manual_review",
@@ -460,11 +490,34 @@ export async function resolveTexUnregisteredWhatsappSubmission(
     const replyText =
       rejectedCount > 0
         ? rejectedCount === expenses.length
-          ? `${expenses.length} receipt${expenses.length === 1 ? "" : "s"} reviewed and auto-rejected as likely duplicate${expenses.length === 1 ? "" : "s"}.`
-          : `${expenses.length} receipts reviewed and linked to ${employee.name}. ${rejectedCount} duplicate receipt${rejectedCount === 1 ? "" : "s"} auto-rejected; the rest are pending manager approval.`
+          ? [
+              "TEX receipt review complete",
+              "",
+              `${expenses.length} receipt${expenses.length === 1 ? "" : "s"} reviewed and auto-rejected as likely duplicate${expenses.length === 1 ? "" : "s"}.`,
+              "",
+              "Status: rejected."
+            ].join("\n")
+          : [
+              "TEX receipts linked",
+              "",
+              `${expenses.length} receipts reviewed and linked to ${employee.name}.`,
+              `${rejectedCount} duplicate receipt${rejectedCount === 1 ? "" : "s"} auto-rejected; the rest are pending manager approval.`
+            ].join("\n")
         : expenses.length > 1
-          ? `${expenses.length} receipts reviewed and linked to ${employee.name}. They are now pending manager approval.`
-          : `Receipt reviewed and linked to ${employee.name}. It is now pending manager approval.`;
+          ? [
+              "TEX receipts linked",
+              "",
+              `${expenses.length} receipts reviewed and linked to ${employee.name}.`,
+              "",
+              "Status: pending manager approval."
+            ].join("\n")
+          : [
+              "TEX receipt linked",
+              "",
+              `Receipt reviewed and linked to ${employee.name}.`,
+              "",
+              "Status: pending manager approval."
+            ].join("\n");
     const delivery = await deliverTexWhatsappReply(
       client,
       actor,

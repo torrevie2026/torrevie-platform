@@ -1833,7 +1833,7 @@ async function main() {
       }
     });
     assert.equal(response.status, 201);
-    assert.match(JSON.stringify(response.body), /No TEX employee profile/);
+    assert.match(JSON.stringify(response.body), /TEX profile not found/);
     assert.equal(client.hasSql("ocr_status"), true);
   }
 

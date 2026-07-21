@@ -84,7 +84,8 @@ export async function deliverExpenseStatusWhatsappReply(
         e.vendor,
         e.amount::float as amount,
         e.currency,
-        e.expense_date::text as expense_date
+        e.expense_date::text as expense_date,
+        e.rejected_reason
       from public.tex_unregistered_whatsapp_submissions s
       join public.tex_expenses e
         on e.tenant_id = s.tenant_id
@@ -124,7 +125,12 @@ export async function buildWhatsappStatusReply(client: TenantQueryClient, phone:
   const employee = await findEmployeeByPhone(client, phone);
 
   if (!employee) {
-    return "No TEX employee profile is enrolled for this WhatsApp number.";
+    return [
+      "TEX profile not found",
+      "",
+      "This WhatsApp number is not linked to an employee profile yet.",
+      "Please ask your company admin to add your WhatsApp number in TEX."
+    ].join("\n");
   }
 
   const result = await client.query<{ status: TexExpenseStatus; count: number; total: number }>(
@@ -144,11 +150,12 @@ export async function buildWhatsappStatusReply(client: TenantQueryClient, phone:
   const paid = totals.get("paid");
 
   return [
-    `TEX status for ${employee.name}:`,
-    `Pending: ${pending?.count ?? 0} (${formatMoney(pending?.total ?? 0, "AED")})`,
-    `Approved: ${approved?.count ?? 0} (${formatMoney(approved?.total ?? 0, "AED")})`,
-    `Rejected: ${rejected?.count ?? 0} (${formatMoney(rejected?.total ?? 0, "AED")})`,
-    `Paid: ${paid?.count ?? 0} (${formatMoney(paid?.total ?? 0, "AED")})`
+    `TEX status for ${employee.name}`,
+    "",
+    `Pending approval: ${pending?.count ?? 0} - ${formatMoney(pending?.total ?? 0, "AED")}`,
+    `Approved, pending payment: ${approved?.count ?? 0} - ${formatMoney(approved?.total ?? 0, "AED")}`,
+    `Rejected: ${rejected?.count ?? 0} - ${formatMoney(rejected?.total ?? 0, "AED")}`,
+    `Paid: ${paid?.count ?? 0} - ${formatMoney(paid?.total ?? 0, "AED")}`
   ].join("\n");
 }
 

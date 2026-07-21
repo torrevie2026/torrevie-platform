@@ -321,6 +321,7 @@ export type TexWhatsappExpenseStatusReplyRow = {
   amount: number;
   currency: string;
   expense_date: string;
+  rejected_reason: string | null;
 };
 
 export type TexUnregisteredWhatsappSubmissionRow = {
