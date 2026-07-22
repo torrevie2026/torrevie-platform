@@ -263,15 +263,21 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
   }
 
   async function closeTrip(tripId: string) {
+    const previousTrips = trips;
+
     setBusyTripId(tripId);
     setTripNotice(null);
     setTripError(null);
+    setTrips((current) =>
+      current.map((trip) => (trip.id === tripId ? { ...trip, status: "closed" } : trip))
+    );
 
     try {
       await texFetch(`/trips/${tripId}/close`, { method: "PATCH", body: "{}" });
       setTripNotice("Trip closed.");
-      await refreshTrips();
+      void refreshTrips();
     } catch (caught) {
+      setTrips(previousTrips);
       setTripError(errorMessage(caught));
     } finally {
       setBusyTripId(null);

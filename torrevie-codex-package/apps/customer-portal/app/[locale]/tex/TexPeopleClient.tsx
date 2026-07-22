@@ -170,7 +170,7 @@ export function TexPeopleClient({
       setNotice(editingEmployeeId ? "Employee updated." : "Employee added.");
       resetForm();
       setIsEmployeeDrawerOpen(false);
-      await refreshPeople();
+      void refreshPeople();
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
@@ -179,18 +179,22 @@ export function TexPeopleClient({
   }
 
   async function deleteEmployee(employee: TexEmployeeProfile) {
+    const previousEmployees = employees;
+
     setBusy(employee.id);
     setNotice(null);
     setError(null);
+    setEmployees((current) => current.filter((item) => item.id !== employee.id));
 
     try {
       await texFetch(`/people/employees/${employee.id}`, { method: "DELETE" });
-      setEmployees((current) => current.filter((item) => item.id !== employee.id));
       setNotice("Employee removed.");
       if (editingEmployeeId === employee.id) {
         closeEmployeeDrawer();
       }
+      void refreshPeople();
     } catch (requestError) {
+      setEmployees(previousEmployees);
       setError(errorMessage(requestError));
     } finally {
       setBusy(null);
@@ -221,7 +225,7 @@ export function TexPeopleClient({
       });
       setNotice(editingTeamId ? "Team updated." : "Team added.");
       resetTeamForm();
-      await refreshPeople();
+      void refreshPeople();
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
@@ -230,18 +234,22 @@ export function TexPeopleClient({
   }
 
   async function deleteTeam(team: TexTeam) {
+    const previousTeams = teams;
+
     setBusy(team.id);
     setNotice(null);
     setError(null);
+    setTeams((current) => current.filter((item) => item.id !== team.id));
 
     try {
       await texFetch(`/people/teams/${team.id}`, { method: "DELETE" });
-      setTeams((current) => current.filter((item) => item.id !== team.id));
       setNotice("Team removed.");
       if (editingTeamId === team.id) {
         resetTeamForm();
       }
+      void refreshPeople();
     } catch (requestError) {
+      setTeams(previousTeams);
       setError(errorMessage(requestError));
     } finally {
       setBusy(null);

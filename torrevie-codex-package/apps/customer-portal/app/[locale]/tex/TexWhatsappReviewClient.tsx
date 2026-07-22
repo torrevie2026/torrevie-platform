@@ -61,9 +61,14 @@ export function TexWhatsappReviewClient({
     submission: TexUnregisteredWhatsappSubmission,
     mode: ResolveMode
   ) {
+    const previousSubmissions = submissions;
+    const previousSelectedEmployees = selectedEmployees;
+    const previousNewEmployeeNames = newEmployeeNames;
+
     setBusyId(submission.id);
     setNotice(null);
     setError(null);
+    setSubmissions((current) => current.filter((item) => item.id !== submission.id));
 
     try {
       const payload =
@@ -84,8 +89,22 @@ export function TexWhatsappReviewClient({
         body: JSON.stringify(payload)
       });
       setNotice("WhatsApp submission assigned.");
-      await refreshQueue();
+      setSelectedEmployees((current) => {
+        const next = { ...current };
+        delete next[submission.id];
+        return next;
+      });
+      setNewEmployeeNames((current) => {
+        const next = { ...current };
+        delete next[submission.id];
+        return next;
+      });
+      setLastUpdatedAt(new Date());
+      void refreshQueue();
     } catch (caught) {
+      setSubmissions(previousSubmissions);
+      setSelectedEmployees(previousSelectedEmployees);
+      setNewEmployeeNames(previousNewEmployeeNames);
       setError(errorMessage(caught));
     } finally {
       setBusyId(null);
@@ -93,9 +112,12 @@ export function TexWhatsappReviewClient({
   }
 
   async function ignoreSubmission(submission: TexUnregisteredWhatsappSubmission) {
+    const previousSubmissions = submissions;
+
     setBusyId(submission.id);
     setNotice(null);
     setError(null);
+    setSubmissions((current) => current.filter((item) => item.id !== submission.id));
 
     try {
       await texFetch(`/unregistered-whatsapp/${submission.id}/ignore`, {
@@ -103,8 +125,10 @@ export function TexWhatsappReviewClient({
         body: JSON.stringify({ reason: "Ignored from TEX WhatsApp review queue" })
       });
       setNotice("WhatsApp submission ignored.");
-      await refreshQueue();
+      setLastUpdatedAt(new Date());
+      void refreshQueue();
     } catch (caught) {
+      setSubmissions(previousSubmissions);
       setError(errorMessage(caught));
     } finally {
       setBusyId(null);
