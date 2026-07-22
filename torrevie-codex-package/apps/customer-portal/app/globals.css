@@ -216,6 +216,50 @@ a {
     color 140ms ease;
 }
 
+.sr-only {
+  block-size: 1px;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  inline-size: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+}
+
+.tex-route-progress {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-accent),
+    var(--color-accent-secondary),
+    transparent
+  );
+  block-size: 3px;
+  box-shadow: 0 1px 10px color-mix(in srgb, var(--color-accent) 28%, transparent);
+  inline-size: 42%;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  opacity: 0;
+  pointer-events: none;
+  position: fixed;
+  transform: translateX(-110%);
+  transition: opacity 120ms ease;
+  z-index: 80;
+}
+
+.tex-route-progress-active {
+  animation: tex-route-progress-slide 820ms ease-in-out infinite;
+  opacity: 1;
+}
+
+.tex-nav-pending {
+  color: var(--color-text-primary);
+}
+
+.tex-nav-pending .tex-nav-icon {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
+
 .tex-nav-icon {
   align-items: center;
   background: #eef4f6;
@@ -757,6 +801,20 @@ a {
   to {
     transform: scaleY(1);
     transform-origin: bottom;
+  }
+}
+
+@keyframes tex-route-progress-slide {
+  0% {
+    transform: translateX(-110%);
+  }
+
+  58% {
+    transform: translateX(92vw);
+  }
+
+  100% {
+    transform: translateX(120vw);
   }
 }
 
@@ -5798,7 +5856,8 @@ form.member-row {
   .tex-funnel-track i,
   .tex-line-chart-path,
   .tex-line-chart-point,
-  .tex-donut-chart {
+  .tex-donut-chart,
+  .tex-route-progress-active {
     animation: none;
     transition: none;
   }
