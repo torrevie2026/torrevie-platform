@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type {
   TexBootstrap,
@@ -9,6 +9,7 @@ import type {
   TexTripListItem
 } from "../../../lib/tex";
 import { prepareReceiptUpload, readTexJsonResponse } from "./TexReceiptUploadClient";
+import { useTexAutoRefresh } from "./useTexAutoRefresh";
 
 type TexExpensesClientProps = {
   canApprove: boolean;
@@ -119,9 +120,11 @@ export function TexExpensesClient({
   const [selectedExpense, setSelectedExpense] = useState<TexExpenseListItem | null>(null);
   const [selectedExpenseIds, setSelectedExpenseIds] = useState<Set<string>>(new Set());
   const [busyExpenseId, setBusyExpenseId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isReceiptParsing, setIsReceiptParsing] = useState(false);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<keyof ExpenseFormState>>(new Set());
   const [receiptWarning, setReceiptWarning] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -140,17 +143,31 @@ export function TexExpensesClient({
     (expense) => expense.status === "approved"
   ).length;
 
-  async function refreshExpenses() {
-    const response = await texFetch<{ expenses: TexExpenseListItem[] }>("/expenses");
-    setExpenses(response.expenses);
-    setSelectedExpense(
-      (current) => response.expenses.find((expense) => expense.id === current?.id) ?? current
-    );
-    setSelectedExpenseIds((current) => {
-      const nextIds = new Set(response.expenses.map((expense) => expense.id));
-      return new Set([...current].filter((id) => nextIds.has(id)));
-    });
-  }
+  const refreshExpenses = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const response = await texFetch<{ expenses: TexExpenseListItem[] }>("/expenses");
+      setExpenses(response.expenses);
+      setSelectedExpense(
+        (current) => response.expenses.find((expense) => expense.id === current?.id) ?? current
+      );
+      setSelectedExpenseIds((current) => {
+        const nextIds = new Set(response.expenses.map((expense) => expense.id));
+        return new Set([...current].filter((id) => nextIds.has(id)));
+      });
+      setLastUpdatedAt(new Date());
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useTexAutoRefresh({
+    enabled: !isExpenseDrawerOpen && busyExpenseId === null,
+    intervalMs: 25000,
+    onRefresh: refreshExpenses
+  });
 
   function closeExpenseDrawer() {
     setIsExpenseDrawerOpen(false);
@@ -705,11 +722,20 @@ export function TexExpensesClient({
             <button type="button" className="tex-primary-button" onClick={openNewExpenseDrawer}>
               New expense
             </button>
-            <button type="button" className="tex-secondary-button" onClick={refreshExpenses}>
-              Refresh
+            <button
+              type="button"
+              className="tex-secondary-button"
+              disabled={isRefreshing}
+              onClick={() => void refreshExpenses()}
+            >
+              {isRefreshing ? "Refreshing..." : "Refresh"}
             </button>
           </div>
         </div>
+        <p className="tex-refresh-meta" aria-live="polite">
+          Auto-refresh every 25 seconds
+          {lastUpdatedAt ? ` - last updated ${formatTime(lastUpdatedAt)}` : ""}
+        </p>
         <div className="tex-expense-toolbar">
           <div className="tex-segmented-control" aria-label="Expense status filter">
             {(["all", "pending", "approved", "rejected", "paid"] as const).map((status) => (
@@ -1022,4 +1048,12 @@ function formatDate(value: string) {
 
 function formatAmount(value: number) {
   return new Intl.NumberFormat("en", { maximumFractionDigits: 2 }).format(value);
+}
+
+function formatTime(value: Date) {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).format(value);
 }

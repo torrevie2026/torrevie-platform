@@ -14,8 +14,8 @@ import {
   Users
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { TexInstallPrompt } from "./TexInstallPrompt";
 
 type TexShellNavProps = {
@@ -53,9 +53,15 @@ const planRank = {
 export function TexShellNav({ email, locale, planKey, roles, tenantName }: TexShellNavProps) {
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
   const basePath = `/${locale}/tex`;
-  const visibleNavItems = texNavItems.filter(
-    (item) => planRank[planKey] >= planRank[item.minimumPlan]
+  const visibleNavItems = useMemo(
+    () => texNavItems.filter((item) => planRank[planKey] >= planRank[item.minimumPlan]),
+    [planKey]
+  );
+  const visibleHrefList = useMemo(
+    () => visibleNavItems.map((item) => `${basePath}${item.href}`),
+    [basePath, visibleNavItems]
   );
   const primaryMobileNavItems = visibleNavItems.filter((item) =>
     ["", "/expenses", "/whatsapp-review"].includes(item.href)
@@ -68,6 +74,10 @@ export function TexShellNav({ email, locale, planKey, roles, tenantName }: TexSh
     return href === "" ? pathname === basePath : pathname.startsWith(itemHref);
   };
   const isMoreActive = secondaryMobileNavItems.some((item) => isActive(item.href));
+
+  useEffect(() => {
+    visibleHrefList.forEach((href) => router.prefetch(href));
+  }, [router, visibleHrefList]);
 
   return (
     <>

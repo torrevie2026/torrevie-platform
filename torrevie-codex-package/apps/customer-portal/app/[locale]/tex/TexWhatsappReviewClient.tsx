@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { TexBootstrap, TexUnregisteredWhatsappSubmission } from "../../../lib/tex";
+import { useTexAutoRefresh } from "./useTexAutoRefresh";
 
 type TexWhatsappReviewClientProps = {
   employees: TexBootstrap["employeeProfiles"];
@@ -26,6 +27,8 @@ export function TexWhatsappReviewClient({
   const [selectedEmployees, setSelectedEmployees] = useState<Record<string, string>>({});
   const [newEmployeeNames, setNewEmployeeNames] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const activeEmployees = useMemo(
@@ -33,12 +36,26 @@ export function TexWhatsappReviewClient({
     [employees]
   );
 
-  async function refreshQueue() {
-    const response = await texFetch<{ submissions: TexUnregisteredWhatsappSubmission[] }>(
-      "/unregistered-whatsapp?status=open"
-    );
-    setSubmissions(response.submissions);
-  }
+  const refreshQueue = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const response = await texFetch<{ submissions: TexUnregisteredWhatsappSubmission[] }>(
+        "/unregistered-whatsapp?status=open"
+      );
+      setSubmissions(response.submissions);
+      setLastUpdatedAt(new Date());
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useTexAutoRefresh({
+    enabled: busyId === null,
+    intervalMs: 15000,
+    onRefresh: refreshQueue
+  });
 
   async function resolveSubmission(
     submission: TexUnregisteredWhatsappSubmission,
@@ -107,12 +124,16 @@ export function TexWhatsappReviewClient({
         <button
           type="button"
           className="tex-secondary-button"
-          onClick={refreshQueue}
-          disabled={busyId !== null}
+          onClick={() => void refreshQueue()}
+          disabled={busyId !== null || isRefreshing}
         >
-          Refresh
+          {isRefreshing ? "Refreshing..." : "Refresh"}
         </button>
       </div>
+      <p className="tex-refresh-meta" aria-live="polite">
+        Auto-refresh every 15 seconds
+        {lastUpdatedAt ? ` - last updated ${formatTime(lastUpdatedAt)}` : ""}
+      </p>
 
       {notice ? <p className="tex-notice">{notice}</p> : null}
       {error ? <p className="tex-error">{error}</p> : null}
@@ -501,4 +522,12 @@ function formatDateTime(value: string) {
     dateStyle: "short",
     timeStyle: "short"
   }).format(new Date(value));
+}
+
+function formatTime(value: Date) {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).format(value);
 }
