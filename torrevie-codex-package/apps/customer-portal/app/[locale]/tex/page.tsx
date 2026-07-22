@@ -90,7 +90,6 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
     const paidCount = reportExpenses.filter((expense) => expense.status === "paid").length;
     const rejectedCount = reportExpenses.filter((expense) => expense.status === "rejected").length;
     const categorySpend = buildCategorySpend(reportExpenses);
-    const maxCategorySpend = Math.max(...categorySpend.map((item) => item.amount), 1);
     const totalSpend = reportExpenses
       .filter((expense) => expense.status !== "rejected")
       .reduce((sum, expense) => sum + expense.baseAmount, 0);
