@@ -478,15 +478,41 @@ a {
 }
 
 .tex-kpi-card {
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border);
+  animation: tex-panel-enter 420ms ease both;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--tex-kpi-tone, var(--color-accent)) 8%, transparent), transparent 62%),
+    var(--color-bg-primary);
+  border: 1px solid color-mix(in srgb, var(--tex-kpi-tone, var(--color-accent)) 18%, var(--color-border));
   border-radius: 8px;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--color-text-primary) 5%, transparent);
   display: grid;
   gap: 8px;
   min-block-size: 126px;
   overflow: hidden;
   padding: 16px;
   position: relative;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.tex-kpi-card:nth-child(2) {
+  animation-delay: 50ms;
+}
+
+.tex-kpi-card:nth-child(3) {
+  animation-delay: 100ms;
+}
+
+.tex-kpi-card:nth-child(4) {
+  animation-delay: 150ms;
+}
+
+.tex-kpi-card:hover {
+  border-color: color-mix(in srgb, var(--tex-kpi-tone, var(--color-accent)) 38%, var(--color-border));
+  box-shadow: 0 18px 40px color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+  transform: translateY(-2px);
 }
 
 .tex-kpi-card::before {
@@ -501,16 +527,32 @@ a {
   background: var(--color-accent);
 }
 
+.tex-kpi-teal {
+  --tex-kpi-tone: var(--color-accent);
+}
+
 .tex-kpi-gold::before {
   background: var(--color-status-warning);
+}
+
+.tex-kpi-gold {
+  --tex-kpi-tone: var(--color-status-warning);
 }
 
 .tex-kpi-blue::before {
   background: var(--color-accent-secondary);
 }
 
+.tex-kpi-blue {
+  --tex-kpi-tone: var(--color-accent-secondary);
+}
+
 .tex-kpi-green::before {
   background: var(--color-status-success);
+}
+
+.tex-kpi-green {
+  --tex-kpi-tone: var(--color-status-success);
 }
 
 .tex-kpi-card span {
@@ -531,6 +573,11 @@ a {
   inline-size: 34px;
   justify-content: center;
   min-block-size: 34px;
+}
+
+.tex-kpi-icon svg {
+  block-size: 18px;
+  inline-size: 18px;
 }
 
 .tex-kpi-card strong {
@@ -589,12 +636,21 @@ a {
 
 .tex-analytics-panel,
 .tex-work-panel {
+  animation: tex-panel-enter 460ms ease both;
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   display: grid;
   gap: 14px;
   padding: 18px;
+}
+
+.tex-dashboard-grid > .tex-analytics-panel:nth-child(2) {
+  animation-delay: 80ms;
+}
+
+.tex-dashboard-grid-balanced {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .tex-analytics-panel .section-heading-row h2,
@@ -643,6 +699,45 @@ a {
   inline-size: 100%;
 }
 
+.tex-loading-donut {
+  animation: tex-donut-reveal 780ms ease both, tex-skeleton-pulse 1.2s ease-in-out infinite;
+  aspect-ratio: 1;
+  background:
+    radial-gradient(circle at center, var(--color-bg-primary) 0 42%, transparent 43%),
+    conic-gradient(
+      color-mix(in srgb, var(--color-accent) 80%, white) 0 62%,
+      color-mix(in srgb, var(--color-accent-secondary) 70%, white) 62% 82%,
+      #eef2f7 82% 100%
+    );
+  border-radius: 999px;
+  inline-size: min(180px, 56vw);
+  justify-self: center;
+}
+
+.tex-skeleton-chart {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  min-block-size: 220px;
+}
+
+.tex-skeleton-chart i {
+  animation: tex-skeleton-rise 920ms ease-in-out infinite alternate;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 35%, white), #eef2f7);
+  border-radius: 8px 8px 3px 3px;
+  display: block;
+  min-block-size: 22px;
+}
+
+.tex-skeleton-chart i:nth-child(2n) {
+  animation-delay: 120ms;
+}
+
+.tex-skeleton-chart i:nth-child(3n) {
+  animation-delay: 240ms;
+}
+
 @keyframes tex-skeleton-pulse {
   0% {
     background-position: 220% 0;
@@ -650,6 +745,18 @@ a {
 
   100% {
     background-position: -220% 0;
+  }
+}
+
+@keyframes tex-skeleton-rise {
+  from {
+    transform: scaleY(0.72);
+    transform-origin: bottom;
+  }
+
+  to {
+    transform: scaleY(1);
+    transform-origin: bottom;
   }
 }
 
@@ -696,6 +803,264 @@ a {
   block-size: 100%;
   border-radius: inherit;
   display: block;
+  transform-origin: left;
+}
+
+.tex-analytics-panel .tex-bar-track i,
+.tex-funnel-track i {
+  animation: tex-bar-grow 620ms ease both;
+}
+
+.tex-line-chart {
+  display: grid;
+  gap: 10px;
+  min-block-size: 260px;
+}
+
+.tex-line-chart svg {
+  block-size: auto;
+  inline-size: 100%;
+  overflow: visible;
+}
+
+.tex-chart-gridline {
+  stroke: color-mix(in srgb, var(--color-border) 78%, transparent);
+  stroke-dasharray: 4 5;
+  stroke-width: 1;
+}
+
+.tex-line-chart-area {
+  fill: url("#texSpendArea");
+}
+
+.tex-line-chart-path {
+  animation: tex-line-draw 900ms ease both;
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.tex-line-chart-point {
+  animation: tex-point-pop 320ms ease both;
+  fill: var(--color-bg-primary);
+  stroke: var(--color-accent);
+  stroke-width: 3;
+}
+
+.tex-line-chart-axis {
+  color: var(--color-text-muted);
+  display: flex;
+  font-size: 12px;
+  font-weight: 800;
+  justify-content: space-between;
+}
+
+.tex-donut-layout {
+  align-items: center;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.2fr);
+  min-block-size: 260px;
+}
+
+.tex-donut-chart {
+  align-items: center;
+  animation: tex-donut-reveal 780ms ease both;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  display: grid;
+  inline-size: min(100%, 210px);
+  justify-self: center;
+  mask: radial-gradient(circle at center, transparent 0 42%, black 43%);
+  place-items: center;
+  position: relative;
+}
+
+.tex-donut-chart::after {
+  background: var(--color-bg-primary);
+  border-radius: 999px;
+  content: "";
+  inset: 30%;
+  position: absolute;
+}
+
+.tex-donut-chart span {
+  align-items: center;
+  background: var(--color-bg-primary);
+  border-radius: 999px;
+  display: grid;
+  inline-size: 46%;
+  min-block-size: 46%;
+  place-items: center;
+  position: relative;
+  text-align: center;
+  z-index: 1;
+}
+
+.tex-donut-chart strong {
+  color: var(--color-text-primary);
+  font-size: 15px;
+  line-height: 1.15;
+}
+
+.tex-donut-chart small {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.tex-donut-legend {
+  display: grid;
+  gap: 10px;
+}
+
+.tex-donut-legend div {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+}
+
+.tex-donut-legend i {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  display: block;
+  inline-size: 10px;
+}
+
+.tex-donut-legend span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 800;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tex-donut-legend strong,
+.tex-panel-stat {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.tex-status-funnel {
+  display: grid;
+  gap: 14px;
+  min-block-size: 218px;
+  place-content: center stretch;
+}
+
+.tex-funnel-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(86px, 0.5fr) minmax(0, 1.8fr) minmax(32px, auto);
+}
+
+.tex-funnel-row > span:first-child {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.tex-funnel-track {
+  background: var(--color-bg-surface);
+  border-radius: 999px;
+  block-size: 16px;
+  overflow: hidden;
+}
+
+.tex-funnel-track i {
+  block-size: 100%;
+  border-radius: inherit;
+  display: block;
+  min-inline-size: 8px;
+}
+
+.tex-funnel-row strong {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 900;
+  text-align: end;
+}
+
+.tex-chart-empty {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: grid;
+  gap: 10px;
+  min-block-size: 220px;
+  place-content: center;
+  text-align: center;
+}
+
+.tex-chart-empty svg {
+  color: var(--color-accent);
+  justify-self: center;
+}
+
+.tex-employee-bar-row .tex-bar-track i {
+  background: var(--color-accent-secondary);
+}
+
+@keyframes tex-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tex-bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes tex-line-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes tex-point-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+    transform-origin: center;
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+    transform-origin: center;
+  }
+}
+
+@keyframes tex-donut-reveal {
+  from {
+    opacity: 0;
+    transform: rotate(-24deg) scale(0.92);
+  }
+
+  to {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+  }
 }
 
 .tex-status-chart {
@@ -4714,6 +5079,8 @@ form.member-row {
   }
 
   .tex-bar-row,
+  .tex-donut-layout,
+  .tex-funnel-row,
   .tex-feed-item,
   .tex-trip-snapshot {
     grid-template-columns: 1fr;
@@ -4721,8 +5088,29 @@ form.member-row {
 
   .tex-feed-item b,
   .tex-trip-snapshot b,
+  .tex-funnel-row strong,
   .tex-bar-row strong {
     text-align: start;
+  }
+
+  .tex-line-chart {
+    min-block-size: 210px;
+  }
+
+  .tex-donut-layout {
+    justify-items: stretch;
+  }
+
+  .tex-donut-chart {
+    inline-size: min(220px, 72vw);
+  }
+
+  .tex-funnel-row {
+    gap: 7px;
+  }
+
+  .tex-skeleton-chart {
+    min-block-size: 170px;
   }
 
   .tex-status-chart {
@@ -5390,5 +5778,25 @@ form.member-row {
     inline-size: 100%;
     justify-self: stretch;
     padding: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tex-kpi-card,
+  .tex-analytics-panel,
+  .tex-skeleton,
+  .tex-skeleton-chart i,
+  .tex-loading-donut,
+  .tex-analytics-panel .tex-bar-track i,
+  .tex-funnel-track i,
+  .tex-line-chart-path,
+  .tex-line-chart-point,
+  .tex-donut-chart {
+    animation: none;
+    transition: none;
+  }
+
+  .tex-line-chart-path {
+    stroke-dashoffset: 0;
   }
 }
