@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { type MouseEvent, useEffect, useMemo, useState } from "react";
 import { TexInstallPrompt } from "./TexInstallPrompt";
 
 type TexShellNavProps = {
@@ -52,6 +52,7 @@ const planRank = {
 
 export function TexShellNav({ email, locale, planKey, roles, tenantName }: TexShellNavProps) {
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [navigatingHref, setNavigatingHref] = useState<string | null>(null);
   const pathname = usePathname();
   const router = useRouter();
   const basePath = `/${locale}/tex`;
@@ -79,8 +80,36 @@ export function TexShellNav({ email, locale, planKey, roles, tenantName }: TexSh
     visibleHrefList.forEach((href) => router.prefetch(href));
   }, [router, visibleHrefList]);
 
+  useEffect(() => {
+    setNavigatingHref(null);
+    setIsMoreOpen(false);
+  }, [pathname]);
+
+  const handleNavigate = (event: MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (
+      event.defaultPrevented ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      event.button !== 0 ||
+      href === pathname
+    ) {
+      return;
+    }
+
+    setNavigatingHref(href);
+  };
+
   return (
     <>
+      <div
+        aria-hidden={!navigatingHref}
+        className={`tex-route-progress${navigatingHref ? " tex-route-progress-active" : ""}`}
+      />
+      <span className="sr-only" aria-live="polite">
+        {navigatingHref ? "Loading TEX section" : ""}
+      </span>
       <aside className="customer-sidebar tex-sidebar" aria-label="TEX sections">
         <div className="tex-sidebar-header">
           <Link className="customer-brand tex-brand" href={`/${locale}`} aria-label="Torrevie">
@@ -105,9 +134,15 @@ export function TexShellNav({ email, locale, planKey, roles, tenantName }: TexSh
             return (
               <Link
                 aria-current={isCurrent ? "page" : undefined}
-                className={isDashboard && isCurrent ? "tex-nav-primary" : undefined}
+                className={[
+                  isDashboard && isCurrent ? "tex-nav-primary" : "",
+                  navigatingHref === href ? "tex-nav-pending" : ""
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 href={href}
                 key={item.href || "dashboard"}
+                onClick={(event) => handleNavigate(event, href)}
               >
                 <span className="tex-nav-icon" aria-hidden="true">
                   <Icon />
@@ -138,7 +173,11 @@ export function TexShellNav({ email, locale, planKey, roles, tenantName }: TexSh
               aria-current={isActive(item.href) ? "page" : undefined}
               href={href}
               key={item.href || "dashboard"}
-              onClick={() => setIsMoreOpen(false)}
+              className={navigatingHref === href ? "tex-nav-pending" : undefined}
+              onClick={(event) => {
+                handleNavigate(event, href);
+                setIsMoreOpen(false);
+              }}
             >
               <span className="tex-nav-icon" aria-hidden="true">
                 <Icon />
@@ -195,7 +234,11 @@ export function TexShellNav({ email, locale, planKey, roles, tenantName }: TexSh
                     aria-current={isActive(item.href) ? "page" : undefined}
                     href={href}
                     key={item.href}
-                    onClick={() => setIsMoreOpen(false)}
+                    className={navigatingHref === href ? "tex-nav-pending" : undefined}
+                    onClick={(event) => {
+                      handleNavigate(event, href);
+                      setIsMoreOpen(false);
+                    }}
                   >
                     <span className="tex-nav-icon" aria-hidden="true">
                       <Icon />
