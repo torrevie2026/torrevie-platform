@@ -28,6 +28,26 @@ export default function TexLoading() {
       <section className="tex-dashboard-grid" aria-label="Loading TEX panels">
         <article className="tex-analytics-panel">
           <span className="tex-skeleton tex-skeleton-title" />
+          <span className="tex-skeleton-chart" aria-hidden="true">
+            {[58, 22, 34, 48, 74, 36, 42, 64, 30, 52].map((height, index) => (
+              <i key={index} style={{ blockSize: `${height}%` }} />
+            ))}
+          </span>
+        </article>
+        <article className="tex-analytics-panel">
+          <span className="tex-skeleton tex-skeleton-title" />
+          <span className="tex-loading-donut" aria-hidden="true" />
+          <span className="tex-skeleton tex-skeleton-line" />
+          <span className="tex-skeleton tex-skeleton-line" />
+        </article>
+      </section>
+
+      <section
+        className="tex-dashboard-grid tex-dashboard-grid-balanced"
+        aria-label="Loading TEX operational panels"
+      >
+        <article className="tex-analytics-panel">
+          <span className="tex-skeleton tex-skeleton-title" />
           <span className="tex-skeleton tex-skeleton-block" />
         </article>
         <article className="tex-analytics-panel">

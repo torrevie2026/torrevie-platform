@@ -1,4 +1,11 @@
-import { CheckCircle2, Clock, MapPin, Receipt, WalletCards } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Receipt,
+  TrendingUp,
+  WalletCards
+} from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
@@ -80,11 +87,34 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
       : emptyFinanceReview(now);
     const reportWorkspace = await listTexReportWorkspace(client, actor).catch(() => null);
     const reportExpenses = reportWorkspace?.expenses ?? [];
-    const openTripCount = trips.filter((trip) => trip.status === "open").length;
     const paidCount = reportExpenses.filter((expense) => expense.status === "paid").length;
     const rejectedCount = reportExpenses.filter((expense) => expense.status === "rejected").length;
     const categorySpend = buildCategorySpend(reportExpenses);
-    const maxCategorySpend = Math.max(...categorySpend.map((item) => item.amount), 1);
+    const totalSpend = reportExpenses
+      .filter((expense) => expense.status !== "rejected")
+      .reduce((sum, expense) => sum + expense.baseAmount, 0);
+    const outstandingSpend = reportExpenses
+      .filter((expense) => expense.status === "pending" || expense.status === "approved")
+      .reduce((sum, expense) => sum + expense.baseAmount, 0);
+    const flaggedCount = expenses.filter(
+      (expense) =>
+        expense.duplicateStatus !== "clear" ||
+        expense.managerReviewRequired ||
+        expense.receiptFileId === null
+    ).length;
+    const approvalRate = reportExpenses.length
+      ? Math.round(((approvedCount + paidCount) / reportExpenses.length) * 100)
+      : 0;
+    const spendTrend = buildSpendTrend(reportExpenses);
+    const topEmployees = buildTopEmployees(reportExpenses);
+    const topEmployeeAmount = topEmployees[0]?.amount ?? 1;
+    const statusItems = [
+      { label: "Pending", value: pendingCount, tone: "var(--color-status-warning)" },
+      { label: "Approved", value: approvedCount, tone: "var(--color-status-success)" },
+      { label: "Paid", value: paidCount, tone: "var(--color-accent)" },
+      { label: "Rejected", value: rejectedCount, tone: "var(--color-status-error)" }
+    ];
+    const maxStatusCount = Math.max(...statusItems.map((item) => item.value), 1);
 
     return (
       <>
@@ -153,69 +183,86 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
         <section className="tex-kpi-grid" aria-label="TEX summary">
           <article className="tex-kpi-card tex-kpi-teal">
             <span className="tex-kpi-icon" aria-hidden="true">
+              <WalletCards />
+            </span>
+            <span>Total spend</span>
+            <strong>{formatMoney(totalSpend, reportWorkspace?.currency ?? financeReview.currency)}</strong>
+            <small>Current report period</small>
+          </article>
+          <article className="tex-kpi-card tex-kpi-green">
+            <span className="tex-kpi-icon" aria-hidden="true">
               <Clock />
             </span>
             <span>Pending</span>
             <strong>{pendingCount}</strong>
             <small>Expenses waiting for review</small>
           </article>
-          <article className="tex-kpi-card tex-kpi-green">
+          <article className="tex-kpi-card tex-kpi-blue">
             <span className="tex-kpi-icon" aria-hidden="true">
               <CheckCircle2 />
             </span>
-            <span>Approved</span>
-            <strong>{approvedCount}</strong>
-            <small>Ready for finance settlement</small>
-          </article>
-          <article className="tex-kpi-card tex-kpi-blue">
-            <span className="tex-kpi-icon" aria-hidden="true">
-              <MapPin />
-            </span>
-            <span>{growthFeaturesEnabled ? "Open trips" : "Employees"}</span>
-            <strong>
-              {growthFeaturesEnabled ? openTripCount : bootstrap.employeeProfiles.length}
-            </strong>
-            <small>
-              {growthFeaturesEnabled
-                ? "Active trip budgets and legs"
-                : "People in this TEX workspace"}
-            </small>
+            <span>Approval rate</span>
+            <strong>{approvalRate}%</strong>
+            <small>Approved or paid receipts</small>
           </article>
           <article className="tex-kpi-card tex-kpi-gold">
             <span className="tex-kpi-icon" aria-hidden="true">
-              <WalletCards />
+              <AlertTriangle />
             </span>
-            <span>Net payable</span>
-            <strong>{formatAmount(financeReview.totals.netPayable)}</strong>
-            <small>{financeReview.currency} this period</small>
+            <span>Review signals</span>
+            <strong>{flaggedCount}</strong>
+            <small>Duplicates or missing receipts</small>
           </article>
         </section>
 
         <section className="tex-dashboard-grid" aria-label="TEX analytics">
+          <article className="tex-analytics-panel tex-trend-panel">
+            <div className="section-heading-row">
+              <div>
+                <p className="eyebrow">Spend trend</p>
+                <h2>Daily receipt movement</h2>
+              </div>
+              <Link href={`/${locale}/tex/reports`}>Open reports</Link>
+            </div>
+            <TexSpendTrendChart points={spendTrend} />
+          </article>
+
+          <article className="tex-analytics-panel tex-category-panel">
+            <div className="section-heading-row">
+              <div>
+                <p className="eyebrow">Spend mix</p>
+                <h2>Spend by category</h2>
+              </div>
+              <span className="tex-kpi-icon" aria-hidden="true">
+                <Receipt />
+              </span>
+            </div>
+            <TexCategoryDonut categories={categorySpend} currency={reportWorkspace?.currency ?? financeReview.currency} />
+          </article>
+        </section>
+
+        <section className="tex-dashboard-grid tex-dashboard-grid-balanced" aria-label="TEX operational analytics">
           <article className="tex-analytics-panel">
             <div className="section-heading-row">
               <div>
                 <p className="eyebrow">Expense flow</p>
-                <h2>Status distribution</h2>
+                <h2>Status funnel</h2>
               </div>
-              <Link href={`/${locale}/tex/reports`}>Open reports</Link>
+              <strong className="tex-panel-stat">{reportExpenses.length} shown</strong>
             </div>
-            <div className="tex-status-chart" aria-label="Expense status chart">
-              {[
-                { label: "Pending", value: pendingCount, tone: "var(--color-status-warning)" },
-                { label: "Approved", value: approvedCount, tone: "var(--color-status-success)" },
-                { label: "Paid", value: paidCount, tone: "var(--color-accent)" },
-                { label: "Rejected", value: rejectedCount, tone: "var(--color-status-error)" }
-              ].map((item) => (
-                <div className="tex-status-column" key={item.label}>
-                  <span
-                    style={{
-                      background: item.tone,
-                      blockSize: `${Math.max(14, item.value * 24)}px`
-                    }}
-                  />
+            <div className="tex-status-funnel" aria-label="Expense status funnel">
+              {statusItems.map((item) => (
+                <div className="tex-funnel-row" key={item.label}>
+                  <span>{item.label}</span>
+                  <span className="tex-funnel-track">
+                    <i
+                      style={{
+                        background: item.tone,
+                        inlineSize: `${Math.max(8, (item.value / maxStatusCount) * 100)}%`
+                      }}
+                    />
+                  </span>
                   <strong>{item.value}</strong>
-                  <small>{item.label}</small>
                 </div>
               ))}
             </div>
@@ -224,26 +271,28 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
           <article className="tex-analytics-panel">
             <div className="section-heading-row">
               <div>
-                <p className="eyebrow">Spend signal</p>
-                <h2>Top categories</h2>
+                <p className="eyebrow">Team signal</p>
+                <h2>Top employees</h2>
               </div>
-              <span className="tex-kpi-icon" aria-hidden="true">
-                <Receipt />
+              <span className="tex-panel-stat">
+                {formatMoney(outstandingSpend, reportWorkspace?.currency ?? financeReview.currency)} open
               </span>
             </div>
             <div className="tex-bar-list">
-              {categorySpend.length ? (
-                categorySpend.map((item) => (
-                  <div className="tex-bar-row" key={item.category}>
-                    <span>{item.category}</span>
+              {topEmployees.length ? (
+                topEmployees.map((item) => (
+                  <div className="tex-bar-row tex-employee-bar-row" key={item.employee}>
+                    <span>{item.employee}</span>
                     <span className="tex-bar-track">
-                      <i style={{ inlineSize: `${(item.amount / maxCategorySpend) * 100}%` }} />
+                      <i style={{ inlineSize: `${(item.amount / topEmployeeAmount) * 100}%` }} />
                     </span>
-                    <strong>{formatAmount(item.amount)}</strong>
+                    <strong>
+                      {formatMoney(item.amount, reportWorkspace?.currency ?? financeReview.currency)}
+                    </strong>
                   </div>
                 ))
               ) : (
-                <p className="tex-empty-state">No report-period category spend yet.</p>
+                <p className="tex-empty-state">No employee spend in the current report period.</p>
               )}
             </div>
           </article>
@@ -273,6 +322,10 @@ function formatAmount(value: number) {
   return new Intl.NumberFormat("en", { maximumFractionDigits: 0 }).format(value);
 }
 
+function formatMoney(value: number, currency: string) {
+  return `${formatAmount(value)} ${currency}`;
+}
+
 function buildCategorySpend(expenses: Array<{ baseAmount: number; category: string | null }>) {
   const spendByCategory = new Map<string, number>();
 
@@ -285,6 +338,172 @@ function buildCategorySpend(expenses: Array<{ baseAmount: number; category: stri
     .map(([category, amount]) => ({ amount, category }))
     .sort((left, right) => right.amount - left.amount)
     .slice(0, 5);
+}
+
+function buildTopEmployees(expenses: Array<{ baseAmount: number; employeeName: string | null; status: string }>) {
+  const spendByEmployee = new Map<string, number>();
+
+  for (const expense of expenses) {
+    if (expense.status === "rejected") {
+      continue;
+    }
+
+    const employee = expense.employeeName || "Unassigned";
+    spendByEmployee.set(employee, (spendByEmployee.get(employee) ?? 0) + expense.baseAmount);
+  }
+
+  return [...spendByEmployee.entries()]
+    .map(([employee, amount]) => ({ amount, employee }))
+    .sort((left, right) => right.amount - left.amount)
+    .slice(0, 5);
+}
+
+function buildSpendTrend(expenses: Array<{ baseAmount: number; expenseDate: string; status: string }>) {
+  const spendByDate = new Map<string, number>();
+
+  for (const expense of expenses) {
+    if (expense.status === "rejected") {
+      continue;
+    }
+
+    const day = expense.expenseDate.slice(0, 10);
+    spendByDate.set(day, (spendByDate.get(day) ?? 0) + expense.baseAmount);
+  }
+
+  return [...spendByDate.entries()]
+    .map(([date, amount]) => ({ amount, date }))
+    .sort((left, right) => left.date.localeCompare(right.date))
+    .slice(-14);
+}
+
+function TexSpendTrendChart({ points }: { points: Array<{ amount: number; date: string }> }) {
+  const width = 720;
+  const height = 220;
+  const paddingX = 24;
+  const paddingY = 22;
+  const maxAmount = Math.max(...points.map((point) => point.amount), 1);
+  const chartWidth = width - paddingX * 2;
+  const chartHeight = height - paddingY * 2;
+  const coordinates = points.map((point, index) => {
+    const x =
+      points.length === 1
+        ? width / 2
+        : paddingX + (index / Math.max(points.length - 1, 1)) * chartWidth;
+    const y = height - paddingY - (point.amount / maxAmount) * chartHeight;
+
+    return { ...point, x, y };
+  });
+
+  if (!coordinates.length) {
+    return (
+      <div className="tex-chart-empty">
+        <TrendingUp aria-hidden="true" />
+        <p>No spend movement yet.</p>
+      </div>
+    );
+  }
+
+  const firstPoint = coordinates[0]!;
+  const lastPoint = coordinates[coordinates.length - 1]!;
+  const path = coordinates
+    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(" ");
+  const areaPath = `${path} L ${lastPoint.x.toFixed(2)} ${height - paddingY} L ${firstPoint.x.toFixed(2)} ${height - paddingY} Z`;
+
+  return (
+    <div className="tex-line-chart" aria-label="Spend trend chart">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Daily spend trend">
+        <defs>
+          <linearGradient id="texSpendArea" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="var(--color-accent)" stopOpacity="0.26" />
+            <stop offset="100%" stopColor="var(--color-accent)" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        {[0, 1, 2, 3].map((line) => {
+          const y = paddingY + (line / 3) * chartHeight;
+          return <line className="tex-chart-gridline" key={line} x1={paddingX} x2={width - paddingX} y1={y} y2={y} />;
+        })}
+        <path className="tex-line-chart-area" d={areaPath} />
+        <path className="tex-line-chart-path" d={path} pathLength={1} />
+        {coordinates.map((point) => (
+          <circle className="tex-line-chart-point" cx={point.x} cy={point.y} key={point.date} r="4" />
+        ))}
+      </svg>
+      <div className="tex-line-chart-axis" aria-hidden="true">
+        <span>{formatShortDate(firstPoint.date)}</span>
+        <span>{formatShortDate(lastPoint.date)}</span>
+      </div>
+    </div>
+  );
+}
+
+function TexCategoryDonut({
+  categories,
+  currency
+}: {
+  categories: Array<{ amount: number; category: string }>;
+  currency: string;
+}) {
+  const total = categories.reduce((sum, item) => sum + item.amount, 0);
+  const palette = [
+    "var(--color-accent)",
+    "var(--color-accent-secondary)",
+    "var(--color-status-warning)",
+    "var(--color-status-error)",
+    "#8b5cf6"
+  ];
+
+  if (!categories.length || total <= 0) {
+    return (
+      <div className="tex-chart-empty">
+        <Receipt aria-hidden="true" />
+        <p>No category spend yet.</p>
+      </div>
+    );
+  }
+
+  let cumulative = 0;
+  const segments = categories.map((item, index) => {
+    const start = cumulative;
+    const portion = (item.amount / total) * 100;
+    cumulative += portion;
+
+    return `${palette[index % palette.length]} ${start}% ${cumulative}%`;
+  });
+
+  return (
+    <div className="tex-donut-layout">
+      <div
+        className="tex-donut-chart"
+        style={{ background: `conic-gradient(${segments.join(", ")})` }}
+        aria-label="Spend by category donut"
+      >
+        <span>
+          <strong>{formatMoney(total, currency)}</strong>
+          <small>Total</small>
+        </span>
+      </div>
+      <div className="tex-donut-legend">
+        {categories.map((item, index) => (
+          <div key={item.category}>
+            <i style={{ background: palette[index % palette.length] }} />
+            <span>{item.category}</span>
+            <strong>{formatMoney(item.amount, currency)}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function formatShortDate(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value.slice(5);
+  }
+
+  return new Intl.DateTimeFormat("en", { day: "2-digit", month: "short" }).format(date);
 }
 
 function TexTrialOnboardingGate({
