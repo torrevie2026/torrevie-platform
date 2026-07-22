@@ -2732,6 +2732,13 @@ form.member-row {
   justify-content: flex-end;
 }
 
+.tex-refresh-meta {
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin: 6px 0 12px;
+}
+
 .tex-drawer .section-heading-row {
   align-items: center;
   border-block-end: 1px solid var(--color-border);
