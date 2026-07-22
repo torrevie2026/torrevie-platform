@@ -62,6 +62,8 @@ type ReceiptUploadResponse = {
   };
 };
 
+type ExpenseActionStatus = Exclude<TexExpenseStatus, "pending">;
+
 const blankForm = (): ExpenseFormState => ({
   employeeProfileId: "",
   vendor: "",
@@ -120,6 +122,10 @@ export function TexExpensesClient({
   const [selectedExpense, setSelectedExpense] = useState<TexExpenseListItem | null>(null);
   const [selectedExpenseIds, setSelectedExpenseIds] = useState<Set<string>>(new Set());
   const [busyExpenseId, setBusyExpenseId] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<{
+    ids: Set<string>;
+    status: ExpenseActionStatus;
+  } | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isReceiptParsing, setIsReceiptParsing] = useState(false);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<keyof ExpenseFormState>>(new Set());
@@ -348,10 +354,38 @@ export function TexExpensesClient({
     }
   }
 
-  async function updateStatus(expenseId: string, status: Exclude<TexExpenseStatus, "pending">) {
+  function applyOptimisticStatus(expenseIds: string[], status: ExpenseActionStatus) {
+    const targetIds = new Set(expenseIds);
+
+    setExpenses((current) =>
+      current.map((expense) =>
+        targetIds.has(expense.id)
+          ? {
+              ...expense,
+              status
+            }
+          : expense
+      )
+    );
+    setSelectedExpense((current) =>
+      current && targetIds.has(current.id)
+        ? {
+            ...current,
+            status
+          }
+        : current
+    );
+    setLastUpdatedAt(new Date());
+  }
+
+  async function updateStatus(expenseId: string, status: ExpenseActionStatus) {
+    const previousExpenses = expenses;
+    const previousSelectedExpense = selectedExpense;
     setBusyExpenseId(expenseId);
+    setPendingAction({ ids: new Set([expenseId]), status });
     setError(null);
     setNotice(null);
+    applyOptimisticStatus([expenseId], status);
 
     try {
       await texFetch(`/expenses/${expenseId}/status`, {
@@ -359,15 +393,18 @@ export function TexExpensesClient({
         body: JSON.stringify({ status })
       });
       setNotice(`Expense ${status}.`);
-      await refreshExpenses();
+      void refreshExpenses();
     } catch (caught) {
+      setExpenses(previousExpenses);
+      setSelectedExpense(previousSelectedExpense);
       setError(errorMessage(caught));
     } finally {
       setBusyExpenseId(null);
+      setPendingAction(null);
     }
   }
 
-  async function bulkUpdateStatus(status: Exclude<TexExpenseStatus, "pending">) {
+  async function bulkUpdateStatus(status: ExpenseActionStatus) {
     const targetIds = selectedExpenses
       .filter((expense) =>
         status === "approved" ? canApprove && expense.status === "pending" : canMarkPaid && expense.status === "approved"
@@ -383,9 +420,14 @@ export function TexExpensesClient({
       return;
     }
 
+    const previousExpenses = expenses;
+    const previousSelectedExpense = selectedExpense;
+    const previousSelectedExpenseIds = selectedExpenseIds;
     setBusyExpenseId("bulk");
+    setPendingAction({ ids: new Set(targetIds), status });
     setError(null);
     setNotice(null);
+    applyOptimisticStatus(targetIds, status);
 
     try {
       for (const expenseId of targetIds) {
@@ -396,11 +438,15 @@ export function TexExpensesClient({
       }
       setNotice(`${targetIds.length} expense${targetIds.length === 1 ? "" : "s"} ${status}.`);
       setSelectedExpenseIds(new Set());
-      await refreshExpenses();
+      void refreshExpenses();
     } catch (caught) {
+      setExpenses(previousExpenses);
+      setSelectedExpense(previousSelectedExpense);
+      setSelectedExpenseIds(previousSelectedExpenseIds);
       setError(errorMessage(caught));
     } finally {
       setBusyExpenseId(null);
+      setPendingAction(null);
     }
   }
 
@@ -659,6 +705,9 @@ export function TexExpensesClient({
             {selectedExpense.duplicateReason ? (
               <p className="tex-error">{selectedExpense.duplicateReason}</p>
             ) : null}
+            {pendingAction?.ids.has(selectedExpense.id) ? (
+              <p className="tex-notice">{actionInProgressLabel(pendingAction.status)}</p>
+            ) : null}
             <div className="tex-hero-actions">
               <button
                 type="button"
@@ -757,7 +806,9 @@ export function TexExpensesClient({
                 disabled={busyExpenseId === "bulk" || selectedPendingCount === 0}
                 onClick={() => bulkUpdateStatus("approved")}
               >
-                Approve selected
+                {busyExpenseId === "bulk" && pendingAction?.status === "approved"
+                  ? "Approving..."
+                  : "Approve selected"}
               </button>
             ) : null}
             {canMarkPaid ? (
@@ -767,7 +818,9 @@ export function TexExpensesClient({
                 disabled={busyExpenseId === "bulk" || selectedApprovedCount === 0}
                 onClick={() => bulkUpdateStatus("paid")}
               >
-                Mark paid selected
+                {busyExpenseId === "bulk" && pendingAction?.status === "paid"
+                  ? "Marking paid..."
+                  : "Mark paid selected"}
               </button>
             ) : null}
             <span>{visibleExpenses.length} shown</span>
@@ -806,6 +859,11 @@ export function TexExpensesClient({
                     <span className={`tex-status tex-status-${expense.status}`}>
                       {expense.status}
                     </span>
+                    {pendingAction?.ids.has(expense.id) ? (
+                      <span className="tex-status tex-status-open">
+                        {actionInProgressLabel(pendingAction.status)}
+                      </span>
+                    ) : null}
                     <ExpenseDuplicateBadge expense={expense} />
                   </div>
                   <h4>{expense.vendor ?? expense.category ?? "Expense"}</h4>
@@ -1048,6 +1106,18 @@ function formatDate(value: string) {
 
 function formatAmount(value: number) {
   return new Intl.NumberFormat("en", { maximumFractionDigits: 2 }).format(value);
+}
+
+function actionInProgressLabel(status: ExpenseActionStatus) {
+  if (status === "approved") {
+    return "Approving...";
+  }
+
+  if (status === "rejected") {
+    return "Rejecting...";
+  }
+
+  return "Marking paid...";
 }
 
 function formatTime(value: Date) {
