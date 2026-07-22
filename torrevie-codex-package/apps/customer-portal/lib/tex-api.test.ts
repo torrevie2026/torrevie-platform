@@ -241,10 +241,11 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
-    if (sql.includes("from public.tex_expenses e") && sql.includes("e.expense_date >= $1::date")) {
+    if (sql.includes("with report_periods as") && sql.includes("from report_periods rp")) {
       return {
         rows: [
           {
+            report_period: "current",
             id: "00000000-0000-4000-8000-000000006001",
             employee_profile_id: "00000000-0000-4000-8000-000000004001",
             employee_name: "Maya Haddad",
@@ -265,6 +266,29 @@ class RecordingTexApiClient implements TenantQueryClient {
             approved_at: "2026-07-12T10:00:00.000Z",
             paid_at: null,
             created_at: "2026-07-12T09:00:00.000Z"
+          },
+          {
+            report_period: "previous",
+            id: "00000000-0000-4000-8000-000000006002",
+            employee_profile_id: "00000000-0000-4000-8000-000000004001",
+            employee_name: "Maya Haddad",
+            vendor: "Airport Cafe",
+            expense_date: values[2],
+            amount: 80,
+            currency: "AED",
+            base_amount: 80,
+            category: "Meals",
+            trip_id: null,
+            trip_name: null,
+            payment_method: "personal",
+            source: "web",
+            status: "approved",
+            policy_flag: false,
+            tax_amount: null,
+            tax_id_number: null,
+            approved_at: "2026-06-12T10:00:00.000Z",
+            paid_at: null,
+            created_at: "2026-06-12T09:00:00.000Z"
           }
         ] as Row[]
       };
@@ -1694,7 +1718,8 @@ async function main() {
     });
     assert.equal(response.status, 200);
     assert.match(JSON.stringify(response.body), /Maya Haddad/);
-    assert.equal(client.hasSql("e.expense_date >= $1::date"), true);
+    assert.match(JSON.stringify(response.body), /previousExpenses/);
+    assert.equal(client.hasSql("with report_periods as"), true);
   }
 
   {

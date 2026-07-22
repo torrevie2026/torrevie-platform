@@ -19,7 +19,7 @@ import {
   mapFxRate,
   mapReportExpense
 } from "./mappers";
-import { queryTexReportExpenses } from "./report-queries";
+import { queryTexReportExpensePeriods } from "./report-queries";
 import { formatMoney, sum, uniqueUuids } from "./shared";
 import type {
   TexActorContext,
@@ -134,18 +134,15 @@ export async function listTexReportWorkspace(
   const period = sanitizeReportPeriod(input.dateFrom, input.dateTo);
 
   return withTenantContext(client, actor, async () => {
-    const expenses = await queryTexReportExpenses(client, period.dateFrom, period.dateTo);
-    const previousExpenses = await queryTexReportExpenses(
-      client,
-      period.previousDateFrom,
-      period.previousDateTo
-    );
+    const reportRows = await queryTexReportExpensePeriods(client, period);
+    const expenses = reportRows.rows.filter((row) => row.report_period === "current");
+    const previousExpenses = reportRows.rows.filter((row) => row.report_period === "previous");
 
     return {
       ...period,
       currency: "AED",
-      expenses: expenses.rows.map(mapReportExpense),
-      previousExpenses: previousExpenses.rows.map(mapReportExpense)
+      expenses: expenses.map(mapReportExpense),
+      previousExpenses: previousExpenses.map(mapReportExpense)
     };
   });
 }
