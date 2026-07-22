@@ -576,10 +576,11 @@ class RecordingTexClient implements TenantQueryClient {
       };
     }
 
-    if (sql.includes("from public.tex_expenses e") && sql.includes("e.expense_date >= $1::date")) {
+    if (sql.includes("with report_periods as") && sql.includes("from report_periods rp")) {
       return {
         rows: [
           {
+            report_period: "current",
             id: "00000000-0000-4000-8000-000000006001",
             employee_profile_id: "00000000-0000-4000-8000-000000004001",
             employee_name: "Maya Haddad",
@@ -600,6 +601,29 @@ class RecordingTexClient implements TenantQueryClient {
             approved_at: "2026-07-12T10:00:00.000Z",
             paid_at: null,
             created_at: "2026-07-12T09:00:00.000Z"
+          },
+          {
+            report_period: "previous",
+            id: "00000000-0000-4000-8000-000000006002",
+            employee_profile_id: "00000000-0000-4000-8000-000000004001",
+            employee_name: "Maya Haddad",
+            vendor: "Airport Cafe",
+            expense_date: values[2],
+            amount: 80,
+            currency: "AED",
+            base_amount: 80,
+            category: "Meals",
+            trip_id: null,
+            trip_name: null,
+            payment_method: "personal",
+            source: "web",
+            status: "approved",
+            policy_flag: false,
+            tax_amount: 4,
+            tax_id_number: "TRN123",
+            approved_at: "2026-06-12T10:00:00.000Z",
+            paid_at: null,
+            created_at: "2026-06-12T09:00:00.000Z"
           }
         ] as Row[]
       };
@@ -968,6 +992,10 @@ class RecordingTexClient implements TenantQueryClient {
     return this.calls.some((call) => call.sql.includes(fragment));
   }
 
+  countSql(fragment: string) {
+    return this.calls.filter((call) => call.sql.includes(fragment)).length;
+  }
+
   valuesContain(value: QueryValue) {
     return this.calls.some((call) => call.values.includes(value));
   }
@@ -1122,7 +1150,9 @@ async function main() {
     assert.equal(report.previousDateFrom, "2026-05-31");
     assert.equal(report.expenses[0]?.employeeName, "Maya Haddad");
     assert.equal(report.expenses[0]?.baseAmount, 120);
-    assert.equal(client.hasSql("e.expense_date >= $1::date"), true);
+    assert.equal(report.previousExpenses[0]?.baseAmount, 80);
+    assert.equal(client.hasSql("with report_periods as"), true);
+    assert.equal(client.countSql("from report_periods rp"), 1);
   }
 
   {
@@ -1135,7 +1165,7 @@ async function main() {
     assert.equal(result.provider, "postmark");
     assert.deepEqual(result.recipients, ["finance@example.test", "ops@example.test"]);
     assert.equal(client.hasSql("email_report_recipients"), true);
-    assert.equal(client.hasSql("e.expense_date >= $1::date"), true);
+    assert.equal(client.hasSql("with report_periods as"), true);
     assert.equal(client.valuesContain("tex.email_report.skipped"), true);
   }
 
