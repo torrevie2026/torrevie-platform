@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type {
   TexBudget,
   TexExpenseCategory,
+  TexPlanContext,
   TexSettingsWorkspace,
   TexSpendPolicy
 } from "../../../lib/tex";
@@ -11,6 +12,7 @@ import type {
 type TexSettingsClientProps = {
   initialSettings: TexSettingsWorkspace | null;
   canManage: boolean;
+  planContext: TexPlanContext;
 };
 
 type CategoryForm = {
@@ -40,7 +42,11 @@ const monthNames = [
   "Dec"
 ];
 
-export function TexSettingsClient({ initialSettings, canManage }: TexSettingsClientProps) {
+export function TexSettingsClient({
+  initialSettings,
+  canManage,
+  planContext
+}: TexSettingsClientProps) {
   const now = new Date();
   const [settings, setSettings] = useState(initialSettings);
   const [categoryForm, setCategoryForm] = useState<CategoryForm>({ name: "", sortOrder: "100" });
@@ -60,6 +66,7 @@ export function TexSettingsClient({ initialSettings, canManage }: TexSettingsCli
   const categoryRows = useMemo(() => settings?.categories ?? [], [settings]);
   const duplicateHandlingMode =
     settings?.processingSettings.duplicateHandlingMode ?? "manager_review";
+  const canManageBilling = canManage;
 
   if (!settings) {
     return null;
@@ -158,6 +165,23 @@ export function TexSettingsClient({ initialSettings, canManage }: TexSettingsCli
     });
   }
 
+  async function openCheckout(planKey: "lite" | "growth", currency: "aed" | "usd") {
+    await run(`billing-${planKey}-${currency}`, async () => {
+      const result = await texFetch<{ url: string }>("/billing/checkout", {
+        method: "POST",
+        body: JSON.stringify({ planKey, currency })
+      });
+      window.location.assign(result.url);
+    });
+  }
+
+  async function openBillingPortal() {
+    await run("billing-portal", async () => {
+      const result = await texFetch<{ url: string }>("/billing/portal", { method: "POST" });
+      window.location.assign(result.url);
+    });
+  }
+
   async function deleteBudget(budget: TexBudget) {
     await run(`budget-${budget.id}`, async () => {
       await texFetch(`/settings/budgets/${budget.id}`, { method: "DELETE" });
@@ -198,6 +222,87 @@ export function TexSettingsClient({ initialSettings, canManage }: TexSettingsCli
       {error ? <p className="tex-error">{error}</p> : null}
 
       <div className="tex-settings-grid">
+        <section id="tex-billing" className="tex-form-panel tex-settings-wide tex-billing-panel">
+          <div className="section-heading-row">
+            <div>
+              <h3>Billing and payment method</h3>
+              <p>
+                Set up card payment through Stripe Checkout, or manage the saved payment method
+                after the tenant is subscribed.
+              </p>
+            </div>
+            <span className="tex-plan-pill">{planContext.planKey}</span>
+          </div>
+          <div className="tex-billing-summary">
+            <span>
+              <strong>Current plan</strong>
+              <small>{billingPlanLabel(planContext)}</small>
+            </span>
+            <span>
+              <strong>Trial end</strong>
+              <small>{formatTrialEnd(planContext.trialEndDate)}</small>
+            </span>
+            <span>
+              <strong>Status</strong>
+              <small>{planContext.planStatus}</small>
+            </span>
+          </div>
+          {canManageBilling ? (
+            <div className="tex-billing-actions">
+              <button
+                type="button"
+                className="tex-primary-button"
+                disabled={busy === "billing-lite-aed"}
+                onClick={() => openCheckout("lite", "aed")}
+              >
+                Upgrade to Lite AED
+              </button>
+              <button
+                type="button"
+                className="tex-secondary-button"
+                disabled={busy === "billing-growth-aed"}
+                onClick={() => openCheckout("growth", "aed")}
+              >
+                Upgrade to Growth AED
+              </button>
+              <button
+                type="button"
+                className="tex-secondary-button"
+                disabled={busy === "billing-portal"}
+                onClick={openBillingPortal}
+              >
+                Manage payment method
+              </button>
+            </div>
+          ) : (
+            <p className="tex-field-hint">
+              Ask a tenant administrator to manage billing and payment methods.
+            </p>
+          )}
+          <p className="tex-field-hint">
+            UAE tenants normally use AED billing. International tenants can use the USD checkout
+            option when required.
+          </p>
+          {canManageBilling ? (
+            <div className="tex-billing-currency-actions" aria-label="USD billing options">
+              <button
+                type="button"
+                disabled={busy === "billing-lite-usd"}
+                onClick={() => openCheckout("lite", "usd")}
+              >
+                Lite USD
+              </button>
+              <button
+                type="button"
+                disabled={busy === "billing-growth-usd"}
+                onClick={() => openCheckout("growth", "usd")}
+              >
+                Growth USD
+              </button>
+            </div>
+          ) : null}
+        </section>
+
         <section className="tex-form-panel">
           <h3>Receipt processing</h3>
           <label className="tex-wide-label">
@@ -517,4 +622,24 @@ function errorMessage(error: unknown) {
 
 function formatAmount(value: number) {
   return new Intl.NumberFormat("en", { maximumFractionDigits: 2 }).format(value);
+}
+
+function billingPlanLabel(plan: TexPlanContext) {
+  const planName = plan.planKey.charAt(0).toUpperCase() + plan.planKey.slice(1);
+  return `${planName} (${plan.seatCount}/${plan.employeeLimit} seats)`;
+}
+
+function formatTrialEnd(value: string | null) {
+  if (!value) {
+    return "Not set";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Not set";
+  }
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(date);
 }

@@ -31,7 +31,11 @@ export default async function TexSettingsPage({
           title="Settings"
           subtitle="Maintain expense categories, spend policies, budgets, and finance controls."
         />
-        <TexSettingsClient canManage={canManagePolicies} initialSettings={settingsWorkspace} />
+        <TexSettingsClient
+          canManage={canManagePolicies}
+          initialSettings={settingsWorkspace}
+          planContext={actor.texPlan}
+        />
       </>
     );
   } catch (error) {

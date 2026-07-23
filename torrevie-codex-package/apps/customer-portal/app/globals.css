@@ -143,6 +143,50 @@ a {
   grid-template-columns: 248px minmax(0, 1fr);
 }
 
+.tex-trial-status-banner {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-status-warning) 14%, var(--color-bg-primary));
+  border: 1px solid color-mix(in srgb, var(--color-status-warning) 32%, var(--color-border));
+  border-radius: 8px;
+  color: var(--color-text-primary);
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-block-end: 14px;
+  padding-block: 10px;
+  padding-inline: 12px;
+}
+
+.tex-trial-status-banner div {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.tex-trial-status-banner strong {
+  color: var(--color-status-warning);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.tex-trial-status-banner span {
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.tex-trial-upgrade-link {
+  background: var(--color-accent);
+  border-radius: 6px;
+  color: var(--color-text-inverse);
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 800;
+  padding-block: 8px;
+  padding-inline: 12px;
+  text-decoration: none;
+}
+
 .tex-sidebar {
   display: flex;
   flex-direction: column;
@@ -3839,6 +3883,71 @@ form.member-row {
   grid-column: 1 / -1;
 }
 
+.tex-billing-panel {
+  gap: 14px;
+}
+
+.tex-plan-pill {
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-bg-surface));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
+  border-radius: 999px;
+  color: var(--color-accent);
+  font-size: 12px;
+  font-weight: 900;
+  padding-block: 6px;
+  padding-inline: 10px;
+  text-transform: uppercase;
+}
+
+.tex-billing-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tex-billing-summary span {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+}
+
+.tex-billing-summary strong {
+  color: var(--color-text-primary);
+  font-size: 13px;
+}
+
+.tex-billing-summary small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tex-billing-actions,
+.tex-billing-currency-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tex-billing-currency-actions button {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-weight: 800;
+  min-block-size: 34px;
+  padding-inline: 10px;
+}
+
+.tex-billing-currency-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .tex-inline-form {
   align-items: end;
   display: grid;
@@ -5492,6 +5601,16 @@ form.member-row {
     grid-column: auto;
   }
 
+  .tex-billing-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .tex-billing-actions,
+  .tex-billing-currency-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
   .customer-sidebar {
     border-block-end: 1px solid var(--color-border);
     border-inline-end: 0;
@@ -5551,6 +5670,15 @@ form.member-row {
   .tex-main {
     padding-block-end: 104px;
     padding-inline: 16px;
+  }
+
+  .tex-trial-status-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tex-trial-upgrade-link {
+    text-align: center;
   }
 
   .fsm-main {
