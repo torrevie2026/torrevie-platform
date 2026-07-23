@@ -75,7 +75,7 @@ a {
   padding-inline: 12px;
 }
 
-.customer-sidebar nav a:first-child,
+.customer-sidebar nav:not(.tex-nav) a:first-child,
 .customer-sidebar nav a[aria-current="page"] {
   background: var(--color-bg-surface);
   border-inline-start: 3px solid var(--color-accent);
