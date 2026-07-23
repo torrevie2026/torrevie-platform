@@ -5,6 +5,7 @@ import {
   createTexEmployeeProfile,
   createTexExpense,
   createTexExpenseCategory,
+  cancelTexBillingSubscription,
   createTexBillingCheckoutSession,
   createTexBillingPortalSession,
   createTexNotification,
@@ -144,6 +145,10 @@ export async function handleTexApiRequest(
 
   if (path === "/billing/portal" && method === "POST") {
     return json(200, await createTexBillingPortalSession(actor));
+  }
+
+  if (path === "/billing/cancel" && method === "POST") {
+    return json(200, await cancelTexBillingSubscription(actor));
   }
 
   if (path === "/billing/sync" && method === "POST") {

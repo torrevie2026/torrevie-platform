@@ -54,6 +54,12 @@ type StripePortalSession = {
   url: string | null;
 };
 
+type TexBillingSubscriptionRow = {
+  stripe_subscription_id: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean | null;
+};
+
 type StripeSubscriptionObject = {
   id: string;
   customer: string;
@@ -144,6 +150,44 @@ export async function createTexBillingPortalSession(actor: TexActorContext) {
 
   return {
     url: session.url
+  };
+}
+
+export async function cancelTexBillingSubscription(actor: TexActorContext) {
+  assertTexPermission(actor, "tenant.settings.manage");
+  const subscription = await getCurrentBillingSubscription(actor);
+
+  if (!subscription?.stripe_subscription_id) {
+    throw new Error("No active Stripe subscription is configured for this TEX tenant.");
+  }
+
+  if (subscription.cancel_at_period_end) {
+    return {
+      cancelledAtPeriodEnd: true,
+      currentPeriodEnd: subscription.current_period_end
+    };
+  }
+
+  const stripeSubscription = await stripeRequest<StripeSubscriptionObject>(
+    `/v1/subscriptions/${encodeURIComponent(subscription.stripe_subscription_id)}`,
+    {
+      method: "POST",
+      form: {
+        cancel_at_period_end: "true"
+      }
+    }
+  );
+
+  await syncStripeSubscription(stripeSubscription);
+  await auditBillingEvent(actor.tenantId, actor.userId, "tex.billing.cancel_at_period_end", {
+    stripeSubscriptionId: stripeSubscription.id
+  });
+
+  return {
+    cancelledAtPeriodEnd: Boolean(stripeSubscription.cancel_at_period_end),
+    currentPeriodEnd:
+      fromUnixTimestamp(subscriptionPeriodEnd(stripeSubscription)) ??
+      subscription.current_period_end
   };
 }
 
@@ -578,6 +622,24 @@ async function getBillingTenant(actor: TexActorContext) {
     throw new Error("Unable to resolve TEX billing tenant.");
   }
   return row;
+}
+
+async function getCurrentBillingSubscription(actor: TexActorContext) {
+  assertUuid(actor.tenantId, "tenant id");
+  const result = await queryServerDatabase<TexBillingSubscriptionRow>(
+    `
+      select
+        stripe_subscription_id,
+        current_period_end::text as current_period_end,
+        cancel_at_period_end
+      from public.tex_billing_subscriptions
+      where tenant_id = $1
+      limit 1
+    `,
+    [actor.tenantId]
+  );
+
+  return result.rows[0] ?? null;
 }
 
 async function findTenantIdForStripeObject(object: Record<string, unknown>) {

@@ -109,7 +109,7 @@ export async function resolveTexActorContext(
                 coalesce(tpc.trial_start_date::text, s.starts_at::date::text) as trial_start_date,
                 coalesce(tpc.trial_end_date::text, s.expires_at::date::text) as trial_end_date,
                 tpc.billing_status::text as billing_status,
-                tpc.renewal_date::text as renewal_date,
+                coalesce(tpc.renewal_date::text, tbs.current_period_end::date::text) as renewal_date,
                 coalesce(
                   tbc.currency::text,
                   case
@@ -119,6 +119,7 @@ export async function resolveTexActorContext(
                     else 'usd'
                   end
                 ) as billing_currency,
+                coalesce(tbs.cancel_at_period_end, false) as billing_cancel_at_period_end,
                 coalesce(tpc.employee_limit, pf.limit_value, 5)::int as employee_limit,
                 coalesce(tpc.seat_count, 0)::int as seat_count,
                 coalesce(tpc.whatsapp_provider_scope::text, 'not_configured') as whatsapp_provider_scope
@@ -133,6 +134,8 @@ export async function resolveTexActorContext(
                 on tpc.tenant_id = s.tenant_id
               left join public.tex_billing_customers tbc
                 on tbc.tenant_id = s.tenant_id
+              left join public.tex_billing_subscriptions tbs
+                on tbs.tenant_id = s.tenant_id
               left join public.plan_features pf
                 on pf.plan_id = plans.id
                and pf.feature_key = 'tex.employee_limit'
@@ -390,7 +393,7 @@ async function resolveTexSupportContext(
           coalesce(tpc.trial_start_date::text, s.starts_at::date::text) as trial_start_date,
           coalesce(tpc.trial_end_date::text, s.expires_at::date::text) as trial_end_date,
           tpc.billing_status::text as billing_status,
-          tpc.renewal_date::text as renewal_date,
+          coalesce(tpc.renewal_date::text, tbs.current_period_end::date::text) as renewal_date,
           coalesce(
             tbc.currency::text,
             case
@@ -400,6 +403,7 @@ async function resolveTexSupportContext(
               else 'usd'
             end
           ) as billing_currency,
+          coalesce(tbs.cancel_at_period_end, false) as billing_cancel_at_period_end,
           coalesce(tpc.employee_limit, pf.limit_value, 5)::int as employee_limit,
           coalesce(tpc.seat_count, 0)::int as seat_count,
           coalesce(tpc.whatsapp_provider_scope::text, 'not_configured') as whatsapp_provider_scope
@@ -414,6 +418,8 @@ async function resolveTexSupportContext(
           on tpc.tenant_id = s.tenant_id
         left join public.tex_billing_customers tbc
           on tbc.tenant_id = s.tenant_id
+        left join public.tex_billing_subscriptions tbs
+          on tbs.tenant_id = s.tenant_id
         left join public.plan_features pf
           on pf.plan_id = plans.id
          and pf.feature_key = 'tex.employee_limit'

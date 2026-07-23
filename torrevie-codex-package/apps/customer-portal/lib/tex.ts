@@ -68,6 +68,7 @@ export type {
 } from "./tex/types";
 
 export {
+  cancelTexBillingSubscription,
   createTexBillingCheckoutSession,
   createTexBillingPortalSession,
   processTexStripeWebhookEvent,

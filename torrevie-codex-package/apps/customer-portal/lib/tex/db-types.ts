@@ -407,6 +407,7 @@ export type TexPlanContextRow = {
   billing_status: string | null;
   renewal_date: string | null;
   billing_currency: string | null;
+  billing_cancel_at_period_end: boolean | null;
   employee_limit: number | string | null;
   seat_count: number | string | null;
   whatsapp_provider_scope: string | null;

@@ -69,6 +69,8 @@ export function TexSettingsClient({
     settings?.processingSettings.duplicateHandlingMode ?? "manager_review";
   const canManageBilling = canManage;
   const isTrialPlan = planContext.planKey === "trial" || planContext.planStatus === "trialing";
+  const subscriptionCancelsAtPeriodEnd =
+    !isTrialPlan && planContext.billingCancelAtPeriodEnd === true;
   const canUpgradeToLite = planContext.planKey === "trial";
   const canUpgradeToGrowth = planContext.planKey === "trial" || planContext.planKey === "lite";
 
@@ -239,6 +241,29 @@ export function TexSettingsClient({
     });
   }
 
+  async function cancelBillingSubscription() {
+    const confirmed = window.confirm(
+      "Cancel this TEX subscription at the end of the current billing period? The tenant will keep access until the paid period ends."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    await run("billing-cancel", async () => {
+      const result = await texFetch<{
+        cancelledAtPeriodEnd: boolean;
+        currentPeriodEnd: string | null;
+      }>("/billing/cancel", {
+        method: "POST",
+        body: JSON.stringify({})
+      });
+      const validUntil = formatBillingDate(result.currentPeriodEnd ?? planContext.renewalDate);
+      setNotice(`Subscription cancellation scheduled. TEX remains available until ${validUntil}.`);
+      window.location.replace(`${window.location.pathname}?billing=cancelled#tex-billing`);
+    });
+  }
+
   async function deleteBudget(budget: TexBudget) {
     await run(`budget-${budget.id}`, async () => {
       await texFetch(`/settings/budgets/${budget.id}`, { method: "DELETE" });
@@ -280,6 +305,9 @@ export function TexSettingsClient({
       {busy === "billing-sync" ? (
         <p className="tex-notice">Confirming your Stripe subscription with TEX...</p>
       ) : null}
+      {busy === "billing-cancel" ? (
+        <p className="tex-notice">Scheduling the Stripe subscription cancellation...</p>
+      ) : null}
 
       <div className="tex-settings-grid">
         <section id="tex-billing" className="tex-form-panel tex-settings-wide tex-billing-panel">
@@ -299,7 +327,13 @@ export function TexSettingsClient({
               <small>{billingPlanLabel(planContext)}</small>
             </span>
             <span>
-              <strong>{isTrialPlan ? "Trial end" : "Renewal date"}</strong>
+              <strong>
+                {isTrialPlan
+                  ? "Trial end"
+                  : subscriptionCancelsAtPeriodEnd
+                    ? "Valid until"
+                    : "Renewal date"}
+              </strong>
               <small>
                 {isTrialPlan
                   ? formatBillingDate(planContext.trialEndDate)
@@ -308,9 +342,22 @@ export function TexSettingsClient({
             </span>
             <span>
               <strong>{isTrialPlan ? "Status" : "Billing status"}</strong>
-              <small>{isTrialPlan ? planContext.planStatus : planContext.billingStatus}</small>
+              <small>
+                {isTrialPlan
+                  ? planContext.planStatus
+                  : subscriptionCancelsAtPeriodEnd
+                    ? "cancelled - active until period end"
+                    : planContext.billingStatus}
+              </small>
             </span>
           </div>
+          {subscriptionCancelsAtPeriodEnd ? (
+            <p className="tex-notice">
+              This subscription has been cancelled. TEX remains available until{" "}
+              {formatBillingDate(planContext.renewalDate)}, then access will stop unless the
+              subscription is reactivated.
+            </p>
+          ) : null}
           {canManageBilling ? (
             <div className="tex-billing-actions">
               {canUpgradeToLite ? (
@@ -349,6 +396,16 @@ export function TexSettingsClient({
               >
                 Sync billing status
               </button>
+              {!isTrialPlan && !subscriptionCancelsAtPeriodEnd ? (
+                <button
+                  type="button"
+                  className="tex-secondary-button"
+                  disabled={Boolean(busy)}
+                  onClick={cancelBillingSubscription}
+                >
+                  Cancel subscription
+                </button>
+              ) : null}
             </div>
           ) : (
             <p className="tex-field-hint">
