@@ -20,6 +20,7 @@ import {
   type TexOnboardingStatus
 } from "../../../lib/tex";
 import { TexRoleDashboard } from "./TexRoleDashboard";
+import { TexDashboardAutoRefresh } from "./TexDashboardAutoRefresh";
 import { isTexSessionError, requireTexRequestContext } from "./tex-request-context";
 
 export const runtime = "nodejs";
@@ -311,6 +312,7 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
           roles={actor.roles}
           trips={trips}
         />
+        <TexDashboardAutoRefresh />
       </>
     );
   } catch (error) {

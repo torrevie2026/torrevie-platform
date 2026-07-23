@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { TexReportExpense, TexReportWorkspace } from "../../../lib/tex";
+import { useTexAutoRefresh } from "./useTexAutoRefresh";
 
 type TexReportsClientProps = {
   initialReport: TexReportWorkspace | null;
@@ -26,6 +27,7 @@ export function TexReportsClient({ initialReport }: TexReportsClientProps) {
   const [filters, setFilters] = useState<ReportFilters>(emptyFilters);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
   const filteredExpenses = useMemo(
     () => filterExpenses(report?.expenses ?? [], filters),
@@ -57,7 +59,7 @@ export function TexReportsClient({ initialReport }: TexReportsClientProps) {
   }
   const activeReport = report;
 
-  async function refreshReport() {
+  const refreshReport = useCallback(async () => {
     setBusy(true);
     setError(null);
 
@@ -73,12 +75,20 @@ export function TexReportsClient({ initialReport }: TexReportsClientProps) {
       setReport(nextReport);
       setDateFrom(nextReport.dateFrom);
       setDateTo(nextReport.dateTo);
+      setLastUpdatedAt(new Date());
     } catch (requestError) {
       setError(errorMessage(requestError));
     } finally {
       setBusy(false);
     }
-  }
+  }, [dateFrom, dateTo]);
+
+  useTexAutoRefresh({
+    enabled: !busy,
+    intervalMs: 60000,
+    minRefreshGapMs: 30000,
+    onRefresh: refreshReport
+  });
 
   function exportCsv() {
     const header = [
@@ -200,6 +210,10 @@ export function TexReportsClient({ initialReport }: TexReportsClientProps) {
             Apply
           </button>
         </div>
+        <p className="tex-refresh-meta" aria-live="polite">
+          Auto-refresh every 60 seconds
+          {lastUpdatedAt ? ` - last updated ${formatTime(lastUpdatedAt)}` : ""}
+        </p>
         {error ? <p className="tex-error">{error}</p> : null}
       </section>
 
@@ -460,6 +474,13 @@ async function texFetch<T = unknown>(path: string, init?: RequestInit): Promise<
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "TEX request failed.";
+}
+
+function formatTime(value: Date) {
+  return new Intl.DateTimeFormat("en", {
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(value);
 }
 
 function formatMoney(value: number, currency: string) {
