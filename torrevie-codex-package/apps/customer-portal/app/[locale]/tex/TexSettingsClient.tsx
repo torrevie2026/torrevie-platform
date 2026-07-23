@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type {
   TexBudget,
   TexExpenseCategory,
@@ -71,6 +71,8 @@ export function TexSettingsClient({
   const isTrialPlan = planContext.planKey === "trial" || planContext.planStatus === "trialing";
   const canUpgradeToLite = planContext.planKey === "trial";
   const canUpgradeToGrowth = planContext.planKey === "trial" || planContext.planKey === "lite";
+  const billingCurrency = planContext.billingCurrency;
+  const billingCurrencyLabel = billingCurrency.toUpperCase();
 
   useEffect(() => {
     if (!canManageBilling || checkoutSyncStarted.current) {
@@ -299,9 +301,9 @@ export function TexSettingsClient({
                   type="button"
                   className="tex-primary-button"
                   disabled={Boolean(busy)}
-                  onClick={() => openCheckout("lite", "aed")}
+                  onClick={() => openCheckout("lite", billingCurrency)}
                 >
-                  Upgrade to Lite AED
+                  Upgrade to Lite {billingCurrencyLabel}
                 </button>
               ) : null}
               {canUpgradeToGrowth ? (
@@ -309,9 +311,9 @@ export function TexSettingsClient({
                   type="button"
                   className={canUpgradeToLite ? "tex-secondary-button" : "tex-primary-button"}
                   disabled={Boolean(busy)}
-                  onClick={() => openCheckout("growth", "aed")}
+                  onClick={() => openCheckout("growth", billingCurrency)}
                 >
-                  Upgrade to Growth AED
+                  Upgrade to Growth {billingCurrencyLabel}
                 </button>
               ) : null}
               <button
@@ -337,27 +339,10 @@ export function TexSettingsClient({
             </p>
           )}
           <p className="tex-field-hint">
-            UAE tenants normally use AED billing. International tenants can use the USD checkout
-            option when required.
+            Billing currency is based on the tenant country: UAE tenants use AED, and non-UAE
+            tenants use USD.
           </p>
-          {canManageBilling && isTrialPlan ? (
-            <div className="tex-billing-currency-actions" aria-label="USD billing options">
-              <button
-                type="button"
-                disabled={Boolean(busy)}
-                onClick={() => openCheckout("lite", "usd")}
-              >
-                Lite USD
-              </button>
-              <button
-                type="button"
-                disabled={Boolean(busy)}
-                onClick={() => openCheckout("growth", "usd")}
-              >
-                Growth USD
-              </button>
-            </div>
-          ) : null}
+          <PlanComparison currentPlan={planContext.planKey} />
         </section>
 
         <section className="tex-form-panel">
@@ -649,6 +634,42 @@ function PolicyRow({
         </button>
       ) : null}
     </article>
+  );
+}
+
+function PlanComparison({ currentPlan }: { currentPlan: TexPlanContext["planKey"] }) {
+  const rows = [
+    ["Seats", "5 included", "25 included"],
+    ["Receipt OCR", "Included", "Included with higher review volume"],
+    ["WhatsApp intake", "Quick Connect", "Managed providers plus Quick Connect"],
+    ["Trips", "Expense-focused", "Trips and trip legs"],
+    ["Finance review", "Approve and mark paid", "Finance review workspace"],
+    ["Controls", "Core settings", "Budgets, reports, and growth controls"]
+  ];
+
+  return (
+    <div className="tex-plan-comparison" aria-label="Lite and Growth plan comparison">
+      <div>
+        <strong>Lite vs Growth</strong>
+        <span>
+          {currentPlan === "lite"
+            ? "Growth is the next upgrade when you need more seats and transport controls."
+            : "Compare the paid plans before choosing the upgrade path."}
+        </span>
+      </div>
+      <div className="tex-plan-comparison-grid">
+        <span />
+        <strong className={currentPlan === "lite" ? "is-current" : undefined}>Lite</strong>
+        <strong className={currentPlan === "growth" ? "is-current" : undefined}>Growth</strong>
+        {rows.map(([feature, lite, growth]) => (
+          <Fragment key={feature}>
+            <span>{feature}</span>
+            <small>{lite}</small>
+            <small>{growth}</small>
+          </Fragment>
+        ))}
+      </div>
+    </div>
   );
 }
 

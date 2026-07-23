@@ -406,6 +406,7 @@ export type TexPlanContextRow = {
   trial_end_date: string | null;
   billing_status: string | null;
   renewal_date: string | null;
+  billing_currency: string | null;
   employee_limit: number | string | null;
   seat_count: number | string | null;
   whatsapp_provider_scope: string | null;

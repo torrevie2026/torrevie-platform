@@ -568,9 +568,14 @@ a {
 .tex-kpi-card {
   animation: tex-panel-enter 420ms ease both;
   background:
-    linear-gradient(145deg, color-mix(in srgb, var(--tex-kpi-tone, var(--color-accent)) 8%, transparent), transparent 62%),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--tex-kpi-tone, var(--color-accent)) 8%, transparent),
+      transparent 62%
+    ),
     var(--color-bg-primary);
-  border: 1px solid color-mix(in srgb, var(--tex-kpi-tone, var(--color-accent)) 18%, var(--color-border));
+  border: 1px solid
+    color-mix(in srgb, var(--tex-kpi-tone, var(--color-accent)) 18%, var(--color-border));
   border-radius: 8px;
   box-shadow: 0 12px 28px color-mix(in srgb, var(--color-text-primary) 5%, transparent);
   display: grid;
@@ -598,7 +603,11 @@ a {
 }
 
 .tex-kpi-card:hover {
-  border-color: color-mix(in srgb, var(--tex-kpi-tone, var(--color-accent)) 38%, var(--color-border));
+  border-color: color-mix(
+    in srgb,
+    var(--tex-kpi-tone, var(--color-accent)) 38%,
+    var(--color-border)
+  );
   box-shadow: 0 18px 40px color-mix(in srgb, var(--color-text-primary) 8%, transparent);
   transform: translateY(-2px);
 }
@@ -788,7 +797,9 @@ a {
 }
 
 .tex-loading-donut {
-  animation: tex-donut-reveal 780ms ease both, tex-skeleton-pulse 1.2s ease-in-out infinite;
+  animation:
+    tex-donut-reveal 780ms ease both,
+    tex-skeleton-pulse 1.2s ease-in-out infinite;
   aspect-ratio: 1;
   background:
     radial-gradient(circle at center, var(--color-bg-primary) 0 42%, transparent 43%),
@@ -3948,6 +3959,53 @@ form.member-row {
   opacity: 0.55;
 }
 
+.tex-plan-comparison {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.tex-plan-comparison > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.tex-plan-comparison > div:first-child strong {
+  color: var(--color-text-primary);
+  font-size: 14px;
+}
+
+.tex-plan-comparison > div:first-child span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.tex-plan-comparison-grid {
+  display: grid;
+  gap: 0;
+  grid-template-columns: minmax(120px, 0.8fr) repeat(2, minmax(160px, 1fr));
+  overflow-x: auto;
+}
+
+.tex-plan-comparison-grid > * {
+  border-block-start: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  padding-block: 9px;
+  padding-inline: 8px;
+}
+
+.tex-plan-comparison-grid > strong {
+  color: var(--color-text-primary);
+  font-size: 13px;
+}
+
+.tex-plan-comparison-grid .is-current {
+  color: var(--color-accent);
+}
+
 .tex-inline-form {
   align-items: end;
   display: grid;
@@ -5609,6 +5667,14 @@ form.member-row {
   .tex-billing-currency-actions {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .tex-plan-comparison {
+    overflow: hidden;
+  }
+
+  .tex-plan-comparison-grid {
+    grid-template-columns: 120px repeat(2, minmax(150px, 1fr));
   }
 
   .customer-sidebar {

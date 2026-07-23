@@ -667,6 +667,7 @@ export type TexPlanContext = {
   trialEndDate: string | null;
   billingStatus: string | null;
   renewalDate: string | null;
+  billingCurrency: "aed" | "usd";
   employeeLimit: number;
   seatCount: number;
   whatsappProviderScope: TexWhatsappProviderScope;

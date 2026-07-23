@@ -9,6 +9,7 @@ export function defaultTexPlanContext(): TexPlanContext {
     trialEndDate: null,
     billingStatus: "not_configured",
     renewalDate: null,
+    billingCurrency: "usd",
     employeeLimit: 5,
     seatCount: 0,
     whatsappProviderScope: "not_configured",
@@ -26,6 +27,7 @@ export function mapTexPlanContext(row: TexPlanContextRow | undefined): TexPlanCo
   const whatsappProviderScope = isTexWhatsappProviderScope(row?.whatsapp_provider_scope)
     ? row.whatsapp_provider_scope
     : fallback.whatsappProviderScope;
+  const billingCurrency = row?.billing_currency === "aed" ? "aed" : "usd";
 
   return {
     planKey,
@@ -34,6 +36,7 @@ export function mapTexPlanContext(row: TexPlanContextRow | undefined): TexPlanCo
     trialEndDate: row?.trial_end_date ?? null,
     billingStatus: row?.billing_status ?? fallback.billingStatus,
     renewalDate: row?.renewal_date ?? null,
+    billingCurrency,
     employeeLimit,
     seatCount,
     whatsappProviderScope,
