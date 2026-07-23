@@ -68,6 +68,14 @@ export type {
 } from "./tex/types";
 
 export {
+  createTexBillingCheckoutSession,
+  createTexBillingPortalSession,
+  processTexStripeWebhookEvent,
+  verifyStripeWebhookPayload
+} from "./tex/billing";
+export type { TexCheckoutInput } from "./tex/billing";
+
+export {
   getTexOnboardingStatus,
   listTexBootstrap,
   resolveTexActorContext
