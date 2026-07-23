@@ -63,13 +63,6 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
               <h1>Set up TEX</h1>
               <p>Complete the starter setup flow, then launch the TEX dashboard.</p>
             </div>
-            <div className="customer-context tex-context" aria-label="TEX context">
-              <span>Tenant scoped by RLS</span>
-              <span>TEX entitlement active</span>
-              <span>
-                {bootstrap.integrationSettings?.whatsappProvider ?? "No WhatsApp provider"}
-              </span>
-            </div>
           </header>
 
           <TexTrialOnboardingGate
@@ -130,15 +123,6 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
                 ? "Start from the role dashboard, then use the TEX menu to move into expenses, trips, finance review, people, reports, integrations, and settings."
                 : "Start with WhatsApp setup, invite employees, and review receipts from a compact Trial workspace."}
             </p>
-          </div>
-          <div className="customer-context tex-context" aria-label="TEX context">
-            <span>Tenant scoped by RLS</span>
-            <span>
-              {actor.entitledProducts.includes("tex")
-                ? "TEX entitlement active"
-                : "TEX entitlement missing"}
-            </span>
-            <span>{bootstrap.integrationSettings?.whatsappProvider ?? "No WhatsApp provider"}</span>
           </div>
         </header>
 

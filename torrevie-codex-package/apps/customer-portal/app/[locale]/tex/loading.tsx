@@ -7,11 +7,6 @@ export default function TexLoading() {
           <h1>Loading TEX</h1>
           <p>Preparing tenant data and workspace controls.</p>
         </div>
-        <div className="customer-context tex-context" aria-label="TEX loading context">
-          <span>Tenant scoped by RLS</span>
-          <span>Checking access</span>
-          <span>Loading data</span>
-        </div>
       </header>
 
       <section className="tex-kpi-grid" aria-label="Loading TEX summary">
