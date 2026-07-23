@@ -59,6 +59,7 @@ export function TexPeopleClient({
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [isEmployeeDrawerOpen, setIsEmployeeDrawerOpen] = useState(false);
+  const [isTeamDrawerOpen, setIsTeamDrawerOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -123,11 +124,24 @@ export function TexPeopleClient({
     });
     setNotice(null);
     setError(null);
+    setIsTeamDrawerOpen(true);
   }
 
   function resetTeamForm() {
     setEditingTeamId(null);
     setTeamForm(emptyTeamForm);
+  }
+
+  function openNewTeamDrawer() {
+    resetTeamForm();
+    setNotice(null);
+    setError(null);
+    setIsTeamDrawerOpen(true);
+  }
+
+  function closeTeamDrawer() {
+    setIsTeamDrawerOpen(false);
+    resetTeamForm();
   }
 
   async function refreshPeople() {
@@ -225,6 +239,7 @@ export function TexPeopleClient({
       });
       setNotice(editingTeamId ? "Team updated." : "Team added.");
       resetTeamForm();
+      setIsTeamDrawerOpen(false);
       void refreshPeople();
     } catch (requestError) {
       setError(errorMessage(requestError));
@@ -245,7 +260,7 @@ export function TexPeopleClient({
       await texFetch(`/people/teams/${team.id}`, { method: "DELETE" });
       setNotice("Team removed.");
       if (editingTeamId === team.id) {
-        resetTeamForm();
+        closeTeamDrawer();
       }
       void refreshPeople();
     } catch (requestError) {
@@ -394,6 +409,120 @@ export function TexPeopleClient({
         </div>
       ) : null}
 
+      {isTeamDrawerOpen ? (
+        <div className="tex-drawer-backdrop" role="presentation" onMouseDown={closeTeamDrawer}>
+          <aside
+            className="tex-drawer"
+            aria-labelledby="tex-team-form-title"
+            aria-modal="true"
+            role="dialog"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="section-heading-row">
+              <div>
+                <p className="eyebrow">Operating team</p>
+                <h3 id="tex-team-form-title">
+                  {editingTeam ? `Edit ${editingTeam.name}` : "Create team"}
+                </h3>
+              </div>
+              <button type="button" className="tex-secondary-button" onClick={closeTeamDrawer}>
+                Close
+              </button>
+            </div>
+
+            <div className="tex-form-grid">
+              <label>
+                Team name
+                <input
+                  value={teamForm.name}
+                  disabled={!canManage}
+                  onChange={(event) => setTeamForm({ ...teamForm, name: event.target.value })}
+                />
+              </label>
+              <label>
+                Description
+                <input
+                  value={teamForm.description}
+                  disabled={!canManage}
+                  onChange={(event) =>
+                    setTeamForm({ ...teamForm, description: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                Team manager
+                <select
+                  value={teamForm.managerEmployeeProfileId}
+                  disabled={!canManage}
+                  onChange={(event) =>
+                    setTeamForm({ ...teamForm, managerEmployeeProfileId: event.target.value })
+                  }
+                >
+                  <option value="">No assigned manager</option>
+                  {activeEmployeeOptions.map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <fieldset className="tex-checkbox-group">
+                <legend>Members</legend>
+                {activeEmployeeOptions.length ? (
+                  activeEmployeeOptions.map((employee) => (
+                    <label key={employee.id} className="tex-toggle-label">
+                      <input
+                        type="checkbox"
+                        checked={teamForm.memberEmployeeProfileIds.includes(employee.id)}
+                        disabled={!canManage}
+                        onChange={() =>
+                          setTeamForm({
+                            ...teamForm,
+                            memberEmployeeProfileIds: toggleId(
+                              teamForm.memberEmployeeProfileIds,
+                              employee.id
+                            )
+                          })
+                        }
+                      />
+                      {employee.name}
+                    </label>
+                  ))
+                ) : (
+                  <p className="tex-empty-state">Add active employees before assigning members.</p>
+                )}
+              </fieldset>
+            </div>
+
+            {canManage ? (
+              <div className="tex-drawer-submit-row">
+                <button
+                  type="button"
+                  className="tex-secondary-button"
+                  disabled={busy !== null}
+                  onClick={closeTeamDrawer}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="tex-primary-button"
+                  disabled={busy !== null}
+                  onClick={saveTeam}
+                >
+                  {busy === "team" ? "Saving..." : editingTeam ? "Save team" : "Create team"}
+                </button>
+              </div>
+            ) : (
+              <p className="tex-empty-state">
+                You need TEX people management permission to edit teams.
+              </p>
+            )}
+            {error ? <p className="tex-error">{error}</p> : null}
+          </aside>
+        </div>
+      ) : null}
+
       <header className="section-heading-row">
         <div>
           <p className="eyebrow">People</p>
@@ -497,7 +626,19 @@ export function TexPeopleClient({
         </section>
 
         <section className="tex-form-panel" aria-labelledby="tex-team-list-title">
-          <h3 id="tex-team-list-title">Teams</h3>
+          <div className="section-heading-row">
+            <h3 id="tex-team-list-title">Teams</h3>
+            {canManage ? (
+              <button
+                type="button"
+                className="tex-primary-button"
+                disabled={busy !== null}
+                onClick={openNewTeamDrawer}
+              >
+                Create team
+              </button>
+            ) : null}
+          </div>
           {teams.length ? (
             <div className="tex-people-list">
               {teams.map((team) => (
@@ -530,87 +671,6 @@ export function TexPeopleClient({
             </div>
           ) : (
             <p className="tex-empty-state">No TEX teams have been configured yet.</p>
-          )}
-        </section>
-
-        <section className="tex-form-panel" aria-labelledby="tex-team-form-title">
-          <h3 id="tex-team-form-title">{editingTeam ? `Edit ${editingTeam.name}` : "Add team"}</h3>
-          <div className="tex-form-grid">
-            <label>
-              Team name
-              <input
-                value={teamForm.name}
-                disabled={!canManage}
-                onChange={(event) => setTeamForm({ ...teamForm, name: event.target.value })}
-              />
-            </label>
-            <label>
-              Description
-              <input
-                value={teamForm.description}
-                disabled={!canManage}
-                onChange={(event) => setTeamForm({ ...teamForm, description: event.target.value })}
-              />
-            </label>
-            <label>
-              Team manager
-              <select
-                value={teamForm.managerEmployeeProfileId}
-                disabled={!canManage}
-                onChange={(event) =>
-                  setTeamForm({ ...teamForm, managerEmployeeProfileId: event.target.value })
-                }
-              >
-                <option value="">No assigned manager</option>
-                {activeEmployeeOptions.map((employee) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <fieldset className="tex-checkbox-group">
-              <legend>Members</legend>
-              {activeEmployeeOptions.length ? (
-                activeEmployeeOptions.map((employee) => (
-                  <label key={employee.id} className="tex-toggle-label">
-                    <input
-                      type="checkbox"
-                      checked={teamForm.memberEmployeeProfileIds.includes(employee.id)}
-                      disabled={!canManage}
-                      onChange={() =>
-                        setTeamForm({
-                          ...teamForm,
-                          memberEmployeeProfileIds: toggleId(
-                            teamForm.memberEmployeeProfileIds,
-                            employee.id
-                          )
-                        })
-                      }
-                    />
-                    {employee.name}
-                  </label>
-                ))
-              ) : (
-                <p className="tex-empty-state">Add active employees before assigning members.</p>
-              )}
-            </fieldset>
-          </div>
-          {canManage ? (
-            <div className="tex-panel-actions">
-              <button type="button" disabled={busy !== null} onClick={saveTeam}>
-                {editingTeam ? "Save team" : "Add team"}
-              </button>
-              {editingTeam ? (
-                <button type="button" disabled={busy !== null} onClick={resetTeamForm}>
-                  Cancel
-                </button>
-              ) : null}
-            </div>
-          ) : (
-            <p className="tex-empty-state">
-              You need TEX people management permission to edit teams.
-            </p>
           )}
         </section>
       </div>

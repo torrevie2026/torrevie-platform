@@ -4155,6 +4155,39 @@ form.member-row {
   white-space: nowrap;
 }
 
+.tex-checkbox-group {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 14px;
+}
+
+.tex-checkbox-group legend {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 800;
+  padding-inline: 4px;
+}
+
+.tex-checkbox-group .tex-toggle-label {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  justify-content: space-between;
+  min-block-size: 42px;
+  padding-inline: 10px;
+}
+
+.tex-checkbox-group .tex-toggle-label input {
+  accent-color: var(--color-accent);
+  block-size: 18px;
+  inline-size: 18px;
+  order: 2;
+}
+
 .tex-budget-admin-row {
   grid-template-columns: minmax(160px, 0.8fr) minmax(180px, 1fr) minmax(92px, auto) auto;
 }
