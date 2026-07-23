@@ -344,60 +344,58 @@ async function resolveTexSupportContext(
   context: ResolvedTenantContext
 ): Promise<{ entitledProducts: ProductKey[]; texPlan: TexPlanContext; tenantName: string }> {
   return withTenantContext(client, context, async () => {
-    const [tenant, entitledProducts, texPlan] = await Promise.all([
-      client.query<TexTenantRow>(
-        `
-          select name
-          from public.tenants
-          where id = public.current_tenant_id()
-          limit 1
-        `
-      ),
-      client.query<TexProductRow>(
-        `
-          select p.key
-          from public.subscriptions s
-          join public.products p on p.id = s.product_id
-          where s.tenant_id = public.current_tenant_id()
-            and s.status in ('trial', 'active')
-            and s.starts_at <= now()
-            and (s.expires_at is null or s.expires_at > now())
-        `
-      ),
-      client.query<TexPlanContextRow>(
-        `
-          select
-            coalesce(tpc.plan_key::text, plans.key, 'trial') as plan_key,
-            coalesce(
-              tpc.plan_status::text,
-              case when s.status = 'trial' then 'trialing' else s.status end,
-              'trialing'
-            ) as plan_status,
-            coalesce(tpc.trial_start_date::text, s.starts_at::date::text) as trial_start_date,
-            coalesce(tpc.trial_end_date::text, s.expires_at::date::text) as trial_end_date,
-            coalesce(tpc.employee_limit, pf.limit_value, 5)::int as employee_limit,
-            coalesce(tpc.seat_count, 0)::int as seat_count,
-            coalesce(tpc.whatsapp_provider_scope::text, 'not_configured') as whatsapp_provider_scope
-          from public.subscriptions s
-          join public.products products
-            on products.id = s.product_id
-          join public.plans plans
-            on plans.id = s.plan_id
-          left join public.tex_plan_controls tpc
-            on tpc.tenant_id = s.tenant_id
-          left join public.plan_features pf
-            on pf.plan_id = plans.id
-           and pf.feature_key = 'tex.employee_limit'
-          where s.tenant_id = public.current_tenant_id()
-            and products.key = 'tex'
-            and s.status in ('trial', 'active')
-            and s.starts_at <= now()
-            and (s.expires_at is null or s.expires_at > now())
-          order by s.created_at desc
-          limit 1
-        `
-      )
-    ]);
+    const tenant = await client.query<TexTenantRow>(
+      `
+        select name
+        from public.tenants
+        where id = public.current_tenant_id()
+        limit 1
+      `
+    );
+    const entitledProducts = await client.query<TexProductRow>(
+      `
+        select p.key
+        from public.subscriptions s
+        join public.products p on p.id = s.product_id
+        where s.tenant_id = public.current_tenant_id()
+          and s.status in ('trial', 'active')
+          and s.starts_at <= now()
+          and (s.expires_at is null or s.expires_at > now())
+      `
+    );
+    const texPlan = await client.query<TexPlanContextRow>(
+      `
+        select
+          coalesce(tpc.plan_key::text, plans.key, 'trial') as plan_key,
+          coalesce(
+            tpc.plan_status::text,
+            case when s.status = 'trial' then 'trialing' else s.status end,
+            'trialing'
+          ) as plan_status,
+          coalesce(tpc.trial_start_date::text, s.starts_at::date::text) as trial_start_date,
+          coalesce(tpc.trial_end_date::text, s.expires_at::date::text) as trial_end_date,
+          coalesce(tpc.employee_limit, pf.limit_value, 5)::int as employee_limit,
+          coalesce(tpc.seat_count, 0)::int as seat_count,
+          coalesce(tpc.whatsapp_provider_scope::text, 'not_configured') as whatsapp_provider_scope
+        from public.subscriptions s
+        join public.products products
+          on products.id = s.product_id
+        join public.plans plans
+          on plans.id = s.plan_id
+        left join public.tex_plan_controls tpc
+          on tpc.tenant_id = s.tenant_id
+        left join public.plan_features pf
+          on pf.plan_id = plans.id
+         and pf.feature_key = 'tex.employee_limit'
+        where s.tenant_id = public.current_tenant_id()
+          and products.key = 'tex'
+          and s.status in ('trial', 'active')
+          and s.starts_at <= now()
+          and (s.expires_at is null or s.expires_at > now())
+        order by s.created_at desc
+        limit 1
+      `
+    );
 
     return {
       entitledProducts: entitledProducts.rows.map((row) => row.key).filter(isProductKey),
