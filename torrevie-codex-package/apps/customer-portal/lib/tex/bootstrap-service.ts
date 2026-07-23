@@ -110,10 +110,15 @@ export async function resolveTexActorContext(
                 coalesce(tpc.trial_end_date::text, s.expires_at::date::text) as trial_end_date,
                 tpc.billing_status::text as billing_status,
                 tpc.renewal_date::text as renewal_date,
-                case
-                  when lower(coalesce(tenants.region, '')) in ('uae', 'united arab emirates') then 'aed'
-                  else 'usd'
-                end as billing_currency,
+                coalesce(
+                  tbc.currency::text,
+                  case
+                    when lower(regexp_replace(coalesce(tenants.region, ''), '[^a-z]', '', 'g'))
+                      in ('ae', 'uae', 'unitedarabemirates')
+                      then 'aed'
+                    else 'usd'
+                  end
+                ) as billing_currency,
                 coalesce(tpc.employee_limit, pf.limit_value, 5)::int as employee_limit,
                 coalesce(tpc.seat_count, 0)::int as seat_count,
                 coalesce(tpc.whatsapp_provider_scope::text, 'not_configured') as whatsapp_provider_scope
@@ -126,6 +131,8 @@ export async function resolveTexActorContext(
                 on tenants.id = s.tenant_id
               left join public.tex_plan_controls tpc
                 on tpc.tenant_id = s.tenant_id
+              left join public.tex_billing_customers tbc
+                on tbc.tenant_id = s.tenant_id
               left join public.plan_features pf
                 on pf.plan_id = plans.id
                and pf.feature_key = 'tex.employee_limit'
@@ -384,10 +391,15 @@ async function resolveTexSupportContext(
           coalesce(tpc.trial_end_date::text, s.expires_at::date::text) as trial_end_date,
           tpc.billing_status::text as billing_status,
           tpc.renewal_date::text as renewal_date,
-          case
-            when lower(coalesce(tenants.region, '')) in ('uae', 'united arab emirates') then 'aed'
-            else 'usd'
-          end as billing_currency,
+          coalesce(
+            tbc.currency::text,
+            case
+              when lower(regexp_replace(coalesce(tenants.region, ''), '[^a-z]', '', 'g'))
+                in ('ae', 'uae', 'unitedarabemirates')
+                then 'aed'
+              else 'usd'
+            end
+          ) as billing_currency,
           coalesce(tpc.employee_limit, pf.limit_value, 5)::int as employee_limit,
           coalesce(tpc.seat_count, 0)::int as seat_count,
           coalesce(tpc.whatsapp_provider_scope::text, 'not_configured') as whatsapp_provider_scope
@@ -400,6 +412,8 @@ async function resolveTexSupportContext(
           on tenants.id = s.tenant_id
         left join public.tex_plan_controls tpc
           on tpc.tenant_id = s.tenant_id
+        left join public.tex_billing_customers tbc
+          on tbc.tenant_id = s.tenant_id
         left join public.plan_features pf
           on pf.plan_id = plans.id
          and pf.feature_key = 'tex.employee_limit'

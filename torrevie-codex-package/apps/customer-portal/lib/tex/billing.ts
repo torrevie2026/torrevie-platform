@@ -669,8 +669,8 @@ export function sanitizeCurrency(value: string | null | undefined): TexBillingCu
 }
 
 export function defaultBillingCurrency(tenant: Pick<TexBillingTenantRow, "region">) {
-  const region = `${tenant.region ?? ""}`.toLowerCase();
-  return region.includes("uae") || region.includes("united arab emirates") ? "aed" : "usd";
+  const region = `${tenant.region ?? ""}`.toLowerCase().replace(/[^a-z]/g, "");
+  return region === "ae" || region === "uae" || region === "unitedarabemirates" ? "aed" : "usd";
 }
 
 export function requireStripePriceId(planKey: TexPaidPlanKey, currency: TexBillingCurrency) {

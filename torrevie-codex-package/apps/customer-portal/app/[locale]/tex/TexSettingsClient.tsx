@@ -80,11 +80,24 @@ export function TexSettingsClient({
     }
 
     const query = new URLSearchParams(window.location.search);
-    if (query.get("billing") !== "success" && !query.get("session_id")) {
+    const returnedFromCheckout =
+      query.get("billing") === "success" || Boolean(query.get("session_id"));
+    const needsRenewalBackfill =
+      !isTrialPlan && planContext.billingStatus === "paid" && !planContext.renewalDate;
+    const backfillKey = `tex-billing-renewal-sync:${planContext.planKey}:${planContext.billingStatus}`;
+
+    if (!returnedFromCheckout && !needsRenewalBackfill) {
+      return;
+    }
+
+    if (!returnedFromCheckout && window.sessionStorage.getItem(backfillKey)) {
       return;
     }
 
     checkoutSyncStarted.current = true;
+    if (!returnedFromCheckout) {
+      window.sessionStorage.setItem(backfillKey, "1");
+    }
     void run("billing-sync", async () => {
       await texFetch("/billing/sync", {
         method: "POST",
@@ -92,7 +105,13 @@ export function TexSettingsClient({
       });
       window.location.replace(`${window.location.pathname}?billing=synced#tex-billing`);
     });
-  }, [canManageBilling]);
+  }, [
+    canManageBilling,
+    isTrialPlan,
+    planContext.billingStatus,
+    planContext.planKey,
+    planContext.renewalDate
+  ]);
 
   if (!settings) {
     return null;

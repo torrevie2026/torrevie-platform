@@ -22,6 +22,7 @@ try {
   assert.equal(sanitizeCurrency("AED"), "aed");
   assert.equal(sanitizeCurrency("usd"), "usd");
   assert.equal(sanitizeCurrency("eur"), null);
+  assert.equal(defaultBillingCurrency({ region: "AE" }), "aed");
   assert.equal(defaultBillingCurrency({ region: "UAE" }), "aed");
   assert.equal(defaultBillingCurrency({ region: "United Arab Emirates" }), "aed");
   assert.equal(defaultBillingCurrency({ region: "Saudi Arabia" }), "usd");

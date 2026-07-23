@@ -4,6 +4,7 @@ import { TexSettingsClient } from "../TexSettingsClient";
 import { isTexSessionError, requireTexRequestContext } from "../tex-request-context";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export default async function TexSettingsPage({
   params
