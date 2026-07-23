@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "crypto";
 import { Client } from "pg";
+import { isSupportedCountryCode } from "../countries";
 
-const allowedCountries = new Set(["AE", "SA", "QA", "BH", "KW", "OM"]);
 const defaultCategories = ["Fuel", "Toll", "Parking", "Meals", "Maintenance", "Other"];
 const texTrialDays = 15;
 const texTrialEmployeeLimit = 5;
@@ -74,7 +74,7 @@ function validateTrialInput(input: TexTrialInput) {
     throw new Error("trial_phone_invalid");
   }
 
-  if (!allowedCountries.has(country)) {
+  if (!isSupportedCountryCode(country)) {
     throw new Error("trial_country_invalid");
   }
 

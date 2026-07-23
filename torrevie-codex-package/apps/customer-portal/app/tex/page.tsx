@@ -1,4 +1,5 @@
 import { startTexTrial } from "./actions";
+import { countries } from "../../lib/countries";
 
 export const runtime = "nodejs";
 
@@ -30,15 +31,9 @@ export default async function TexTrialPage({
           <p className="eyebrow">15-day Starter trial</p>
           <h1 id="tex-trial-title">TEX Starter Trial</h1>
           <p>
-            Run transport expenses, trips, receipts, finance review, and WhatsApp receipt intake from
-            a dedicated tenant workspace on the Torrevie SaaS platform.
+            Create a dedicated TEX workspace for transport expenses, receipts, approvals, and
+            WhatsApp receipt intake.
           </p>
-        </div>
-        <div className="tex-trial-points" aria-label="Trial includes">
-          <span>Starter package</span>
-          <span>Quick Connect ready</span>
-          <span>Tenant-isolated data</span>
-          <span>No tex1 dependency</span>
         </div>
       </section>
 
@@ -94,12 +89,11 @@ export default async function TexTrialPage({
           <label>
             Country
             <select name="country" defaultValue={params.country ?? "AE"} required>
-              <option value="AE">United Arab Emirates</option>
-              <option value="SA">Saudi Arabia</option>
-              <option value="QA">Qatar</option>
-              <option value="BH">Bahrain</option>
-              <option value="KW">Kuwait</option>
-              <option value="OM">Oman</option>
+              {countries.map((country) => (
+                <option key={country.code} value={country.code}>
+                  {country.name}
+                </option>
+              ))}
             </select>
           </label>
           <label>
@@ -146,7 +140,7 @@ function trialErrorMessage(error: string) {
   }
 
   if (error === "trial_country_invalid") {
-    return "Please select one of the supported GCC countries.";
+    return "Please select a supported country.";
   }
 
   if (error === "trial_password_invalid") {

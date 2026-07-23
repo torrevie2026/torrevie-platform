@@ -5316,8 +5316,7 @@ form.member-row {
 }
 
 .tex-trial-brand small,
-.tex-trial-copy p,
-.tex-trial-points span {
+.tex-trial-copy p {
   color: var(--color-text-muted);
 }
 
@@ -5345,22 +5344,6 @@ form.member-row {
   line-height: 1.55;
   margin: 0;
   max-inline-size: 560px;
-}
-
-.tex-trial-points {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(2, minmax(0, 220px));
-}
-
-.tex-trial-points span {
-  background: var(--color-bg-primary);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 800;
-  min-block-size: 44px;
-  padding: 12px;
 }
 
 .tex-trial-panel {
@@ -6390,10 +6373,6 @@ form.member-row {
     gap: 20px;
     min-block-size: auto;
     padding-inline-end: 0;
-  }
-
-  .tex-trial-points {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .tex-trial-panel {
