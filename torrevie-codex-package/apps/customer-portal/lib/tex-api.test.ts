@@ -397,6 +397,24 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
+    if (
+      sql.includes("from public.tenants") &&
+      sql.includes("logo_storage_path") &&
+      sql.includes("logo_updated_at") &&
+      !sql.includes("update public.tenants")
+    ) {
+      return {
+        rows: [
+          {
+            name: "SEK Demo",
+            logo_storage_path:
+              "tenant/00000000-0000-4000-8000-000000001001/tex/logos/company-logo.png",
+            logo_updated_at: "2026-07-23T09:00:00.000Z"
+          }
+        ] as Row[]
+      };
+    }
+
     if (sql.includes("insert into public.tex_fx_rates")) {
       return {
         rows: [{ id: "00000000-0000-4000-8000-000000017002" }] as Row[]
@@ -1578,6 +1596,8 @@ async function main() {
     });
     assert.equal(response.status, 200);
     assert.match(JSON.stringify(response.body), /Logistics/);
+    assert.match(JSON.stringify(response.body), /SEK Demo/);
+    assert.match(JSON.stringify(response.body), /\/api\/tex\/branding\/logo/);
     assert.equal(client.hasSql("from public.tex_spend_policies"), true);
     assert.equal(client.hasSql("from public.tex_budgets b"), true);
   }

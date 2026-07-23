@@ -19,7 +19,6 @@ import {
   sanitizeExpenseCategoryInput,
   sanitizeSpendPolicyInput
 } from "./settings-input";
-import { getTexTenantBranding } from "./branding-service";
 import { assertUuid, requireSingleRow } from "./shared";
 import type {
   TexActorContext,
@@ -31,7 +30,8 @@ import type {
   TexProcessingSettingsInput,
   TexSettingsWorkspace,
   TexSpendPolicy,
-  TexSpendPolicyInput
+  TexSpendPolicyInput,
+  TexTenantBranding
 } from "./types";
 import { sanitizeMonth, sanitizeYear } from "./validation";
 
@@ -119,11 +119,18 @@ export async function listTexSettingsWorkspace(
           limit 1
         `
     );
-    const branding = await getTexTenantBranding(client, actor).catch(() => ({
-      tenantName: "Current tenant",
-      logoUrl: null,
-      logoUpdatedAt: null
-    }));
+    const brandingResult = await client.query<TexTenantBrandingRow>(
+      `
+          select
+            name,
+            logo_storage_path,
+            logo_updated_at::text as logo_updated_at
+          from public.tenants
+          where id = public.current_tenant_id()
+          limit 1
+        `
+    );
+    const branding = mapSettingsBranding(brandingResult.rows[0], actor.tenantId);
 
     return {
       branding,
@@ -409,6 +416,27 @@ export async function upsertTexBudget(
     return mapBudget(row);
   });
 }
+
+function mapSettingsBranding(
+  row: TexTenantBrandingRow | undefined,
+  tenantId: string
+): TexTenantBranding {
+  const logoUpdatedAt = row?.logo_updated_at ?? null;
+
+  return {
+    tenantName: row?.name?.trim() || "Current tenant",
+    logoUrl: row?.logo_storage_path
+      ? `/api/tex/branding/logo?v=${encodeURIComponent(logoUpdatedAt ?? tenantId)}`
+      : null,
+    logoUpdatedAt
+  };
+}
+
+type TexTenantBrandingRow = {
+  name: string | null;
+  logo_storage_path: string | null;
+  logo_updated_at: string | null;
+};
 
 export async function deleteTexBudget(
   client: TenantQueryClient,
