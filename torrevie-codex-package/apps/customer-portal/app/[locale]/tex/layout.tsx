@@ -2,6 +2,8 @@ import { isLocale, type Locale } from "@torrevie/localization";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
+import { getTexFirstRunTutorialState } from "../../../lib/tex";
+import { TexFirstRunTutorial } from "./TexFirstRunTutorial";
 import { TexShellNav } from "./TexShellNav";
 import { isTexSessionError, requireTexRequestContext } from "./tex-request-context";
 
@@ -23,7 +25,8 @@ export default async function TexLayout({
   const locale = rawLocale as Locale;
 
   try {
-    const { actor, session } = await requireTexRequestContext(locale, "/tex");
+    const { actor, client, session } = await requireTexRequestContext(locale, "/tex");
+    const tutorial = await getTexFirstRunTutorialState(client, actor);
 
     return (
       <main className="customer-shell tex-shell" data-visual-check="tex-platform">
@@ -44,6 +47,10 @@ export default async function TexLayout({
           />
           {children}
         </section>
+        <TexFirstRunTutorial
+          shouldShow={tutorial.shouldShow}
+          tenantName={actor.tenantName ?? "your TEX workspace"}
+        />
       </main>
     );
   } catch (error) {

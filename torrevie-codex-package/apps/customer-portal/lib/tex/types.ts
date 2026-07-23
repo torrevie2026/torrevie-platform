@@ -558,6 +558,11 @@ export type TexTenantBranding = {
   logoUpdatedAt: string | null;
 };
 
+export type TexFirstRunTutorialState = {
+  dismissedAt: string | null;
+  shouldShow: boolean;
+};
+
 export type TexTenantLogoUploadInput = {
   fileName?: string | null;
   contentType: string;

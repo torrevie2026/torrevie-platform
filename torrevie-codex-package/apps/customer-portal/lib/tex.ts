@@ -20,6 +20,7 @@ export type {
   TexExpenseUpdateInput,
   TexFinanceExpense,
   TexFinancePaymentInput,
+  TexFirstRunTutorialState,
   TexFinanceReview,
   TexFinanceTripPayout,
   TexFxRate,
@@ -121,6 +122,10 @@ export {
   updateTexEmployeeProfile,
   updateTexTeam
 } from "./tex/people-service";
+export {
+  dismissTexFirstRunTutorial,
+  getTexFirstRunTutorialState
+} from "./tex/tutorial-service";
 export {
   createTexNotification,
   listTexNotifications,

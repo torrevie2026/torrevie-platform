@@ -3708,6 +3708,388 @@ form.member-row {
   inline-size: 18px;
 }
 
+.tex-tutorial-backdrop {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-text-primary) 46%, transparent);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 18px;
+  position: fixed;
+  z-index: 95;
+}
+
+.tex-tutorial-dialog {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 26px 70px color-mix(in srgb, var(--color-text-primary) 24%, transparent);
+  display: grid;
+  gap: 16px;
+  inline-size: min(920px, 100%);
+  max-block-size: min(88vh, 760px);
+  overflow: auto;
+  padding: 18px;
+}
+
+.tex-tutorial-header,
+.tex-tutorial-footer,
+.tex-tutorial-title-group,
+.tex-tutorial-actions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.tex-tutorial-header,
+.tex-tutorial-footer {
+  justify-content: space-between;
+}
+
+.tex-tutorial-title-group {
+  min-inline-size: 0;
+}
+
+.tex-tutorial-icon {
+  align-items: center;
+  background: var(--color-accent);
+  border-radius: 8px;
+  color: var(--color-text-inverse);
+  display: inline-flex;
+  flex: 0 0 auto;
+  inline-size: 44px;
+  justify-content: center;
+  min-block-size: 44px;
+}
+
+.tex-tutorial-icon svg,
+.tex-icon-button svg {
+  block-size: 20px;
+  inline-size: 20px;
+}
+
+.tex-tutorial-dialog h2 {
+  font-size: 24px;
+  margin: 2px 0 0;
+}
+
+.tex-icon-button {
+  align-items: center;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-primary);
+  display: inline-flex;
+  flex: 0 0 auto;
+  inline-size: 40px;
+  justify-content: center;
+  min-block-size: 40px;
+}
+
+.tex-tutorial-progress {
+  background: var(--color-bg-surface);
+  border-radius: 999px;
+  block-size: 8px;
+  overflow: hidden;
+}
+
+.tex-tutorial-progress span {
+  background: var(--color-accent);
+  block-size: 100%;
+  display: block;
+  transition: inline-size 220ms ease;
+}
+
+.tex-tutorial-stage {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(230px, 0.8fr) minmax(0, 1.4fr);
+}
+
+.tex-tutorial-copy {
+  align-content: start;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.tex-tutorial-copy span,
+.tex-tutorial-copy small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.tex-tutorial-copy h3 {
+  font-size: 26px;
+  letter-spacing: 0;
+  line-height: 1.12;
+  margin: 0;
+}
+
+.tex-tutorial-copy p {
+  color: var(--color-text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.tex-tutorial-snapshot {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-bg-card) 88%, var(--color-accent) 12%), var(--color-bg-card));
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  min-block-size: 330px;
+  overflow: hidden;
+  padding: 16px;
+  position: relative;
+}
+
+.tex-tutorial-window-bar {
+  align-items: center;
+  border-block-end: 1px solid var(--color-border);
+  display: flex;
+  gap: 6px;
+  margin: -16px -16px 0;
+  padding: 10px 14px;
+}
+
+.tex-tutorial-window-bar span {
+  background: color-mix(in srgb, var(--color-text-muted) 34%, transparent);
+  border-radius: 999px;
+  block-size: 8px;
+  inline-size: 8px;
+}
+
+.tex-tutorial-kpi-row,
+.tex-tutorial-review-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tex-tutorial-kpi-row span,
+.tex-tutorial-review-grid span,
+.tex-tutorial-status-card,
+.tex-tutorial-expense-list span,
+.tex-tutorial-drawer-mock,
+.tex-tutorial-people-row,
+.tex-tutorial-panel-note {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-primary);
+  font-weight: 800;
+  padding: 12px;
+}
+
+.tex-tutorial-chart-line {
+  align-items: end;
+  background-image:
+    linear-gradient(var(--color-border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
+  background-size: 38px 38px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  display: flex;
+  gap: 18px;
+  min-block-size: 160px;
+  padding: 16px;
+}
+
+.tex-tutorial-chart-line i {
+  background: var(--color-accent);
+  border-radius: 999px 999px 0 0;
+  display: block;
+  inline-size: 24%;
+}
+
+.tex-tutorial-chart-line i:first-child {
+  animation: texTutorialBarPulse 2.6s ease-in-out infinite;
+  min-block-size: 42%;
+}
+
+.tex-tutorial-chart-line i:last-child {
+  animation: texTutorialBarPulse 2.6s ease-in-out 180ms infinite;
+  min-block-size: 72%;
+}
+
+.tex-tutorial-panel-note {
+  border-color: color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
+}
+
+.tex-tutorial-status-card {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.tex-tutorial-status-card span {
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-bg-card));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 36%, var(--color-border));
+  border-radius: 999px;
+  color: var(--color-accent);
+  padding: 6px 10px;
+}
+
+.tex-tutorial-chat {
+  align-content: end;
+  display: grid;
+  gap: 10px;
+  min-block-size: 210px;
+}
+
+.tex-tutorial-chat p {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  inline-size: fit-content;
+  margin: 0;
+  max-inline-size: 76%;
+  padding: 12px;
+}
+
+.tex-tutorial-chat p:last-child {
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-bg-card));
+  justify-self: end;
+}
+
+.tex-tutorial-review-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tex-tutorial-expense-list {
+  align-content: center;
+  display: grid;
+  gap: 10px;
+}
+
+.tex-tutorial-expense-list span {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.tex-tutorial-expense-list b {
+  color: var(--color-accent);
+}
+
+.tex-tutorial-drawer-mock {
+  justify-self: end;
+  min-inline-size: min(300px, 82%);
+}
+
+.tex-tutorial-drawer-mock strong,
+.tex-tutorial-drawer-mock span,
+.tex-tutorial-drawer-mock button {
+  display: block;
+  margin-block-end: 10px;
+}
+
+.tex-tutorial-drawer-mock span {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  padding: 10px;
+}
+
+.tex-tutorial-drawer-mock button {
+  background: var(--color-accent);
+  border: 0;
+  border-radius: 6px;
+  color: var(--color-text-inverse);
+  font-weight: 800;
+  inline-size: 100%;
+  min-block-size: 38px;
+}
+
+.tex-tutorial-report-bars {
+  align-items: end;
+  display: flex;
+  gap: 14px;
+  min-block-size: 160px;
+}
+
+.tex-tutorial-report-bars span {
+  background: var(--color-accent);
+  border-radius: 8px 8px 0 0;
+  flex: 1;
+}
+
+.tex-tutorial-report-bars span:nth-child(1) {
+  block-size: 54%;
+}
+
+.tex-tutorial-report-bars span:nth-child(2) {
+  block-size: 82%;
+}
+
+.tex-tutorial-report-bars span:nth-child(3) {
+  block-size: 36%;
+}
+
+.tex-tutorial-donut {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+.tex-tutorial-donut span {
+  background: conic-gradient(var(--color-accent) 0 74%, #f59e0b 74% 88%, #ef4444 88% 100%);
+  border-radius: 999px;
+  display: block;
+  inline-size: 118px;
+  min-block-size: 118px;
+  position: relative;
+}
+
+.tex-tutorial-donut span::after {
+  background: var(--color-bg-card);
+  border-radius: inherit;
+  content: "";
+  inset: 26px;
+  position: absolute;
+}
+
+.tex-tutorial-checkbox {
+  align-items: center;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.tex-tutorial-checkbox input {
+  accent-color: var(--color-accent);
+  block-size: 18px;
+  inline-size: 18px;
+}
+
+.tex-tutorial-error {
+  background: #fee2e2;
+  border-inline-start: 4px solid #dc2626;
+  color: #991b1b;
+  margin: 0;
+  padding: 12px;
+}
+
+@keyframes texTutorialBarPulse {
+  0%,
+  100% {
+    transform: scaleY(0.82);
+  }
+
+  50% {
+    transform: scaleY(1);
+  }
+}
+
 .tex-finance-summary {
   display: grid;
   gap: 10px;
@@ -6226,6 +6608,71 @@ form.member-row {
     padding: 14px;
   }
 
+  .tex-tutorial-backdrop {
+    align-items: flex-end;
+    padding: 12px;
+    padding-block-end: max(12px, env(safe-area-inset-bottom));
+  }
+
+  .tex-tutorial-dialog {
+    border-radius: 8px 8px 0 0;
+    inline-size: 100%;
+    max-block-size: min(88vh, 740px);
+    padding: 14px;
+  }
+
+  .tex-tutorial-header,
+  .tex-tutorial-footer {
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .tex-tutorial-header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+
+  .tex-tutorial-footer {
+    display: grid;
+  }
+
+  .tex-tutorial-dialog h2 {
+    font-size: 20px;
+  }
+
+  .tex-tutorial-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .tex-tutorial-copy h3 {
+    font-size: 22px;
+  }
+
+  .tex-tutorial-snapshot {
+    min-block-size: 260px;
+  }
+
+  .tex-tutorial-kpi-row {
+    grid-template-columns: 1fr;
+  }
+
+  .tex-tutorial-review-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tex-tutorial-chat p {
+    max-inline-size: 90%;
+  }
+
+  .tex-tutorial-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .tex-tutorial-actions button {
+    inline-size: 100%;
+  }
+
   .tex-mobile-more-panel {
     background: var(--color-bg-primary);
     border: 1px solid var(--color-border);
@@ -6524,7 +6971,9 @@ form.member-row {
   .tex-live-refreshing .tex-report-breakdown article::after,
   .tex-live-refreshing .tex-report-row::after,
   .tex-live-refreshing .tex-expense-card::after,
-  .tex-live-refreshing .tex-whatsapp-row::after {
+  .tex-live-refreshing .tex-whatsapp-row::after,
+  .tex-tutorial-chart-line i,
+  .tex-tutorial-progress span {
     animation: none;
     transition: none;
   }

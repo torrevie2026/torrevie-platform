@@ -1077,6 +1077,19 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
+    if (
+      sql.includes("update public.user_profiles") &&
+      sql.includes("tex_first_run_tutorial_dismissed_at")
+    ) {
+      return {
+        rows: [
+          {
+            tex_first_run_tutorial_dismissed_at: "2026-07-23T15:30:00.000Z"
+          }
+        ] as Row[]
+      };
+    }
+
     return { rows: [] };
   }
 
@@ -1098,6 +1111,17 @@ async function main() {
     });
     assert.equal(response.status, 200);
     assert.equal(client.hasSql("from public.tex_expense_categories"), true);
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const response = await handleTexApiRequest(client, actor, {
+      method: "POST",
+      path: "/tutorial/dismiss"
+    });
+    assert.equal(response.status, 200);
+    assert.equal(client.hasSql("update public.user_profiles"), true);
+    assert.equal(client.valuesContain("tex.tutorial.dismissed"), true);
   }
 
   {

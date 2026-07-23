@@ -17,6 +17,7 @@ import {
   deleteTexExpenseCategory,
   deleteTexTeam,
   deleteTexTripLeg,
+  dismissTexFirstRunTutorial,
   disconnectTexQuickConnect,
   ignoreTexUnregisteredWhatsappSubmission,
   listTexBootstrap,
@@ -137,6 +138,10 @@ export async function handleTexApiRequest(
 
   if (path === "/bootstrap" && method === "GET") {
     return json(200, await listTexBootstrap(client, actor));
+  }
+
+  if (path === "/tutorial/dismiss" && method === "POST") {
+    return json(200, await dismissTexFirstRunTutorial(client, actor));
   }
 
   if (path === "/billing/checkout" && method === "POST") {
