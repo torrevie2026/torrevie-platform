@@ -21,7 +21,7 @@ export default async function TexSettingsPage({
       actor,
       now.getUTCMonth() + 1,
       now.getUTCFullYear()
-    ).catch(() => null);
+    );
     const canManagePolicies = actor.roles.some((role) =>
       ["customer_admin", "customer_module_admin", "torrevie_platform_admin"].includes(role)
     );

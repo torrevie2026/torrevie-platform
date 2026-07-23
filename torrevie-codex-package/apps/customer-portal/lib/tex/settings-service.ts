@@ -119,9 +119,14 @@ export async function listTexSettingsWorkspace(
           limit 1
         `
     );
+    const branding = await getTexTenantBranding(client, actor).catch(() => ({
+      tenantName: "Current tenant",
+      logoUrl: null,
+      logoUpdatedAt: null
+    }));
 
     return {
-      branding: await getTexTenantBranding(client, actor),
+      branding,
       categories: categoriesResult.rows.map(mapCategory),
       policies: mergePoliciesWithCategories(categoriesResult.rows, policiesResult.rows),
       budgets: budgetsResult.rows.map(mapBudget),

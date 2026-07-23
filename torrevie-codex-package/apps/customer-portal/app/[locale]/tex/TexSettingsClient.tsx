@@ -115,7 +115,17 @@ export function TexSettingsClient({
   ]);
 
   if (!settings) {
-    return null;
+    return (
+      <section className="tex-settings-workspace" aria-labelledby="tex-settings-unavailable-title">
+        <div className="tex-form-panel">
+          <h2 id="tex-settings-unavailable-title">Settings could not load</h2>
+          <p>
+            TEX could not load the settings workspace. Refresh the page, and contact support if this
+            continues.
+          </p>
+        </div>
+      </section>
+    );
   }
 
   async function refresh(month = Number(budgetForm.month), year = Number(budgetForm.year)) {
