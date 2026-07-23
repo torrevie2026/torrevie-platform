@@ -71,9 +71,10 @@ export {
   createTexBillingCheckoutSession,
   createTexBillingPortalSession,
   processTexStripeWebhookEvent,
+  syncTexBillingFromStripe,
   verifyStripeWebhookPayload
 } from "./tex/billing";
-export type { TexCheckoutInput } from "./tex/billing";
+export type { TexBillingSyncInput, TexCheckoutInput } from "./tex/billing";
 
 export {
   getTexOnboardingStatus,

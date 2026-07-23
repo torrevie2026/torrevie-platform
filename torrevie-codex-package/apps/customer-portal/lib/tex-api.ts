@@ -40,6 +40,7 @@ import {
   replaceTexTripLegs,
   sendTexEmailReport,
   startTexQuickConnectPairing,
+  syncTexBillingFromStripe,
   updateTexExpenseCategory,
   updateTexExpense,
   updateTexEmployeeProfile,
@@ -53,6 +54,7 @@ import {
   type TexActorContext,
   type TexBudgetInput,
   type TexCheckoutInput,
+  type TexBillingSyncInput,
   type TexDriverAdvanceInput,
   type TexExpenseCategoryInput,
   type TexEmployeeProfileInput,
@@ -134,11 +136,18 @@ export async function handleTexApiRequest(
   }
 
   if (path === "/billing/checkout" && method === "POST") {
-    return json(200, await createTexBillingCheckoutSession(actor, request.body as TexCheckoutInput));
+    return json(
+      200,
+      await createTexBillingCheckoutSession(actor, request.body as TexCheckoutInput)
+    );
   }
 
   if (path === "/billing/portal" && method === "POST") {
     return json(200, await createTexBillingPortalSession(actor));
+  }
+
+  if (path === "/billing/sync" && method === "POST") {
+    return json(200, await syncTexBillingFromStripe(actor, request.body as TexBillingSyncInput));
   }
 
   if (path === "/people" && method === "GET") {

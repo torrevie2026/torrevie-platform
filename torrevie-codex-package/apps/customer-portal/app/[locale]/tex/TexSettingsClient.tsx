@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   TexBudget,
   TexExpenseCategory,
@@ -60,6 +60,7 @@ export function TexSettingsClient({
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const checkoutSyncStarted = useRef(false);
 
   const policyRows = useMemo(() => settings?.policies ?? [], [settings]);
   const budgetRows = useMemo(() => settings?.budgets ?? [], [settings]);
@@ -67,6 +68,26 @@ export function TexSettingsClient({
   const duplicateHandlingMode =
     settings?.processingSettings.duplicateHandlingMode ?? "manager_review";
   const canManageBilling = canManage;
+
+  useEffect(() => {
+    if (!canManageBilling || checkoutSyncStarted.current) {
+      return;
+    }
+
+    const query = new URLSearchParams(window.location.search);
+    if (query.get("billing") !== "success" && !query.get("session_id")) {
+      return;
+    }
+
+    checkoutSyncStarted.current = true;
+    void run("billing-sync", async () => {
+      await texFetch("/billing/sync", {
+        method: "POST",
+        body: JSON.stringify({ sessionId: query.get("session_id") })
+      });
+      window.location.replace(`${window.location.pathname}?billing=synced#tex-billing`);
+    });
+  }, [canManageBilling]);
 
   if (!settings) {
     return null;
@@ -182,6 +203,20 @@ export function TexSettingsClient({
     });
   }
 
+  async function syncBillingStatus() {
+    await run("billing-sync", async () => {
+      const result = await texFetch<{ synced: boolean; reason?: string }>("/billing/sync", {
+        method: "POST",
+        body: JSON.stringify({})
+      });
+      if (result.synced) {
+        window.location.replace(`${window.location.pathname}?billing=synced#tex-billing`);
+        return;
+      }
+      setNotice("No active Stripe subscription was found for this tenant yet.");
+    });
+  }
+
   async function deleteBudget(budget: TexBudget) {
     await run(`budget-${budget.id}`, async () => {
       await texFetch(`/settings/budgets/${budget.id}`, { method: "DELETE" });
@@ -220,6 +255,9 @@ export function TexSettingsClient({
       </div>
       {notice ? <p className="tex-notice">{notice}</p> : null}
       {error ? <p className="tex-error">{error}</p> : null}
+      {busy === "billing-sync" ? (
+        <p className="tex-notice">Confirming your Stripe subscription with TEX...</p>
+      ) : null}
 
       <div className="tex-settings-grid">
         <section id="tex-billing" className="tex-form-panel tex-settings-wide tex-billing-panel">
@@ -252,7 +290,7 @@ export function TexSettingsClient({
               <button
                 type="button"
                 className="tex-primary-button"
-                disabled={busy === "billing-lite-aed"}
+                disabled={Boolean(busy)}
                 onClick={() => openCheckout("lite", "aed")}
               >
                 Upgrade to Lite AED
@@ -260,7 +298,7 @@ export function TexSettingsClient({
               <button
                 type="button"
                 className="tex-secondary-button"
-                disabled={busy === "billing-growth-aed"}
+                disabled={Boolean(busy)}
                 onClick={() => openCheckout("growth", "aed")}
               >
                 Upgrade to Growth AED
@@ -268,10 +306,18 @@ export function TexSettingsClient({
               <button
                 type="button"
                 className="tex-secondary-button"
-                disabled={busy === "billing-portal"}
+                disabled={Boolean(busy)}
                 onClick={openBillingPortal}
               >
                 Manage payment method
+              </button>
+              <button
+                type="button"
+                className="tex-secondary-button"
+                disabled={Boolean(busy)}
+                onClick={syncBillingStatus}
+              >
+                Sync billing status
               </button>
             </div>
           ) : (
@@ -287,14 +333,14 @@ export function TexSettingsClient({
             <div className="tex-billing-currency-actions" aria-label="USD billing options">
               <button
                 type="button"
-                disabled={busy === "billing-lite-usd"}
+                disabled={Boolean(busy)}
                 onClick={() => openCheckout("lite", "usd")}
               >
                 Lite USD
               </button>
               <button
                 type="button"
-                disabled={busy === "billing-growth-usd"}
+                disabled={Boolean(busy)}
                 onClick={() => openCheckout("growth", "usd")}
               >
                 Growth USD

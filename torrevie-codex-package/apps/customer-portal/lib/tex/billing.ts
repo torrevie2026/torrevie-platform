@@ -12,6 +12,10 @@ export type TexCheckoutInput = {
   currency?: string | null;
 };
 
+export type TexBillingSyncInput = {
+  sessionId?: string | null;
+};
+
 export type TexStripeEvent = {
   id: string;
   type: string;
@@ -34,7 +38,15 @@ type StripeCustomer = {
 };
 
 type StripeCheckoutSession = {
+  id?: string;
+  customer?: string | null;
+  metadata?: Record<string, string>;
+  subscription?: string | null;
   url: string | null;
+};
+
+type StripeSubscriptionList = {
+  data?: StripeSubscriptionObject[];
 };
 
 type StripePortalSession = {
@@ -132,6 +144,64 @@ export async function createTexBillingPortalSession(actor: TexActorContext) {
   };
 }
 
+export async function syncTexBillingFromStripe(
+  actor: TexActorContext,
+  input: TexBillingSyncInput = {}
+) {
+  assertTexPermission(actor, "tenant.settings.manage");
+  const tenant = await getBillingTenant(actor);
+
+  if (input.sessionId) {
+    const session = await stripeRequest<StripeCheckoutSession>(
+      `/v1/checkout/sessions/${encodeURIComponent(input.sessionId)}`,
+      { method: "GET" }
+    );
+    const tenantId = session.metadata?.tenant_id;
+    if (tenantId && tenantId !== actor.tenantId) {
+      throw new Error("Stripe checkout session belongs to another TEX tenant.");
+    }
+    if (
+      session.customer &&
+      tenant.stripe_customer_id &&
+      session.customer !== tenant.stripe_customer_id
+    ) {
+      throw new Error("Stripe checkout session customer does not match this TEX tenant.");
+    }
+    if (session.subscription) {
+      const subscription = await stripeRequest<StripeSubscriptionObject>(
+        `/v1/subscriptions/${encodeURIComponent(session.subscription)}`,
+        { method: "GET" }
+      );
+      await syncStripeSubscription(subscription);
+      return {
+        synced: true,
+        source: "checkout_session",
+        stripeSubscriptionId: subscription.id
+      };
+    }
+  }
+
+  if (!tenant.stripe_customer_id) {
+    return { synced: false, source: "stripe_customer", reason: "missing_customer" };
+  }
+
+  const subscriptions = await stripeRequest<StripeSubscriptionList>(
+    `/v1/subscriptions?customer=${encodeURIComponent(tenant.stripe_customer_id)}&status=all&limit=10`,
+    { method: "GET" }
+  );
+  const subscription = pickMostRelevantSubscription(subscriptions.data ?? []);
+  if (!subscription) {
+    return { synced: false, source: "stripe_customer", reason: "missing_subscription" };
+  }
+
+  await syncStripeSubscription(subscription);
+  return {
+    synced: true,
+    source: "stripe_customer",
+    stripeSubscriptionId: subscription.id
+  };
+}
+
 export function verifyStripeWebhookPayload(payload: string, signatureHeader: string | null) {
   const webhookSecret = requireEnv("STRIPE_WEBHOOK_SECRET");
   if (!signatureHeader) {
@@ -158,7 +228,10 @@ export function verifyStripeWebhookPayload(payload: string, signatureHeader: str
   const expectedBuffer = Buffer.from(expected, "hex");
   const actualBuffer = Buffer.from(signature, "hex");
 
-  if (expectedBuffer.length !== actualBuffer.length || !timingSafeEqual(expectedBuffer, actualBuffer)) {
+  if (
+    expectedBuffer.length !== actualBuffer.length ||
+    !timingSafeEqual(expectedBuffer, actualBuffer)
+  ) {
     throw new Error("Invalid Stripe webhook signature.");
   }
 
@@ -167,7 +240,8 @@ export function verifyStripeWebhookPayload(payload: string, signatureHeader: str
 
 export async function processTexStripeWebhookEvent(event: TexStripeEvent) {
   const object = event.data?.object ?? {};
-  const tenantId = readString(object.metadata, "tenant_id") ?? (await findTenantIdForStripeObject(object));
+  const tenantId =
+    readString(object.metadata, "tenant_id") ?? (await findTenantIdForStripeObject(object));
 
   if (await hasStripeEvent(event.id)) {
     return { status: "duplicate" };
@@ -207,8 +281,11 @@ async function handleCheckoutCompleted(object: Record<string, unknown>) {
 }
 
 async function syncStripeSubscription(subscription: StripeSubscriptionObject) {
-  const tenantId = subscription.metadata?.tenant_id ?? (await tenantIdForStripeCustomer(subscription.customer));
-  const planKey = sanitizePaidPlanKey(subscription.metadata?.plan_key ?? planKeyFromPrice(subscription));
+  const tenantId =
+    subscription.metadata?.tenant_id ?? (await tenantIdForStripeCustomer(subscription.customer));
+  const planKey = sanitizePaidPlanKey(
+    subscription.metadata?.plan_key ?? planKeyFromPrice(subscription)
+  );
   const currency = sanitizeCurrency(subscription.items?.data?.[0]?.price?.currency) ?? "aed";
   const platformStatus = platformSubscriptionStatus(subscription.status);
   const texPlanStatus = texPlanStatusForStripeStatus(subscription.status);
@@ -391,9 +468,10 @@ async function upsertTexBillingSubscription(
 }
 
 async function replaceEntitlements(subscriptionId: string, tenantId: string, planId: string) {
-  await queryServerDatabase("delete from public.subscription_entitlements where subscription_id = $1", [
-    subscriptionId
-  ]);
+  await queryServerDatabase(
+    "delete from public.subscription_entitlements where subscription_id = $1",
+    [subscriptionId]
+  );
 
   await queryServerDatabase(
     `
@@ -572,9 +650,7 @@ export function sanitizeCurrency(value: string | null | undefined): TexBillingCu
 
 export function defaultBillingCurrency(tenant: Pick<TexBillingTenantRow, "region">) {
   const region = `${tenant.region ?? ""}`.toLowerCase();
-  return region.includes("uae") || region.includes("united arab emirates")
-    ? "aed"
-    : "usd";
+  return region.includes("uae") || region.includes("united arab emirates") ? "aed" : "usd";
 }
 
 export function requireStripePriceId(planKey: TexPaidPlanKey, currency: TexBillingCurrency) {
@@ -592,9 +668,8 @@ function planKeyFromPrice(subscription: StripeSubscriptionObject) {
   ] as const;
 
   for (const [planKey, currency] of matches) {
-    const configured = process.env[
-      `TEX_STRIPE_${planKey.toUpperCase()}_${currency.toUpperCase()}_PRICE_ID`
-    ];
+    const configured =
+      process.env[`TEX_STRIPE_${planKey.toUpperCase()}_${currency.toUpperCase()}_PRICE_ID`];
     if (configured && configured === priceId) {
       return planKey;
     }
@@ -603,7 +678,9 @@ function planKeyFromPrice(subscription: StripeSubscriptionObject) {
   throw new Error("Unable to map Stripe price to a TEX plan.");
 }
 
-export function platformSubscriptionStatus(stripeStatus: string): "active" | "cancelled" | "expired" {
+export function platformSubscriptionStatus(
+  stripeStatus: string
+): "active" | "cancelled" | "expired" {
   if (stripeStatus === "active" || stripeStatus === "trialing") {
     return "active";
   }
@@ -639,7 +716,10 @@ export function billingStatusForStripeStatus(stripeStatus: string) {
   return "manual_invoice_pending";
 }
 
-function entitlementExpiryForStripeStatus(stripeStatus: string, currentPeriodEnd: number | undefined) {
+function entitlementExpiryForStripeStatus(
+  stripeStatus: string,
+  currentPeriodEnd: number | undefined
+) {
   if (stripeStatus === "active" || stripeStatus === "trialing") {
     return null;
   }
@@ -658,7 +738,28 @@ function latestInvoiceId(value: StripeSubscriptionObject["latest_invoice"]) {
   if (!value) {
     return null;
   }
-  return typeof value === "string" ? value : value.id ?? null;
+  return typeof value === "string" ? value : (value.id ?? null);
+}
+
+function pickMostRelevantSubscription(subscriptions: StripeSubscriptionObject[]) {
+  const statusRank = new Map([
+    ["active", 0],
+    ["trialing", 1],
+    ["past_due", 2],
+    ["unpaid", 3],
+    ["incomplete", 4]
+  ]);
+
+  return [...subscriptions]
+    .filter((subscription) => sanitizeCurrency(subscription.items?.data?.[0]?.price?.currency))
+    .sort((left, right) => {
+      const leftRank = statusRank.get(left.status) ?? 99;
+      const rightRank = statusRank.get(right.status) ?? 99;
+      if (leftRank !== rightRank) {
+        return leftRank - rightRank;
+      }
+      return (right.current_period_start ?? 0) - (left.current_period_start ?? 0);
+    })[0];
 }
 
 function readString(source: unknown, key: string) {
@@ -691,7 +792,9 @@ async function stripeRequest<Response>(
     | null;
 
   if (!response.ok) {
-    throw new Error(body?.error?.message ?? `Stripe request failed with status ${response.status}.`);
+    throw new Error(
+      body?.error?.message ?? `Stripe request failed with status ${response.status}.`
+    );
   }
 
   return body as Response;
@@ -703,7 +806,10 @@ function customerPortalBaseUrl() {
     process.env.NEXT_PUBLIC_CUSTOMER_PORTAL_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
     "https://app.torrevie.com";
-  return url.trim().replace(/^"+|"+$/g, "").replace(/\/+$/, "");
+  return url
+    .trim()
+    .replace(/^"+|"+$/g, "")
+    .replace(/\/+$/, "");
 }
 
 function requireEnv(key: string) {
