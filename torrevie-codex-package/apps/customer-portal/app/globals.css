@@ -4404,9 +4404,20 @@ form.member-row {
   border-radius: 8px;
   display: grid;
   gap: 12px;
-  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.5fr) auto;
+  grid-template-columns: minmax(260px, 1fr) 160px 120px;
   overflow: hidden;
   padding: 12px;
+}
+
+.tex-report-row > span:nth-of-type(2) {
+  justify-self: start;
+  inline-size: 160px;
+}
+
+.tex-report-row > strong:last-child {
+  justify-self: end;
+  text-align: end;
+  white-space: nowrap;
 }
 
 .tex-expense-card,
@@ -5366,6 +5377,15 @@ form.member-row {
 
   .tex-whatsapp-table-head {
     display: none;
+  }
+
+  .tex-report-row > span:nth-of-type(2) {
+    inline-size: auto;
+  }
+
+  .tex-report-row > strong:last-child {
+    justify-self: start;
+    text-align: start;
   }
 
   .tex-whatsapp-sender,
