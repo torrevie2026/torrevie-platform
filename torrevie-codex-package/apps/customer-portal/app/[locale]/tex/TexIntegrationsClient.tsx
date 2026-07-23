@@ -224,6 +224,11 @@ export function TexIntegrationsClient({
   const selectedGuide =
     visibleProviderGuides.find((guide) => guide.key === selectedProvider) ?? visibleProviderGuides[0]!;
   const webhookUrl = buildWebhookUrl(selectedProvider, origin);
+  const quickConnectIsConnected =
+    selectedGuide.key === "quickconnect" &&
+    quickConnect.connectorActive &&
+    quickConnect.session?.status === "connected";
+  const showSetupGuideSteps = selectedGuide.key !== "quickconnect" || !quickConnectIsConnected;
 
   return (
     <section className="tex-integrations-workspace" aria-labelledby="tex-integrations-title">
@@ -283,19 +288,19 @@ export function TexIntegrationsClient({
           <div className="tex-provider-guide-grid">
             <section className="tex-provider-guide-main">
               <p>{selectedGuide.summary}</p>
-              {selectedGuide.key === "quickconnect" ? (
+              {selectedGuide.key === "quickconnect" && !quickConnectIsConnected ? (
                 <div className="tex-quick-connect-checklist" aria-label="Quick Connect requirements">
                   {selectedGuide.requiredFields.map((field) => (
                     <span key={field}>{field}</span>
                   ))}
                 </div>
-              ) : (
+              ) : selectedGuide.key !== "quickconnect" ? (
                 <div className="tex-guide-field-list" aria-label={`${selectedGuide.label} required fields`}>
                   {selectedGuide.requiredFields.map((field) => (
                     <span key={field}>{field}</span>
                   ))}
                 </div>
-              )}
+              ) : null}
               {selectedGuide.dashboardUrl ? (
                 <a className="tex-secondary-link" href={selectedGuide.dashboardUrl} rel="noreferrer" target="_blank">
                   Open {selectedGuide.label} dashboard
@@ -322,11 +327,13 @@ export function TexIntegrationsClient({
             )}
           </div>
 
-          <div className="tex-guide-step-grid">
-            <GuideStepList title="1. Collect credentials" steps={selectedGuide.steps} />
-            <GuideStepList title="2. Add webhook" steps={selectedGuide.webhookSteps} />
-            <GuideStepList title="3. Test and activate" steps={selectedGuide.testSteps} />
-          </div>
+          {showSetupGuideSteps ? (
+            <div className="tex-guide-step-grid">
+              <GuideStepList title="1. Collect credentials" steps={selectedGuide.steps} />
+              <GuideStepList title="2. Add webhook" steps={selectedGuide.webhookSteps} />
+              <GuideStepList title="3. Test and activate" steps={selectedGuide.testSteps} />
+            </div>
+          ) : null}
         </article>
 
       </div>
