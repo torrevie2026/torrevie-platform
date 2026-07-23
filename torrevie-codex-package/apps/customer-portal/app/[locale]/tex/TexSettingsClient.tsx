@@ -71,8 +71,6 @@ export function TexSettingsClient({
   const isTrialPlan = planContext.planKey === "trial" || planContext.planStatus === "trialing";
   const canUpgradeToLite = planContext.planKey === "trial";
   const canUpgradeToGrowth = planContext.planKey === "trial" || planContext.planKey === "lite";
-  const billingCurrency = planContext.billingCurrency;
-  const billingCurrencyLabel = billingCurrency.toUpperCase();
 
   useEffect(() => {
     if (!canManageBilling || checkoutSyncStarted.current) {
@@ -210,11 +208,11 @@ export function TexSettingsClient({
     });
   }
 
-  async function openCheckout(planKey: "lite" | "growth", currency: "aed" | "usd") {
-    await run(`billing-${planKey}-${currency}`, async () => {
+  async function openCheckout(planKey: "lite" | "growth") {
+    await run(`billing-${planKey}`, async () => {
       const result = await texFetch<{ url: string }>("/billing/checkout", {
         method: "POST",
-        body: JSON.stringify({ planKey, currency })
+        body: JSON.stringify({ planKey })
       });
       window.location.assign(result.url);
     });
@@ -320,9 +318,9 @@ export function TexSettingsClient({
                   type="button"
                   className="tex-primary-button"
                   disabled={Boolean(busy)}
-                  onClick={() => openCheckout("lite", billingCurrency)}
+                  onClick={() => openCheckout("lite")}
                 >
-                  Upgrade to Lite {billingCurrencyLabel}
+                  Upgrade to Lite
                 </button>
               ) : null}
               {canUpgradeToGrowth ? (
@@ -330,9 +328,9 @@ export function TexSettingsClient({
                   type="button"
                   className={canUpgradeToLite ? "tex-secondary-button" : "tex-primary-button"}
                   disabled={Boolean(busy)}
-                  onClick={() => openCheckout("growth", billingCurrency)}
+                  onClick={() => openCheckout("growth")}
                 >
-                  Upgrade to Growth {billingCurrencyLabel}
+                  Upgrade to Growth
                 </button>
               ) : null}
               <button

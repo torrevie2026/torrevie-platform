@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import {
+  billingCurrencyForTenant,
   billingStatusForStripeStatus,
   defaultBillingCurrency,
   platformSubscriptionStatus,
@@ -26,6 +27,11 @@ try {
   assert.equal(defaultBillingCurrency({ region: "UAE" }), "aed");
   assert.equal(defaultBillingCurrency({ region: "United Arab Emirates" }), "aed");
   assert.equal(defaultBillingCurrency({ region: "Saudi Arabia" }), "usd");
+  assert.equal(
+    billingCurrencyForTenant({ region: "Saudi Arabia", billing_currency: "aed" }),
+    "aed"
+  );
+  assert.equal(billingCurrencyForTenant({ region: "AE", billing_currency: null }), "aed");
 
   process.env.TEX_STRIPE_LITE_AED_PRICE_ID = "price_lite_aed";
   assert.equal(requireStripePriceId("lite", "aed"), "price_lite_aed");

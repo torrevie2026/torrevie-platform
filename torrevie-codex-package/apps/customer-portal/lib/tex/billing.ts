@@ -31,6 +31,7 @@ type TexBillingTenantRow = {
   user_email: string;
   region: string | null;
   stripe_customer_id: string | null;
+  billing_currency: string | null;
 };
 
 type StripeCustomer = {
@@ -84,7 +85,7 @@ export async function createTexBillingCheckoutSession(
   assertTexPermission(actor, "tenant.settings.manage");
   const planKey = sanitizePaidPlanKey(input.planKey);
   const tenant = await getBillingTenant(actor);
-  const currency = sanitizeCurrency(input.currency) ?? defaultBillingCurrency(tenant);
+  const currency = billingCurrencyForTenant(tenant);
   const priceId = requireStripePriceId(planKey, currency);
   const customerId = await ensureStripeCustomer(actor, tenant, currency);
   const baseUrl = customerPortalBaseUrl();
@@ -562,7 +563,8 @@ async function getBillingTenant(actor: TexActorContext) {
         t.billing_email,
         u.email as user_email,
         t.region,
-        tbc.stripe_customer_id
+        tbc.stripe_customer_id,
+        tbc.currency::text as billing_currency
       from public.tenants t
       join public.users u on u.id = $2
       left join public.tex_billing_customers tbc on tbc.tenant_id = t.id
@@ -671,6 +673,13 @@ export function sanitizeCurrency(value: string | null | undefined): TexBillingCu
 export function defaultBillingCurrency(tenant: Pick<TexBillingTenantRow, "region">) {
   const region = `${tenant.region ?? ""}`.toLowerCase().replace(/[^a-z]/g, "");
   return region === "ae" || region === "uae" || region === "unitedarabemirates" ? "aed" : "usd";
+}
+
+export function billingCurrencyForTenant(tenant: {
+  region: string | null;
+  billing_currency?: string | null;
+}) {
+  return sanitizeCurrency(tenant.billing_currency) ?? defaultBillingCurrency(tenant);
 }
 
 export function requireStripePriceId(planKey: TexPaidPlanKey, currency: TexBillingCurrency) {
