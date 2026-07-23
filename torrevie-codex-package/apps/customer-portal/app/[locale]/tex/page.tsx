@@ -49,10 +49,11 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
     const requiredOnboardingTasks = onboardingTasks.filter((task) => task.required);
     const completedTasks = requiredOnboardingTasks.filter((task) => task.completed).length;
     const onboardingProgress = Math.round((completedTasks / requiredOnboardingTasks.length) * 100);
+    const requiredOnboardingComplete = completedTasks >= requiredOnboardingTasks.length;
     const nextOnboardingTask = onboardingTasks.find((task) => !task.completed);
     const showOnboardingGate =
       (actor.texPlan.planKey === "trial" || actor.texPlan.planKey === "lite") &&
-      completedTasks < requiredOnboardingTasks.length;
+      !requiredOnboardingComplete;
 
     if (showOnboardingGate) {
       return (
@@ -126,44 +127,58 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
           </div>
         </header>
 
-        <section className="tex-analytics-panel" aria-label="TEX onboarding progress">
-          <div className="section-heading-row">
+        {requiredOnboardingComplete && !growthFeaturesEnabled ? (
+          <section className="tex-growth-reminder" aria-label="Growth plan reminder">
             <div>
-              <p className="eyebrow">{actor.texPlan.planKey} plan</p>
-              <h2>Set up TEX</h2>
+              <p className="eyebrow">Growth modules</p>
+              <h2>Need trips, finance review, or more seats?</h2>
+              <p>
+                Growth adds trip planning, trip legs, managed WhatsApp providers, finance review,
+                and higher operating limits when your transport workflow expands.
+              </p>
             </div>
-            <strong>{onboardingProgress}%</strong>
-          </div>
-          <div className="tex-bar-row">
-            <span>Onboarding</span>
-            <span className="tex-bar-track">
-              <i style={{ inlineSize: `${onboardingProgress}%` }} />
-            </span>
-            <strong>{actor.texPlan.employeeLimit || "Unlimited"} seats</strong>
-          </div>
-          <div className="tex-onboarding-steps">
-            {onboardingTasks.map((task) => (
-              <Link
-                aria-current={nextOnboardingTask?.key === task.key ? "step" : undefined}
-                className={`tex-onboarding-step${task.completed ? " tex-onboarding-step-complete" : ""}`}
-                href={task.href}
-                key={task.key}
-              >
-                <span>
-                  <strong>{task.label}</strong>
-                  <small>{task.detail}</small>
-                </span>
-                <b>
-                  {task.completed
-                    ? "Completed"
-                    : nextOnboardingTask?.key === task.key
-                      ? "Next"
-                      : "Pending"}
-                </b>
-              </Link>
-            ))}
-          </div>
-        </section>
+            <Link href={`/${locale}/tex/settings#tex-billing`}>View Growth options</Link>
+          </section>
+        ) : (
+          <section className="tex-analytics-panel" aria-label="TEX onboarding progress">
+            <div className="section-heading-row">
+              <div>
+                <p className="eyebrow">{actor.texPlan.planKey} plan</p>
+                <h2>Set up TEX</h2>
+              </div>
+              <strong>{onboardingProgress}%</strong>
+            </div>
+            <div className="tex-bar-row">
+              <span>Onboarding</span>
+              <span className="tex-bar-track">
+                <i style={{ inlineSize: `${onboardingProgress}%` }} />
+              </span>
+              <strong>{actor.texPlan.employeeLimit || "Unlimited"} seats</strong>
+            </div>
+            <div className="tex-onboarding-steps">
+              {onboardingTasks.map((task) => (
+                <Link
+                  aria-current={nextOnboardingTask?.key === task.key ? "step" : undefined}
+                  className={`tex-onboarding-step${task.completed ? " tex-onboarding-step-complete" : ""}`}
+                  href={task.href}
+                  key={task.key}
+                >
+                  <span>
+                    <strong>{task.label}</strong>
+                    <small>{task.detail}</small>
+                  </span>
+                  <b>
+                    {task.completed
+                      ? "Completed"
+                      : nextOnboardingTask?.key === task.key
+                        ? "Next"
+                        : "Pending"}
+                  </b>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="tex-kpi-grid" aria-label="TEX summary">
           <article className="tex-kpi-card tex-kpi-teal">

@@ -4606,6 +4606,37 @@ form.member-row {
   color: var(--color-status-success);
 }
 
+.tex-growth-reminder {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-accent) 7%, var(--color-bg-card));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 24%, var(--color-border));
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 16px 18px;
+}
+
+.tex-growth-reminder h2 {
+  font-size: 18px;
+  margin: 2px 0 4px;
+}
+
+.tex-growth-reminder p:last-child {
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.tex-growth-reminder a {
+  background: var(--color-accent);
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 900;
+  padding: 10px 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 .tex-onboarding-gate {
   gap: 18px;
 }
@@ -5347,6 +5378,7 @@ form.member-row {
   .tex-form-grid,
   .tex-onboarding-steps,
   .tex-onboarding-flow-step,
+  .tex-growth-reminder,
   .tenant-integration-grid,
   .tenant-secret-grid,
   .tex-dashboard-hero,
@@ -5377,6 +5409,11 @@ form.member-row {
 
   .tex-whatsapp-table-head {
     display: none;
+  }
+
+  .tex-growth-reminder a {
+    justify-self: start;
+    white-space: normal;
   }
 
   .tex-report-row > span:nth-of-type(2) {
