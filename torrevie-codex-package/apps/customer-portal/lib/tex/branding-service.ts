@@ -1,6 +1,7 @@
 import { withTenantContext, type TenantQueryClient } from "@torrevie/tenant-context";
 import { assertTexPermission } from "./access";
 import { writeTexAuditEvent } from "./audit";
+import { requireSingleRow } from "./shared";
 import { downloadTenantAssetObject, uploadTenantAssetObject } from "./tenant-asset-storage";
 import type {
   TexActorContext,
@@ -50,23 +51,26 @@ export async function uploadTexTenantLogo(
   await uploadTenantAssetObject(storagePath, contentType, buffer);
 
   return withTenantContext(client, actor, async () => {
-    const result = await client.query<TexTenantBrandingRow>(
-      `
-        update public.tenants
-           set logo_storage_path = $1,
-               logo_content_type = $2,
-               logo_updated_at = now(),
-               updated_at = now()
-         where id = public.current_tenant_id()
-        returning
-          name,
-          logo_storage_path,
-          logo_content_type,
-          logo_updated_at::text as logo_updated_at
-      `,
-      [storagePath, contentType]
-    );
-    const branding = mapBranding(result.rows[0], actor.tenantId);
+    const branding = await withTenantBrandingWriteAccess(client, async () => {
+      const result = await client.query<TexTenantBrandingRow>(
+        `
+          update public.tenants
+             set logo_storage_path = $1,
+                 logo_content_type = $2,
+                 logo_updated_at = now(),
+                 updated_at = now()
+           where id = public.current_tenant_id()
+          returning
+            name,
+            logo_storage_path,
+            logo_content_type,
+            logo_updated_at::text as logo_updated_at
+        `,
+        [storagePath, contentType]
+      );
+
+      return mapBranding(requireSingleRow(result.rows, "tenant branding"), actor.tenantId);
+    });
 
     await writeTexAuditEvent(client, actor, "tex.tenant_logo.updated", "tenants", actor.tenantId, {
       content_type: contentType,
@@ -84,22 +88,25 @@ export async function removeTexTenantLogo(
   assertTexPermission(actor, "tex.policy.manage");
 
   return withTenantContext(client, actor, async () => {
-    const result = await client.query<TexTenantBrandingRow>(
-      `
-        update public.tenants
-           set logo_storage_path = null,
-               logo_content_type = null,
-               logo_updated_at = now(),
-               updated_at = now()
-         where id = public.current_tenant_id()
-        returning
-          name,
-          logo_storage_path,
-          logo_content_type,
-          logo_updated_at::text as logo_updated_at
-      `
-    );
-    const branding = mapBranding(result.rows[0], actor.tenantId);
+    const branding = await withTenantBrandingWriteAccess(client, async () => {
+      const result = await client.query<TexTenantBrandingRow>(
+        `
+          update public.tenants
+             set logo_storage_path = null,
+                 logo_content_type = null,
+                 logo_updated_at = now(),
+                 updated_at = now()
+           where id = public.current_tenant_id()
+          returning
+            name,
+            logo_storage_path,
+            logo_content_type,
+            logo_updated_at::text as logo_updated_at
+        `
+      );
+
+      return mapBranding(requireSingleRow(result.rows, "tenant branding"), actor.tenantId);
+    });
 
     await writeTexAuditEvent(client, actor, "tex.tenant_logo.removed", "tenants", actor.tenantId, {});
 
@@ -188,6 +195,19 @@ function logoExtension(contentType: string) {
   }
 
   return "jpg";
+}
+
+async function withTenantBrandingWriteAccess<T>(
+  client: TenantQueryClient,
+  callback: () => Promise<T>
+) {
+  await client.query("select set_config('app.platform_service_role', 'true', true)");
+
+  try {
+    return await callback();
+  } finally {
+    await client.query("select set_config('app.platform_service_role', 'false', true)");
+  }
 }
 
 type TexTenantBrandingRow = {

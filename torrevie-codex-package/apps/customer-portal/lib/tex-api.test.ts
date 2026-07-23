@@ -1064,6 +1064,19 @@ class RecordingTexApiClient implements TenantQueryClient {
       };
     }
 
+    if (sql.includes("update public.tenants") && sql.includes("logo_storage_path")) {
+      return {
+        rows: [
+          {
+            name: "SEK Demo",
+            logo_storage_path: values[0] ?? null,
+            logo_content_type: values[1] ?? null,
+            logo_updated_at: "2026-07-23T09:00:00.000Z"
+          }
+        ] as Row[]
+      };
+    }
+
     return { rows: [] };
   }
 
@@ -1769,6 +1782,48 @@ async function main() {
         delete process.env.FX_API_KEY;
       } else {
         process.env.FX_API_KEY = previousKey;
+      }
+    }
+  }
+
+  {
+    const client = new RecordingTexApiClient();
+    const previousFetch = globalThis.fetch;
+    const previousUrl = process.env.SUPABASE_URL;
+    const previousServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    try {
+      process.env.SUPABASE_URL = "https://supabase.example.test";
+      process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-test";
+      globalThis.fetch = async () => new Response(null, { status: 200 });
+
+      const response = await handleTexApiRequest(client, actor, {
+        method: "PUT",
+        path: "/settings/branding",
+        body: {
+          contentType: "image/png",
+          dataBase64: Buffer.from("logo").toString("base64")
+        }
+      });
+
+      assert.equal(response.status, 200);
+      assert.match(JSON.stringify(response.body), /SEK Demo/);
+      assert.match(JSON.stringify(response.body), /\/api\/tex\/branding\/logo/);
+      assert.equal(client.hasSql("update public.tenants"), true);
+      assert.equal(client.hasSql("app.platform_service_role', 'true"), true);
+      assert.equal(client.hasSql("app.platform_service_role', 'false"), true);
+      assert.equal(client.valuesContain("tex.tenant_logo.updated"), true);
+    } finally {
+      globalThis.fetch = previousFetch;
+      if (previousUrl === undefined) {
+        delete process.env.SUPABASE_URL;
+      } else {
+        process.env.SUPABASE_URL = previousUrl;
+      }
+
+      if (previousServiceKey === undefined) {
+        delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+      } else {
+        process.env.SUPABASE_SERVICE_ROLE_KEY = previousServiceKey;
       }
     }
   }
