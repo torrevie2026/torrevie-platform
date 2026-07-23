@@ -135,7 +135,11 @@ export function TexReportsClient({ initialReport }: TexReportsClientProps) {
   }
 
   return (
-    <section className="tex-reports-workspace" aria-labelledby="tex-reports-title">
+    <section
+      className={`tex-reports-workspace${busy ? " tex-live-refreshing" : ""}`}
+      aria-busy={busy}
+      aria-labelledby="tex-reports-title"
+    >
       <header className="section-heading-row">
         <div>
           <p className="eyebrow">Reports</p>
@@ -207,7 +211,7 @@ export function TexReportsClient({ initialReport }: TexReportsClientProps) {
             </select>
           </label>
           <button type="button" disabled={busy} onClick={refreshReport}>
-            Apply
+            {busy ? "Applying..." : "Apply"}
           </button>
         </div>
         <p className="tex-refresh-meta" aria-live="polite">
