@@ -4879,6 +4879,7 @@ form.member-row {
   color: var(--color-text-primary);
   display: grid;
   gap: 12px;
+  min-inline-size: 0;
   padding: 16px;
 }
 
@@ -5520,6 +5521,58 @@ form.member-row {
   .tex-growth-reminder a {
     justify-self: start;
     white-space: normal;
+  }
+
+  .tex-integrations-workspace > .section-heading-row,
+  .tex-whatsapp-guide > .section-heading-row,
+  .tex-provider-note {
+    align-items: start;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: 1fr;
+  }
+
+  .tex-integrations-workspace .tex-panel-actions {
+    justify-content: stretch;
+    inline-size: 100%;
+  }
+
+  .tex-integrations-workspace .tex-panel-actions button,
+  .tex-integrations-workspace .tex-panel-actions a {
+    inline-size: 100%;
+    justify-content: center;
+  }
+
+  .tex-provider-tabs,
+  .tex-provider-guide-grid,
+  .tex-guide-step-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tex-provider-guide-main,
+  .tex-quick-connect-panel,
+  .tex-webhook-copy-panel {
+    padding: 14px;
+  }
+
+  .tex-quick-connect-header {
+    align-items: start;
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+
+  .tex-quick-connect-qr {
+    min-block-size: auto;
+    padding: 14px;
+  }
+
+  .tex-quick-connect-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .tex-quick-connect-actions button {
+    inline-size: 100%;
   }
 
   .tex-quick-connect-details {

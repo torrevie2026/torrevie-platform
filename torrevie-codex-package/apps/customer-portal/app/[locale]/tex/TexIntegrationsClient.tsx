@@ -228,6 +228,7 @@ export function TexIntegrationsClient({
     selectedGuide.key === "quickconnect" &&
     quickConnect.connectorActive &&
     quickConnect.session?.status === "connected";
+  const showProviderGuideMain = selectedGuide.key !== "quickconnect" || !quickConnectIsConnected;
   const showSetupGuideSteps = selectedGuide.key !== "quickconnect" || !quickConnectIsConnected;
 
   return (
@@ -286,27 +287,29 @@ export function TexIntegrationsClient({
           )}
 
           <div className="tex-provider-guide-grid">
-            <section className="tex-provider-guide-main">
-              <p>{selectedGuide.summary}</p>
-              {selectedGuide.key === "quickconnect" && !quickConnectIsConnected ? (
-                <div className="tex-quick-connect-checklist" aria-label="Quick Connect requirements">
-                  {selectedGuide.requiredFields.map((field) => (
-                    <span key={field}>{field}</span>
-                  ))}
-                </div>
-              ) : selectedGuide.key !== "quickconnect" ? (
-                <div className="tex-guide-field-list" aria-label={`${selectedGuide.label} required fields`}>
-                  {selectedGuide.requiredFields.map((field) => (
-                    <span key={field}>{field}</span>
-                  ))}
-                </div>
-              ) : null}
-              {selectedGuide.dashboardUrl ? (
-                <a className="tex-secondary-link" href={selectedGuide.dashboardUrl} rel="noreferrer" target="_blank">
-                  Open {selectedGuide.label} dashboard
-                </a>
-              ) : null}
-            </section>
+            {showProviderGuideMain ? (
+              <section className="tex-provider-guide-main">
+                <p>{selectedGuide.summary}</p>
+                {selectedGuide.key === "quickconnect" ? (
+                  <div className="tex-quick-connect-checklist" aria-label="Quick Connect requirements">
+                    {selectedGuide.requiredFields.map((field) => (
+                      <span key={field}>{field}</span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="tex-guide-field-list" aria-label={`${selectedGuide.label} required fields`}>
+                    {selectedGuide.requiredFields.map((field) => (
+                      <span key={field}>{field}</span>
+                    ))}
+                  </div>
+                )}
+                {selectedGuide.dashboardUrl ? (
+                  <a className="tex-secondary-link" href={selectedGuide.dashboardUrl} rel="noreferrer" target="_blank">
+                    Open {selectedGuide.label} dashboard
+                  </a>
+                ) : null}
+              </section>
+            ) : null}
 
             {selectedGuide.key === "quickconnect" ? (
               <QuickConnectPanel
@@ -457,7 +460,7 @@ function QuickConnectPanel({
             </div>
             <div>
               <dt>WhatsApp number</dt>
-              <dd>{session?.connectedPhone ?? "Not linked"}</dd>
+              <dd>{formatConnectedWhatsappNumber(session?.connectedPhone)}</dd>
             </div>
             <div>
               <dt>Service status</dt>
@@ -478,6 +481,19 @@ function QuickConnectPanel({
       )}
     </section>
   );
+}
+
+function formatConnectedWhatsappNumber(value: string | null | undefined) {
+  if (!value) {
+    return "Not linked";
+  }
+
+  const phonePart = value.split("@")[0]?.split(":")[0]?.trim();
+  if (!phonePart) {
+    return value;
+  }
+
+  return phonePart.startsWith("+") ? phonePart : `+${phonePart}`;
 }
 
 function GuideStepList({ steps, title }: { steps: string[]; title: string }) {
