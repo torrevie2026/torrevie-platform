@@ -5,6 +5,8 @@ import {
   createTexEmployeeProfile,
   createTexExpense,
   createTexExpenseCategory,
+  createTexBillingCheckoutSession,
+  createTexBillingPortalSession,
   createTexNotification,
   createTexTeam,
   createTexTrip,
@@ -50,6 +52,7 @@ import {
   upsertTexSpendPolicy,
   type TexActorContext,
   type TexBudgetInput,
+  type TexCheckoutInput,
   type TexDriverAdvanceInput,
   type TexExpenseCategoryInput,
   type TexEmployeeProfileInput,
@@ -128,6 +131,14 @@ export async function handleTexApiRequest(
 
   if (path === "/bootstrap" && method === "GET") {
     return json(200, await listTexBootstrap(client, actor));
+  }
+
+  if (path === "/billing/checkout" && method === "POST") {
+    return json(200, await createTexBillingCheckoutSession(actor, request.body as TexCheckoutInput));
+  }
+
+  if (path === "/billing/portal" && method === "POST") {
+    return json(200, await createTexBillingPortalSession(actor));
   }
 
   if (path === "/people" && method === "GET") {
