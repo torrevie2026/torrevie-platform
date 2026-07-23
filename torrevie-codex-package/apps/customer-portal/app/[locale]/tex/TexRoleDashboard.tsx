@@ -2,16 +2,20 @@ import type {
   TexBootstrap,
   TexExpenseListItem,
   TexFinanceReview,
+  TexPlanKey,
   TexReportExpense,
   TexReportWorkspace,
   TexTripListItem
 } from "../../../lib/tex";
+import Link from "next/link";
 
 type TexRoleDashboardProps = {
   bootstrap: TexBootstrap;
   currentUserId: string;
   expenses: TexExpenseListItem[];
   financeReview: TexFinanceReview;
+  locale: string;
+  planKey: TexPlanKey;
   report: TexReportWorkspace | null;
   roles: readonly string[];
   trips: TexTripListItem[];
@@ -24,6 +28,8 @@ export function TexRoleDashboard({
   currentUserId,
   expenses,
   financeReview,
+  locale,
+  planKey,
   report,
   roles,
   trips
@@ -156,12 +162,7 @@ export function TexRoleDashboard({
             detail="Policy and duplicate signals"
           />
         </div>
-        <div className="tex-role-shortcuts">
-          <a href="#tex-report-ledger-title">Open reports</a>
-          <a href="#tex-finance-controls-title">Open finance review</a>
-          <a href="#tex-people-title">Open people</a>
-          <a href="#tex-integrations-title">Open integrations</a>
-        </div>
+        <RoleShortcuts locale={locale} planKey={planKey} />
       </section>
     );
   }
@@ -215,6 +216,28 @@ export function TexRoleDashboard({
         }))}
       />
     </section>
+  );
+}
+
+function RoleShortcuts({ locale, planKey }: { locale: string; planKey: TexPlanKey }) {
+  const hasGrowthModules = planKey === "growth" || planKey === "enterprise";
+  const shortcuts = [
+    { href: `/${locale}/tex/reports`, label: "Open reports" },
+    ...(hasGrowthModules
+      ? [{ href: `/${locale}/tex/finance-review`, label: "Open finance review" }]
+      : [{ href: `/${locale}/tex/settings#tex-billing`, label: "View Growth options" }]),
+    { href: `/${locale}/tex/people`, label: "Open people" },
+    { href: `/${locale}/tex/integrations`, label: "Open WhatsApp setup" }
+  ];
+
+  return (
+    <div className="tex-role-shortcuts">
+      {shortcuts.map((shortcut) => (
+        <Link href={shortcut.href} key={shortcut.href}>
+          {shortcut.label}
+        </Link>
+      ))}
+    </div>
   );
 }
 

@@ -303,6 +303,8 @@ export default async function TexPage({ params }: { params: Promise<{ locale: st
           currentUserId={session.userId}
           expenses={expenses}
           financeReview={financeReview}
+          locale={locale}
+          planKey={actor.texPlan.planKey}
           report={reportWorkspace}
           roles={actor.roles}
           trips={trips}
