@@ -3615,9 +3615,13 @@ form.member-row {
 }
 
 .tex-install-button {
+  align-items: center;
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);
   color: var(--color-accent);
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
   inline-size: 100%;
   min-block-size: 38px;
   padding-inline: 10px;
@@ -3655,6 +3659,12 @@ form.member-row {
   margin: 2px 0 0;
 }
 
+.tex-install-intro {
+  color: var(--color-text-muted);
+  line-height: 1.45;
+  margin: 6px 0 0;
+}
+
 .tex-install-steps {
   display: grid;
   gap: 10px;
@@ -3676,6 +3686,26 @@ form.member-row {
 .tex-install-steps p {
   color: var(--color-text-muted);
   margin: 0;
+}
+
+.tex-install-step-primary {
+  border-color: color-mix(in srgb, var(--color-accent) 32%, var(--color-border)) !important;
+}
+
+.tex-install-step-icon {
+  align-items: center;
+  background: var(--color-accent);
+  border-radius: 6px;
+  color: var(--color-text-inverse);
+  display: inline-flex;
+  inline-size: 34px;
+  justify-content: center;
+  min-block-size: 34px;
+}
+
+.tex-install-step-icon svg {
+  block-size: 18px;
+  inline-size: 18px;
 }
 
 .tex-finance-summary {
@@ -6053,7 +6083,7 @@ form.member-row {
     box-shadow: 0 -12px 28px color-mix(in srgb, var(--color-text-primary) 10%, transparent);
     display: grid;
     gap: 4px;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
     inset-block-end: 0;
     inset-inline: 0;
     padding-block: 8px;
@@ -6078,6 +6108,21 @@ form.member-row {
     padding-block: 4px;
   }
 
+  .tex-mobile-nav .tex-mobile-install-button {
+    inline-size: auto;
+    padding-inline: 4px;
+  }
+
+  .tex-mobile-nav .tex-mobile-install-button svg {
+    background: #eef4f6;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    block-size: 28px;
+    color: var(--color-accent-secondary);
+    inline-size: 28px;
+    padding: 5px;
+  }
+
   .tex-mobile-nav a[aria-current="page"],
   .tex-mobile-nav button[aria-current="page"] {
     background: var(--color-bg-surface);
@@ -6099,6 +6144,33 @@ form.member-row {
     padding-block-end: 86px;
     position: fixed;
     z-index: 30;
+  }
+
+  .tex-install-dialog-backdrop {
+    align-items: flex-end;
+    background: color-mix(in srgb, var(--color-text-primary) 42%, transparent);
+    padding: 12px;
+    padding-block-end: max(18px, env(safe-area-inset-bottom));
+    z-index: 90;
+  }
+
+  .tex-install-dialog {
+    border-radius: 8px 8px 0 0;
+    inline-size: 100%;
+    max-block-size: min(76vh, 620px);
+    overflow: auto;
+    padding: 18px;
+  }
+
+  .tex-install-dialog .section-heading-row {
+    align-items: start;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: 1fr auto;
+  }
+
+  .tex-install-steps article {
+    padding: 14px;
   }
 
   .tex-mobile-more-panel {

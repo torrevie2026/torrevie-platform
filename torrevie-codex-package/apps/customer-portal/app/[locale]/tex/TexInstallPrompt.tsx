@@ -1,6 +1,6 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { Download, MoreVertical, Share2, Smartphone } from "lucide-react";
 import { useEffect, useState } from "react";
 
 type BeforeInstallPromptEvent = Event & {
@@ -8,10 +8,18 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
 
-export function TexInstallPrompt() {
+type InstallPlatform = "android-edge" | "android-chrome" | "ios" | "desktop" | "generic";
+
+type TexInstallPromptProps = {
+  className?: string;
+  compact?: boolean;
+};
+
+export function TexInstallPrompt({ className, compact = false }: TexInstallPromptProps) {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [platform, setPlatform] = useState<InstallPlatform>("generic");
 
   useEffect(() => {
     const standalone =
@@ -21,6 +29,8 @@ export function TexInstallPrompt() {
       setInstalled(true);
       return;
     }
+
+    setPlatform(detectInstallPlatform(window.navigator.userAgent));
 
     const onBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
@@ -44,11 +54,13 @@ export function TexInstallPrompt() {
     return null;
   }
 
+  const help = installGuidance(platform);
+
   return (
     <>
       <button
         type="button"
-        className="tex-install-button"
+        className={["tex-install-button", className].filter(Boolean).join(" ")}
         onClick={async () => {
           if (!installPrompt) {
             setShowHelp(true);
@@ -63,7 +75,7 @@ export function TexInstallPrompt() {
         }}
       >
         <Download aria-hidden="true" />
-        <span>Install app</span>
+        <span>{compact ? "Install" : "Install app"}</span>
       </button>
 
       {showHelp ? (
@@ -82,24 +94,31 @@ export function TexInstallPrompt() {
             <div className="section-heading-row">
               <div>
                 <p className="eyebrow">Install app</p>
-                <h2 id="tex-install-dialog-title">Add Torrevie TEX to your device</h2>
+                <h2 id="tex-install-dialog-title">Install Torrevie TEX</h2>
+                <p className="tex-install-intro">
+                  Your browser is not showing the one-tap install prompt, so use the browser menu
+                  instead.
+                </p>
               </div>
               <button type="button" className="tex-secondary-button" onClick={() => setShowHelp(false)}>
                 Close
               </button>
             </div>
             <div className="tex-install-steps">
-              <article>
-                <strong>Chrome or Edge on desktop</strong>
-                <p>Open the browser menu, then choose Install app or Apps and install this site.</p>
+              <article className="tex-install-step-primary">
+                <span className="tex-install-step-icon" aria-hidden="true">
+                  <help.icon />
+                </span>
+                <strong>{help.title}</strong>
+                <p>{help.description}</p>
               </article>
               <article>
-                <strong>Android Chrome</strong>
-                <p>Open the browser menu, then choose Add to Home screen or Install app.</p>
+                <strong>What happens next</strong>
+                <p>Torrevie TEX will appear on your home screen and open like an app.</p>
               </article>
               <article>
-                <strong>iPhone or iPad Safari</strong>
-                <p>Tap Share, then choose Add to Home Screen.</p>
+                <strong>Already installed?</strong>
+                <p>Open it from the home screen. You can close this message.</p>
               </article>
             </div>
           </section>
@@ -107,4 +126,70 @@ export function TexInstallPrompt() {
       ) : null}
     </>
   );
+}
+
+function detectInstallPlatform(userAgent: string): InstallPlatform {
+  const ua = userAgent.toLowerCase();
+
+  if (/iphone|ipad|ipod/.test(ua)) {
+    return "ios";
+  }
+
+  if (ua.includes("android") && ua.includes("edg")) {
+    return "android-edge";
+  }
+
+  if (ua.includes("android") && ua.includes("chrome")) {
+    return "android-chrome";
+  }
+
+  if (ua.includes("windows") || ua.includes("macintosh") || ua.includes("linux")) {
+    return "desktop";
+  }
+
+  return "generic";
+}
+
+function installGuidance(platform: InstallPlatform): {
+  description: string;
+  icon: typeof MoreVertical;
+  title: string;
+} {
+  if (platform === "android-edge") {
+    return {
+      description: "Tap the Edge menu button, then choose Add to phone or Install app.",
+      icon: MoreVertical,
+      title: "Microsoft Edge on Android"
+    };
+  }
+
+  if (platform === "android-chrome") {
+    return {
+      description: "Tap the Chrome menu button, then choose Add to Home screen or Install app.",
+      icon: MoreVertical,
+      title: "Chrome on Android"
+    };
+  }
+
+  if (platform === "ios") {
+    return {
+      description: "Open this page in Safari, tap Share, then choose Add to Home Screen.",
+      icon: Share2,
+      title: "iPhone or iPad"
+    };
+  }
+
+  if (platform === "desktop") {
+    return {
+      description: "Open the browser menu or address-bar app icon, then choose Install app.",
+      icon: Smartphone,
+      title: "Desktop browser"
+    };
+  }
+
+  return {
+    description: "Open your browser menu, then choose Install app or Add to Home screen.",
+    icon: MoreVertical,
+    title: "Install from browser menu"
+  };
 }

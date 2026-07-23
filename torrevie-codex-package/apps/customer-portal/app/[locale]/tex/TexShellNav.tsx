@@ -198,6 +198,7 @@ export function TexShellNav({
             </Link>
           );
         })}
+        <TexInstallPrompt className="tex-mobile-install-button" compact />
         <button
           aria-current={isMoreActive ? "page" : undefined}
           aria-expanded={isMoreOpen}
@@ -260,7 +261,6 @@ export function TexShellNav({
                 );
               })}
             </div>
-            <TexInstallPrompt />
           </section>
         </div>
       ) : null}
