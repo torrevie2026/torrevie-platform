@@ -68,6 +68,9 @@ export function TexSettingsClient({
   const duplicateHandlingMode =
     settings?.processingSettings.duplicateHandlingMode ?? "manager_review";
   const canManageBilling = canManage;
+  const isTrialPlan = planContext.planKey === "trial" || planContext.planStatus === "trialing";
+  const canUpgradeToLite = planContext.planKey === "trial";
+  const canUpgradeToGrowth = planContext.planKey === "trial" || planContext.planKey === "lite";
 
   useEffect(() => {
     if (!canManageBilling || checkoutSyncStarted.current) {
@@ -277,32 +280,40 @@ export function TexSettingsClient({
               <small>{billingPlanLabel(planContext)}</small>
             </span>
             <span>
-              <strong>Trial end</strong>
-              <small>{formatTrialEnd(planContext.trialEndDate)}</small>
+              <strong>{isTrialPlan ? "Trial end" : "Renewal date"}</strong>
+              <small>
+                {isTrialPlan
+                  ? formatBillingDate(planContext.trialEndDate)
+                  : formatBillingDate(planContext.renewalDate)}
+              </small>
             </span>
             <span>
-              <strong>Status</strong>
-              <small>{planContext.planStatus}</small>
+              <strong>{isTrialPlan ? "Status" : "Billing status"}</strong>
+              <small>{isTrialPlan ? planContext.planStatus : planContext.billingStatus}</small>
             </span>
           </div>
           {canManageBilling ? (
             <div className="tex-billing-actions">
-              <button
-                type="button"
-                className="tex-primary-button"
-                disabled={Boolean(busy)}
-                onClick={() => openCheckout("lite", "aed")}
-              >
-                Upgrade to Lite AED
-              </button>
-              <button
-                type="button"
-                className="tex-secondary-button"
-                disabled={Boolean(busy)}
-                onClick={() => openCheckout("growth", "aed")}
-              >
-                Upgrade to Growth AED
-              </button>
+              {canUpgradeToLite ? (
+                <button
+                  type="button"
+                  className="tex-primary-button"
+                  disabled={Boolean(busy)}
+                  onClick={() => openCheckout("lite", "aed")}
+                >
+                  Upgrade to Lite AED
+                </button>
+              ) : null}
+              {canUpgradeToGrowth ? (
+                <button
+                  type="button"
+                  className={canUpgradeToLite ? "tex-secondary-button" : "tex-primary-button"}
+                  disabled={Boolean(busy)}
+                  onClick={() => openCheckout("growth", "aed")}
+                >
+                  Upgrade to Growth AED
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="tex-secondary-button"
@@ -329,7 +340,7 @@ export function TexSettingsClient({
             UAE tenants normally use AED billing. International tenants can use the USD checkout
             option when required.
           </p>
-          {canManageBilling ? (
+          {canManageBilling && isTrialPlan ? (
             <div className="tex-billing-currency-actions" aria-label="USD billing options">
               <button
                 type="button"
@@ -675,7 +686,7 @@ function billingPlanLabel(plan: TexPlanContext) {
   return `${planName} (${plan.seatCount}/${plan.employeeLimit} seats)`;
 }
 
-function formatTrialEnd(value: string | null) {
+function formatBillingDate(value: string | null) {
   if (!value) {
     return "Not set";
   }

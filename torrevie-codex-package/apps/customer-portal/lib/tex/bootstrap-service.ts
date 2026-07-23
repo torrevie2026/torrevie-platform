@@ -108,6 +108,8 @@ export async function resolveTexActorContext(
                 ) as plan_status,
                 coalesce(tpc.trial_start_date::text, s.starts_at::date::text) as trial_start_date,
                 coalesce(tpc.trial_end_date::text, s.expires_at::date::text) as trial_end_date,
+                tpc.billing_status::text as billing_status,
+                tpc.renewal_date::text as renewal_date,
                 coalesce(tpc.employee_limit, pf.limit_value, 5)::int as employee_limit,
                 coalesce(tpc.seat_count, 0)::int as seat_count,
                 coalesce(tpc.whatsapp_provider_scope::text, 'not_configured') as whatsapp_provider_scope
@@ -374,6 +376,8 @@ async function resolveTexSupportContext(
           ) as plan_status,
           coalesce(tpc.trial_start_date::text, s.starts_at::date::text) as trial_start_date,
           coalesce(tpc.trial_end_date::text, s.expires_at::date::text) as trial_end_date,
+          tpc.billing_status::text as billing_status,
+          tpc.renewal_date::text as renewal_date,
           coalesce(tpc.employee_limit, pf.limit_value, 5)::int as employee_limit,
           coalesce(tpc.seat_count, 0)::int as seat_count,
           coalesce(tpc.whatsapp_provider_scope::text, 'not_configured') as whatsapp_provider_scope

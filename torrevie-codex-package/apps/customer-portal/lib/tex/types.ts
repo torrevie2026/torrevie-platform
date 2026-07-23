@@ -665,6 +665,8 @@ export type TexPlanContext = {
   planStatus: TexPlanStatus;
   trialStartDate: string | null;
   trialEndDate: string | null;
+  billingStatus: string | null;
+  renewalDate: string | null;
   employeeLimit: number;
   seatCount: number;
   whatsappProviderScope: TexWhatsappProviderScope;

@@ -59,6 +59,8 @@ type StripeSubscriptionObject = {
   status: string;
   items?: {
     data?: Array<{
+      current_period_start?: number;
+      current_period_end?: number;
       price?: {
         id?: string;
         currency?: string;
@@ -342,8 +344,8 @@ async function syncStripeSubscription(subscription: StripeSubscriptionObject) {
       row.product_id,
       row.plan_id,
       platformStatus,
-      fromUnixTimestamp(subscription.current_period_start),
-      entitlementExpiryForStripeStatus(subscription.status, subscription.current_period_end)
+      fromUnixTimestamp(subscriptionPeriodStart(subscription)),
+      entitlementExpiryForStripeStatus(subscription.status, subscriptionPeriodEnd(subscription))
     ]
   );
   const subscriptionId = platformSubscription.rows[0]?.id;
@@ -414,11 +416,27 @@ async function upsertTexBillingSubscription(
       input.planKey,
       input.currency,
       subscription.status,
-      fromUnixTimestamp(subscription.current_period_start),
-      fromUnixTimestamp(subscription.current_period_end),
+      fromUnixTimestamp(subscriptionPeriodStart(subscription)),
+      fromUnixTimestamp(subscriptionPeriodEnd(subscription)),
       Boolean(subscription.cancel_at_period_end),
       latestInvoiceId(subscription.latest_invoice)
     ]
+  );
+
+  await queryServerDatabase(
+    `
+      update public.tenants
+      set
+        status = case
+          when $2::public.tex_plan_status = 'active' then 'active'
+          when $2::public.tex_plan_status in ('expired', 'suspended') then 'suspended'
+          when $2::public.tex_plan_status = 'cancelled' then 'archived'
+          else status
+        end,
+        updated_at = now()
+      where id = $1
+    `,
+    [input.tenantId, input.texPlanStatus]
   );
 
   await queryServerDatabase(
@@ -451,6 +469,8 @@ async function upsertTexBillingSubscription(
         subscription_id = excluded.subscription_id,
         plan_key = excluded.plan_key,
         plan_status = excluded.plan_status,
+        trial_start_date = null,
+        trial_end_date = null,
         employee_limit = excluded.employee_limit,
         billing_status = excluded.billing_status,
         renewal_date = excluded.renewal_date,
@@ -462,7 +482,7 @@ async function upsertTexBillingSubscription(
       input.planKey,
       input.texPlanStatus,
       input.billingStatus,
-      fromUnixDate(subscription.current_period_end)
+      fromUnixDate(subscriptionPeriodEnd(subscription))
     ]
   );
 }
@@ -724,6 +744,14 @@ function entitlementExpiryForStripeStatus(
     return null;
   }
   return fromUnixTimestamp(currentPeriodEnd);
+}
+
+function subscriptionPeriodStart(subscription: StripeSubscriptionObject) {
+  return subscription.current_period_start ?? subscription.items?.data?.[0]?.current_period_start;
+}
+
+function subscriptionPeriodEnd(subscription: StripeSubscriptionObject) {
+  return subscription.current_period_end ?? subscription.items?.data?.[0]?.current_period_end;
 }
 
 function fromUnixTimestamp(value: number | undefined) {
