@@ -217,8 +217,6 @@ export function TexIntegrationsClient({
     }
   }
 
-  const settings = workspace.settings;
-  const defaultProfile = workspace.defaultProviderProfile;
   const quickConnect = workspace.quickConnect;
   const visibleProviderGuides = isStarterPlan
     ? providerGuides.filter((guide) => guide.key === "quickconnect")
@@ -331,80 +329,6 @@ export function TexIntegrationsClient({
           </div>
         </article>
 
-        <article className="tex-form-panel">
-          <h3>Live WhatsApp route</h3>
-          <dl className="tex-integration-details">
-            <div>
-              <dt>Provider</dt>
-              <dd>{formatProvider(settings?.whatsappProvider)}</dd>
-            </div>
-            <div>
-              <dt>Default profile</dt>
-              <dd>{defaultProfile?.label ?? "Not selected"}</dd>
-            </div>
-            <div>
-              <dt>API key</dt>
-              <dd>
-                {defaultProfile?.apiKeyConfigured
-                  ? `Configured${defaultProfile.apiKeyLast4 ? ` ending ${defaultProfile.apiKeyLast4}` : ""}`
-                  : "Not configured"}
-              </dd>
-            </div>
-            <div>
-              <dt>AI receipt OCR</dt>
-              <dd>{settings?.aiReceiptExtractionEnabled ? "Enabled" : "Disabled"}</dd>
-            </div>
-            <div>
-              <dt>Duplicate handling</dt>
-              <dd>
-                {settings?.duplicateDetectionEnabled
-                  ? settings.duplicateAutoRejectEnabled
-                    ? "Auto-reject likely duplicates"
-                    : "Flag likely duplicates"
-                  : "Disabled"}
-              </dd>
-            </div>
-          </dl>
-        </article>
-
-        <article className="tex-form-panel">
-          <h3>Provider profiles</h3>
-          {workspace.providerProfiles.length ? (
-            <div className="tex-provider-profile-list">
-              {workspace.providerProfiles.map((profile) => (
-                <section key={profile.id} className="tex-provider-profile-row">
-                  <span>
-                    <strong>{profile.label}</strong>
-                    <small>
-                      {formatProvider(profile.provider)} / {profile.status}
-                    </small>
-                  </span>
-                  <b>{profile.isDefault ? "Default" : "Standby"}</b>
-                </section>
-              ))}
-            </div>
-          ) : (
-            <p className="tex-empty-state">No WhatsApp provider profiles have been saved yet.</p>
-          )}
-        </article>
-
-        <article className="tex-form-panel tex-integrations-wide">
-          <h3>Receipt storage boundary</h3>
-          <dl className="tex-integration-details tex-storage-details">
-            <div>
-              <dt>Bucket</dt>
-              <dd>{workspace.receiptStorage.bucket}</dd>
-            </div>
-            <div>
-              <dt>Path prefix</dt>
-              <dd dir="ltr">{workspace.receiptStorage.pathPrefix}</dd>
-            </div>
-            <div>
-              <dt>Convention</dt>
-              <dd dir="ltr">{workspace.receiptStorage.convention}</dd>
-            </div>
-          </dl>
-        </article>
       </div>
     </section>
   );
@@ -568,19 +492,6 @@ function buildWebhookUrl(provider: WhatsappProvider, origin: string) {
   }
 
   return `${origin || "https://app.torrevie.com"}/api/tex/webhooks/${provider}`;
-}
-
-function formatProvider(provider: string | null | undefined) {
-  if (provider === "ultramsg") {
-    return "UltraMsg";
-  }
-  if (provider === "wappfly") {
-    return "Wappfly";
-  }
-  if (provider === "meta") {
-    return "Meta WhatsApp Cloud API";
-  }
-  return "Not configured";
 }
 
 function formatQuickConnectStatus(status: string) {
