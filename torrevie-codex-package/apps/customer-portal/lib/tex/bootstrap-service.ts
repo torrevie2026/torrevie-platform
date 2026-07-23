@@ -45,6 +45,7 @@ export async function resolveTexActorContext(
       entitledProducts: supportContext.entitledProducts,
       texPlan: supportContext.texPlan,
       tenantName: supportContext.tenantName,
+      tenantLogoUrl: supportContext.tenantLogoUrl,
       moduleAdminProducts: supportContext.entitledProducts
     };
   }
@@ -80,6 +81,13 @@ export async function resolveTexActorContext(
             where id = public.current_tenant_id()
             limit 1
           ) as tenant_name,
+          (
+            select logo_updated_at::text
+            from public.tenants
+            where id = public.current_tenant_id()
+              and logo_storage_path is not null
+            limit 1
+          ) as tenant_logo_updated_at,
           coalesce((
             select array_agg(r.key order by r.key)
             from public.user_role_assignments ura
@@ -156,6 +164,9 @@ export async function resolveTexActorContext(
     const resolvedProducts = (contextRow?.entitled_products ?? []).filter(isProductKey);
     const resolvedTexPlan = mapTexPlanContext(contextRow?.tex_plan ?? undefined);
     const tenantName = contextRow?.tenant_name?.trim() || context.tenantId;
+    const tenantLogoUrl = contextRow?.tenant_logo_updated_at
+      ? `/api/tex/branding/logo?v=${encodeURIComponent(contextRow.tenant_logo_updated_at)}`
+      : null;
 
     return {
       ...context,
@@ -163,6 +174,7 @@ export async function resolveTexActorContext(
       entitledProducts: resolvedProducts,
       texPlan: resolvedTexPlan,
       tenantName,
+      tenantLogoUrl,
       moduleAdminProducts: resolvedRoles.includes("customer_module_admin") ? resolvedProducts : []
     };
   });
@@ -360,11 +372,16 @@ export async function getTexOnboardingStatus(
 async function resolveTexSupportContext(
   client: TenantQueryClient,
   context: ResolvedTenantContext
-): Promise<{ entitledProducts: ProductKey[]; texPlan: TexPlanContext; tenantName: string }> {
+): Promise<{
+  entitledProducts: ProductKey[];
+  texPlan: TexPlanContext;
+  tenantName: string;
+  tenantLogoUrl: string | null;
+}> {
   return withTenantContext(client, context, async () => {
     const tenant = await client.query<TexTenantRow>(
       `
-        select name
+        select name, logo_updated_at::text as logo_updated_at
         from public.tenants
         where id = public.current_tenant_id()
         limit 1
@@ -436,13 +453,17 @@ async function resolveTexSupportContext(
     return {
       entitledProducts: entitledProducts.rows.map((row) => row.key).filter(isProductKey),
       texPlan: mapTexPlanContext(texPlan.rows[0]),
-      tenantName: tenant.rows[0]?.name?.trim() || context.tenantId
+      tenantName: tenant.rows[0]?.name?.trim() || context.tenantId,
+      tenantLogoUrl: tenant.rows[0]?.logo_updated_at
+        ? `/api/tex/branding/logo?v=${encodeURIComponent(tenant.rows[0].logo_updated_at)}`
+        : null
     };
   });
 }
 
 type TexActorContextWorkspaceRow = {
   tenant_name: string | null;
+  tenant_logo_updated_at: string | null;
   roles: string[];
   entitled_products: string[];
   tex_plan: TexPlanContextRow | null;

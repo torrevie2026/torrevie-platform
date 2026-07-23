@@ -67,6 +67,7 @@ export function TexSettingsClient({
   const categoryRows = useMemo(() => settings?.categories ?? [], [settings]);
   const duplicateHandlingMode =
     settings?.processingSettings.duplicateHandlingMode ?? "manager_review";
+  const branding = settings?.branding;
   const canManageBilling = canManage;
   const isTrialPlan = planContext.planKey === "trial" || planContext.planStatus === "trialing";
   const subscriptionCancelsAtPeriodEnd =
@@ -193,6 +194,40 @@ export function TexSettingsClient({
     });
   }
 
+  async function uploadLogo(file: File | null) {
+    if (!file) {
+      return;
+    }
+
+    await run("branding", async () => {
+      const dataBase64 = await fileToBase64(file);
+      const result = await texFetch<Pick<TexSettingsWorkspace, "branding">>(
+        "/settings/branding",
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            fileName: file.name,
+            contentType: file.type,
+            dataBase64
+          })
+        }
+      );
+      setSettings((current) => (current ? { ...current, branding: result.branding } : current));
+      setNotice("Company logo updated.");
+    });
+  }
+
+  async function removeLogo() {
+    await run("branding", async () => {
+      const result = await texFetch<Pick<TexSettingsWorkspace, "branding">>(
+        "/settings/branding/logo",
+        { method: "DELETE" }
+      );
+      setSettings((current) => (current ? { ...current, branding: result.branding } : current));
+      setNotice("Company logo removed.");
+    });
+  }
+
   async function saveBudget() {
     await run("budget", async () => {
       await texFetch("/settings/budgets", {
@@ -310,6 +345,58 @@ export function TexSettingsClient({
       ) : null}
 
       <div className="tex-settings-grid">
+        <section className="tex-form-panel tex-settings-wide">
+          <div className="section-heading-row">
+            <div>
+              <h3>Workspace branding</h3>
+              <p>Show your company identity in the TEX navigation.</p>
+            </div>
+          </div>
+          <div className="tex-branding-editor">
+            <div className="tex-branding-preview" aria-label="Current TEX workspace branding">
+              <span className="tex-branding-logo">
+                <img
+                  src={branding?.logoUrl ?? "/logo/torrevie_logo_color.png"}
+                  alt=""
+                  width="52"
+                  height="52"
+                />
+              </span>
+              <span>
+                <strong>{branding?.tenantName ?? "Current tenant"}</strong>
+                <small>Torrevie TEX workspace</small>
+              </span>
+            </div>
+            {canManage ? (
+              <div className="tex-branding-actions">
+                <label className="tex-secondary-button">
+                  Upload logo
+                  <input
+                    accept="image/png,image/jpeg,image/webp"
+                    disabled={busy === "branding"}
+                    type="file"
+                    onChange={(event) => {
+                      void uploadLogo(event.target.files?.[0] ?? null);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                {branding?.logoUrl ? (
+                  <button
+                    type="button"
+                    className="tex-secondary-button"
+                    disabled={busy === "branding"}
+                    onClick={removeLogo}
+                  >
+                    Remove logo
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <p className="tex-field-hint">Use a PNG, JPG, or WebP logo smaller than 2 MB.</p>
+        </section>
+
         <section id="tex-billing" className="tex-form-panel tex-settings-wide tex-billing-panel">
           <div className="section-heading-row">
             <div>
@@ -749,6 +836,15 @@ function PlanComparison({ currentPlan }: { currentPlan: TexPlanContext["planKey"
 
 function optionalNumber(value: string) {
   return value.trim() ? Number(value) : null;
+}
+
+function fileToBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result ?? "")));
+    reader.addEventListener("error", () => reject(new Error("Unable to read the logo file.")));
+    reader.readAsDataURL(file);
+  });
 }
 
 async function texFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {

@@ -8,6 +8,7 @@ export type TexActorContext = ResolvedTenantContext & {
   entitledProducts: readonly ProductKey[];
   texPlan: TexPlanContext;
   tenantName?: string;
+  tenantLogoUrl?: string | null;
   moduleAdminProducts?: readonly ProductKey[];
   integrationPermissions?: readonly PermissionKey[];
 };
@@ -541,6 +542,7 @@ export type TexProcessingSettingsInput = {
 };
 
 export type TexSettingsWorkspace = {
+  branding: TexTenantBranding;
   categories: TexExpenseCategory[];
   policies: TexSpendPolicy[];
   budgets: TexBudget[];
@@ -548,6 +550,23 @@ export type TexSettingsWorkspace = {
   processingSettings: TexProcessingSettings;
   month: number;
   year: number;
+};
+
+export type TexTenantBranding = {
+  tenantName: string;
+  logoUrl: string | null;
+  logoUpdatedAt: string | null;
+};
+
+export type TexTenantLogoUploadInput = {
+  fileName?: string | null;
+  contentType: string;
+  dataBase64: string;
+};
+
+export type TexTenantLogoDownload = {
+  buffer: Buffer;
+  contentType: string;
 };
 
 export type TexWebhookSubmissionInput = {

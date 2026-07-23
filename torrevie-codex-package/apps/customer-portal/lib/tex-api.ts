@@ -42,10 +42,12 @@ import {
   sendTexEmailReport,
   startTexQuickConnectPairing,
   syncTexBillingFromStripe,
+  removeTexTenantLogo,
   updateTexExpenseCategory,
   updateTexExpense,
   updateTexEmployeeProfile,
   updateTexProcessingSettings,
+  uploadTexTenantLogo,
   updateTexTeam,
   updateTexTrip,
   updateTexExpenseStatus,
@@ -66,6 +68,7 @@ import {
   type TexNotificationInput,
   type TexProcessingSettingsInput,
   type TexReceiptUploadInput,
+  type TexTenantLogoUploadInput,
   type TexEmailReportInput,
   type TexReportInput,
   type TexSpendPolicyInput,
@@ -432,6 +435,22 @@ export async function handleTexApiRequest(
         actor,
         readProcessingSettingsInput(request.body)
       )
+    });
+  }
+
+  if (path === "/settings/branding" && method === "PUT") {
+    return json(200, {
+      branding: await uploadTexTenantLogo(
+        client,
+        actor,
+        request.body as TexTenantLogoUploadInput
+      )
+    });
+  }
+
+  if (path === "/settings/branding/logo" && method === "DELETE") {
+    return json(200, {
+      branding: await removeTexTenantLogo(client, actor)
     });
   }
 

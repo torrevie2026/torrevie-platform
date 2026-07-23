@@ -49,6 +49,9 @@ export type {
   TexSettingsWorkspace,
   TexSpendPolicy,
   TexSpendPolicyInput,
+  TexTenantBranding,
+  TexTenantLogoDownload,
+  TexTenantLogoUploadInput,
   TexTeam,
   TexTeamInput,
   TexTripInput,
@@ -67,6 +70,12 @@ export type {
   TexWhatsappProviderScope
 } from "./tex/types";
 
+export {
+  getTexTenantBranding,
+  getTexTenantLogoDownload,
+  removeTexTenantLogo,
+  uploadTexTenantLogo
+} from "./tex/branding-service";
 export {
   cancelTexBillingSubscription,
   createTexBillingCheckoutSession,

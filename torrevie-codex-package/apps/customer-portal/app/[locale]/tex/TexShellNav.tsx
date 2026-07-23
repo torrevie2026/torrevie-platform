@@ -23,6 +23,7 @@ type TexShellNavProps = {
   locale: string;
   planKey: "trial" | "lite" | "growth" | "enterprise";
   roles: readonly string[];
+  tenantLogoUrl: string | null;
   tenantName: string;
 };
 
@@ -50,7 +51,14 @@ const planRank = {
   enterprise: 3
 } as const;
 
-export function TexShellNav({ email, locale, planKey, roles, tenantName }: TexShellNavProps) {
+export function TexShellNav({
+  email,
+  locale,
+  planKey,
+  roles,
+  tenantLogoUrl,
+  tenantName
+}: TexShellNavProps) {
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [navigatingHref, setNavigatingHref] = useState<string | null>(null);
   const pathname = usePathname();
@@ -113,15 +121,19 @@ export function TexShellNav({ email, locale, planKey, roles, tenantName }: TexSh
       <aside className="customer-sidebar tex-sidebar" aria-label="TEX sections">
         <div className="tex-sidebar-header">
           <Link className="customer-brand tex-brand" href={`/${locale}`} aria-label="Torrevie">
-            <img src="/logo/torrevie_logo_color.png" alt="" width="36" height="36" />
+            <span className="tex-brand-logo">
+              <img
+                src={tenantLogoUrl ?? "/logo/torrevie_logo_color.png"}
+                alt=""
+                width="36"
+                height="36"
+              />
+            </span>
             <span>
-              <strong>Torrevie TEX</strong>
-              <small>Travel and Expense</small>
+              <strong>{tenantName}</strong>
+              <small>Torrevie TEX</small>
             </span>
           </Link>
-          <div className="tex-company-chip" title={tenantName}>
-            {tenantName}
-          </div>
         </div>
 
         <nav className="tex-nav">

@@ -32,6 +32,7 @@ export default async function TexLayout({
           locale={locale}
           planKey={actor.texPlan.planKey}
           roles={actor.roles}
+          tenantLogoUrl={actor.tenantLogoUrl ?? null}
           tenantName={actor.tenantName ?? actor.tenantId}
         />
         <section className="customer-main tex-main">

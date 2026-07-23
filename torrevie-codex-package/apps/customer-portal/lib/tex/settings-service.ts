@@ -19,6 +19,7 @@ import {
   sanitizeExpenseCategoryInput,
   sanitizeSpendPolicyInput
 } from "./settings-input";
+import { getTexTenantBranding } from "./branding-service";
 import { assertUuid, requireSingleRow } from "./shared";
 import type {
   TexActorContext,
@@ -120,6 +121,7 @@ export async function listTexSettingsWorkspace(
     );
 
     return {
+      branding: await getTexTenantBranding(client, actor),
       categories: categoriesResult.rows.map(mapCategory),
       policies: mergePoliciesWithCategories(categoriesResult.rows, policiesResult.rows),
       budgets: budgetsResult.rows.map(mapBudget),

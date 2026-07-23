@@ -372,6 +372,7 @@ export type TexMembershipValidationRow = {
 
 export type TexTenantRow = {
   name: string | null;
+  logo_updated_at?: string | null;
 };
 
 export type TexRoleRow = {
