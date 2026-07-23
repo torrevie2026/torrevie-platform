@@ -137,8 +137,9 @@ export function TexWhatsappReviewClient({
 
   return (
     <section
-      className="tex-work-panel tex-whatsapp-review"
+      className={`tex-work-panel tex-whatsapp-review${isRefreshing ? " tex-live-refreshing" : ""}`}
       aria-label="Unregistered WhatsApp review"
+      aria-busy={isRefreshing}
     >
       <div className="section-heading-row">
         <div>

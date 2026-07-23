@@ -2848,13 +2848,17 @@ form.member-row {
 
 .tex-live-refreshing .tex-report-kpi,
 .tex-live-refreshing .tex-report-breakdown article,
-.tex-live-refreshing .tex-report-row {
+.tex-live-refreshing .tex-report-row,
+.tex-live-refreshing .tex-expense-card,
+.tex-live-refreshing .tex-whatsapp-row {
   position: relative;
 }
 
 .tex-live-refreshing .tex-report-kpi::after,
 .tex-live-refreshing .tex-report-breakdown article::after,
-.tex-live-refreshing .tex-report-row::after {
+.tex-live-refreshing .tex-report-row::after,
+.tex-live-refreshing .tex-expense-card::after,
+.tex-live-refreshing .tex-whatsapp-row::after {
   animation: tex-live-shimmer 1.1s ease-in-out infinite;
   background: linear-gradient(
     90deg,
@@ -4118,6 +4122,11 @@ form.member-row {
   padding: 12px;
 }
 
+.tex-expense-card,
+.tex-whatsapp-row {
+  overflow: hidden;
+}
+
 .tex-role-dashboard {
   display: grid;
   gap: 16px;
@@ -5167,12 +5176,14 @@ form.member-row {
   }
 
   .tex-whatsapp-action-group {
+    align-items: stretch;
     gap: 8px;
   }
 
   .tex-whatsapp-actions .tex-primary-button,
   .tex-whatsapp-actions .tex-secondary-button,
   .tex-whatsapp-actions .tex-inline-button {
+    inline-size: 100%;
     min-block-size: 44px;
   }
 
@@ -5292,7 +5303,7 @@ form.member-row {
   }
 
   .tex-expense-toolbar .tex-panel-actions button {
-    min-block-size: 42px;
+    min-block-size: 44px;
   }
 
   .tex-expense-toolbar .tex-panel-actions span {
@@ -5303,7 +5314,7 @@ form.member-row {
   .tex-expense-card {
     align-items: stretch;
     gap: 9px;
-    grid-template-columns: 24px minmax(0, 1fr) auto;
+    grid-template-columns: 24px minmax(0, 1fr);
   }
 
   .tex-expense-card .tex-row-checkbox {
@@ -5320,7 +5331,9 @@ form.member-row {
   }
 
   .tex-expense-card-amount {
-    align-self: start;
+    align-self: center;
+    grid-column: 2;
+    justify-self: start;
     white-space: nowrap;
   }
 
@@ -5937,7 +5950,9 @@ form.member-row {
   .tex-live-sync-indicator span,
   .tex-live-refreshing .tex-report-kpi::after,
   .tex-live-refreshing .tex-report-breakdown article::after,
-  .tex-live-refreshing .tex-report-row::after {
+  .tex-live-refreshing .tex-report-row::after,
+  .tex-live-refreshing .tex-expense-card::after,
+  .tex-live-refreshing .tex-whatsapp-row::after {
     animation: none;
     transition: none;
   }

@@ -755,7 +755,8 @@ export function TexExpensesClient({
       ) : null}
 
       <section
-        className="tex-form-panel tex-expense-panel"
+        className={`tex-form-panel tex-expense-panel${isRefreshing ? " tex-live-refreshing" : ""}`}
+        aria-busy={isRefreshing}
         aria-labelledby="tex-expense-list-title"
       >
         <div className="section-heading-row">
