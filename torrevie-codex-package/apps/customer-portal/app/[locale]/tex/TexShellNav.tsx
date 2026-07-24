@@ -177,7 +177,7 @@ export function TexShellNav({
         <div className="tex-sidebar-user">
           <TexInstallPrompt />
           <span className="tex-avatar">{email?.slice(0, 1).toUpperCase() ?? "T"}</span>
-          <span>
+          <span className="tex-sidebar-user-identity">
             <strong>{email ?? "Customer user"}</strong>
             <small>{roles.join(", ") || "TEX user"}</small>
           </span>

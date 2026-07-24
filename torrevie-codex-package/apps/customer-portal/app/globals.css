@@ -377,16 +377,18 @@ a {
   align-items: center;
   border-block-start: 1px solid var(--color-border);
   display: grid;
-  gap: 10px;
+  gap: 8px 10px;
   grid-template-columns: auto minmax(0, 1fr);
   margin-block-start: auto;
   min-inline-size: 0;
-  padding-block: 16px;
+  padding-block: 14px;
   padding-inline: 16px;
 }
 
 .tex-sidebar-user .tex-install-button {
   grid-column: 1 / -1;
+  inline-size: 100%;
+  min-block-size: 36px;
 }
 
 .tex-signout-button {
@@ -401,7 +403,8 @@ a {
   gap: 8px;
   grid-column: 1 / -1;
   justify-content: center;
-  min-block-size: 38px;
+  inline-size: 100%;
+  min-block-size: 36px;
 }
 
 .tex-signout-button:disabled {
@@ -414,27 +417,31 @@ a {
   inline-size: 16px;
 }
 
-.tex-sidebar-user span:last-child {
+.tex-sidebar-user-identity {
   display: grid;
   gap: 2px;
   min-inline-size: 0;
 }
 
-.tex-sidebar-user strong,
-.tex-sidebar-user small {
+.tex-sidebar-user-identity strong,
+.tex-sidebar-user-identity small {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tex-sidebar-user strong {
+.tex-sidebar-user-identity strong {
   font-size: 13px;
+  line-height: 1.25;
+  max-inline-size: 100%;
 }
 
-.tex-sidebar-user small {
+.tex-sidebar-user-identity small {
   color: var(--color-text-muted);
   font-size: 12px;
   font-weight: 600;
+  line-height: 1.2;
 }
 
 .tex-avatar {
