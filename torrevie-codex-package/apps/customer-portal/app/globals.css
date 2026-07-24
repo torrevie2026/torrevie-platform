@@ -3872,6 +3872,386 @@ form.member-row {
   margin: 0;
 }
 
+.tex-tutorial-copy strong {
+  background: color-mix(in srgb, var(--color-accent) 9%, var(--color-bg-primary));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 26%, var(--color-border));
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  line-height: 1.35;
+  padding: 10px;
+}
+
+.tex-tour-frame {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.tex-tour-screen {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-bg-surface) 72%, transparent);
+  min-block-size: 310px;
+  overflow: hidden;
+  position: relative;
+}
+
+.tex-tour-window-bar {
+  align-items: center;
+  background: var(--color-bg-surface);
+  border-block-end: 1px solid var(--color-border);
+  display: flex;
+  gap: 6px;
+  min-block-size: 34px;
+  padding-inline: 12px;
+}
+
+.tex-tour-window-bar span {
+  background: color-mix(in srgb, var(--color-text-muted) 34%, transparent);
+  border-radius: 999px;
+  block-size: 8px;
+  inline-size: 8px;
+}
+
+.tex-tour-window-bar b {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  margin-inline-start: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tex-tour-app {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  min-block-size: 276px;
+}
+
+.tex-tour-rail {
+  background: #162449;
+  color: var(--color-text-inverse);
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.tex-tour-rail strong {
+  font-size: 13px;
+  margin-block-end: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tex-tour-rail span {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 7px 8px;
+}
+
+.tex-tour-content {
+  background: #f5f7fa;
+  min-inline-size: 0;
+  overflow: hidden;
+  padding: 14px;
+  position: relative;
+}
+
+.tex-tour-content header {
+  display: grid;
+  gap: 2px;
+  margin-block-end: 10px;
+}
+
+.tex-tour-content header span {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.tex-tour-content h4 {
+  color: var(--color-text-primary);
+  font-size: 17px;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.tex-tour-frame figcaption {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.tex-tour-highlight {
+  animation: texTourFocus 2.8s ease-in-out infinite;
+  border: 2px solid var(--color-accent);
+  border-radius: 10px;
+  box-shadow: 0 0 0 999px rgba(22, 36, 73, 0.1);
+  pointer-events: none;
+  position: absolute;
+}
+
+.tex-tour-frame-dashboard .tex-tour-highlight {
+  block-size: 74px;
+  inline-size: 66%;
+  inset-block-start: 76px;
+  inset-inline-start: 156px;
+}
+
+.tex-tour-frame-whatsapp .tex-tour-highlight {
+  block-size: 84px;
+  inline-size: 47%;
+  inset-block-start: 94px;
+  inset-inline-start: 158px;
+}
+
+.tex-tour-frame-review .tex-tour-highlight,
+.tex-tour-frame-approval .tex-tour-highlight {
+  block-size: 54px;
+  inline-size: 61%;
+  inset-block-start: 134px;
+  inset-inline-start: 158px;
+}
+
+.tex-tour-frame-people .tex-tour-highlight {
+  block-size: 166px;
+  inline-size: 44%;
+  inset-block-start: 96px;
+  inset-inline-end: 24px;
+}
+
+.tex-tour-frame-reports .tex-tour-highlight {
+  block-size: 142px;
+  inline-size: 62%;
+  inset-block-start: 100px;
+  inset-inline-start: 156px;
+}
+
+.tex-tour-dashboard,
+.tex-tour-whatsapp,
+.tex-tour-review,
+.tex-tour-approval,
+.tex-tour-people,
+.tex-tour-reports {
+  animation: texTourPan 7s ease-in-out infinite;
+}
+
+.tex-tour-kpis,
+.tex-tour-status-grid,
+.tex-tour-table,
+.tex-tour-report-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.tex-tour-kpis {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tex-tour-kpis b,
+.tex-tour-status-grid span,
+.tex-tour-table span,
+.tex-tour-expense-row,
+.tex-tour-drawer-mock,
+.tex-tour-team-row,
+.tex-tour-cta,
+.tex-tour-export span {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.28;
+  padding: 10px;
+}
+
+.tex-tour-kpis strong {
+  color: var(--color-accent);
+  display: block;
+  font-size: 18px;
+  margin-block-start: 4px;
+}
+
+.tex-tour-chart {
+  align-items: end;
+  background-image:
+    linear-gradient(var(--color-border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
+  background-size: 32px 32px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  display: flex;
+  gap: 14px;
+  margin-block-start: 10px;
+  min-block-size: 92px;
+  overflow: hidden;
+  padding: 12px;
+}
+
+.tex-tour-chart i,
+.tex-tour-report-bars span {
+  animation: texTutorialBarPulse 2.6s ease-in-out infinite;
+  background: var(--color-accent);
+  border-radius: 7px 7px 0 0;
+  display: block;
+  flex: 1;
+  transform-origin: bottom;
+}
+
+.tex-tour-chart i:nth-child(1) {
+  block-size: 46%;
+}
+
+.tex-tour-chart i:nth-child(2) {
+  block-size: 78%;
+}
+
+.tex-tour-chart i:nth-child(3) {
+  block-size: 58%;
+}
+
+.tex-tour-cta {
+  border-color: color-mix(in srgb, var(--color-accent) 34%, var(--color-border));
+  color: var(--color-accent);
+  margin-block-start: 10px;
+}
+
+.tex-tour-status-card {
+  align-items: center;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.tex-tour-status-card strong,
+.tex-tour-table b {
+  color: var(--color-accent);
+}
+
+.tex-tour-status-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-block-start: 8px;
+}
+
+.tex-tour-table {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.tex-tour-expense-row {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  margin-block-end: 8px;
+}
+
+.tex-tour-expense-row em,
+.tex-tour-drawer-mock em {
+  background: var(--color-accent);
+  border-radius: 6px;
+  color: var(--color-text-inverse);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  padding: 6px 8px;
+}
+
+.tex-tour-drawer-mock {
+  display: grid;
+  gap: 8px;
+  inline-size: min(250px, 78%);
+  justify-self: end;
+}
+
+.tex-tour-drawer-mock span {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  padding: 8px;
+}
+
+.tex-tour-team-row {
+  margin-block-start: 10px;
+}
+
+.tex-tour-report-grid {
+  grid-template-columns: minmax(0, 1fr) 124px;
+}
+
+.tex-tour-report-bars {
+  align-items: end;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  display: flex;
+  gap: 12px;
+  min-block-size: 118px;
+  padding: 12px;
+}
+
+.tex-tour-report-bars span:nth-child(1) {
+  block-size: 52%;
+}
+
+.tex-tour-report-bars span:nth-child(2) {
+  block-size: 84%;
+}
+
+.tex-tour-report-bars span:nth-child(3) {
+  block-size: 36%;
+}
+
+.tex-tour-donut {
+  align-items: center;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  display: flex;
+  justify-content: center;
+}
+
+.tex-tour-donut span {
+  background: conic-gradient(var(--color-accent) 0 72%, #f59e0b 72% 88%, #ef4444 88% 100%);
+  border-radius: 999px;
+  display: block;
+  inline-size: 78px;
+  min-block-size: 78px;
+  position: relative;
+}
+
+.tex-tour-donut span::after {
+  background: var(--color-bg-primary);
+  border-radius: inherit;
+  content: "";
+  inset: 20px;
+  position: absolute;
+}
+
+.tex-tour-export {
+  display: flex;
+  gap: 8px;
+  margin-block-start: 10px;
+}
+
+.tex-tour-export span:last-child {
+  flex: 1;
+}
+
 .tex-tutorial-snapshot {
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--color-bg-card) 88%, var(--color-accent) 12%), var(--color-bg-card));
@@ -4127,6 +4507,30 @@ form.member-row {
 
   50% {
     transform: scaleY(1);
+  }
+}
+
+@keyframes texTourFocus {
+  0%,
+  100% {
+    opacity: 0.78;
+    transform: scale(0.985);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes texTourPan {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-4px);
   }
 }
 
@@ -6741,6 +7145,50 @@ form.member-row {
     min-block-size: 0;
   }
 
+  .tex-tour-screen {
+    min-block-size: 270px;
+  }
+
+  .tex-tour-app {
+    grid-template-columns: 1fr;
+    min-block-size: 236px;
+  }
+
+  .tex-tour-rail {
+    display: none;
+  }
+
+  .tex-tour-content {
+    padding: 12px;
+  }
+
+  .tex-tour-kpis,
+  .tex-tour-status-grid,
+  .tex-tour-table,
+  .tex-tour-report-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tex-tour-frame-dashboard .tex-tour-highlight,
+  .tex-tour-frame-whatsapp .tex-tour-highlight,
+  .tex-tour-frame-review .tex-tour-highlight,
+  .tex-tour-frame-approval .tex-tour-highlight,
+  .tex-tour-frame-people .tex-tour-highlight,
+  .tex-tour-frame-reports .tex-tour-highlight {
+    block-size: 86px;
+    inline-size: calc(100% - 34px);
+    inset-block-start: 92px;
+    inset-inline: 16px;
+  }
+
+  .tex-tour-expense-row {
+    grid-template-columns: 1fr;
+  }
+
+  .tex-tour-drawer-mock {
+    inline-size: 100%;
+  }
+
   .tex-tutorial-kpi-row {
     grid-template-columns: 1fr;
   }
@@ -6755,7 +7203,7 @@ form.member-row {
 
   .tex-tutorial-actions {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 
   .tex-tutorial-actions button {
@@ -7085,7 +7533,16 @@ form.member-row {
   .tex-live-refreshing .tex-expense-card::after,
   .tex-live-refreshing .tex-whatsapp-row::after,
   .tex-tutorial-chart-line i,
-  .tex-tutorial-progress span {
+  .tex-tutorial-progress span,
+  .tex-tour-dashboard,
+  .tex-tour-whatsapp,
+  .tex-tour-review,
+  .tex-tour-approval,
+  .tex-tour-people,
+  .tex-tour-reports,
+  .tex-tour-chart i,
+  .tex-tour-report-bars span,
+  .tex-tour-highlight {
     animation: none;
     transition: none;
   }
