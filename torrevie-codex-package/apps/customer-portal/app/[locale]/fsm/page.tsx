@@ -1172,7 +1172,7 @@ function sectionContent(
       secondaryItems: [
         `Segment ${workspace.segment}`,
         `Plan ${workspace.planTier}`,
-        `Terminology ${workspace.terminologyPack}`,
+        `Terminology ${workspace.terminologyPack.customer}, ${workspace.terminologyPack.job}, ${workspace.terminologyPack.asset}`,
         `Menu items ${workspace.navItems.length}`
       ]
     }
