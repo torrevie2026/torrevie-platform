@@ -3131,7 +3131,7 @@ form.member-row {
   gap: 4px;
 }
 
-.tex-form-grid input,
+.tex-form-grid input:not([type="checkbox"]),
 .tex-form-grid select,
 .tex-place-field input {
   background: var(--color-bg-primary);
@@ -3142,7 +3142,7 @@ form.member-row {
   padding-inline: 9px;
 }
 
-.tex-form-grid input:focus,
+.tex-form-grid input:not([type="checkbox"]):focus,
 .tex-form-grid select:focus,
 .tex-place-field input:focus,
 .tex-wide-label input:focus,
@@ -4646,7 +4646,16 @@ form.member-row {
   font-size: 13px;
   font-weight: 800;
   gap: 8px;
+  min-block-size: 38px;
   white-space: nowrap;
+}
+
+.tex-toggle-label input[type="checkbox"] {
+  accent-color: var(--color-accent);
+  block-size: 18px;
+  flex: 0 0 18px;
+  inline-size: 18px;
+  margin: 0;
 }
 
 .tex-checkbox-group {
@@ -4676,9 +4685,6 @@ form.member-row {
 }
 
 .tex-checkbox-group .tex-toggle-label input {
-  accent-color: var(--color-accent);
-  block-size: 18px;
-  inline-size: 18px;
   order: 2;
 }
 
