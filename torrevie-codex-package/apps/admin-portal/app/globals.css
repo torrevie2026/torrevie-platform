@@ -1036,6 +1036,33 @@ h1 {
   gap: 20px;
 }
 
+.billing-overview {
+  display: grid;
+  gap: 18px;
+}
+
+.billing-row {
+  align-items: start;
+  grid-template-columns:
+    minmax(180px, 1.4fr) minmax(120px, 0.9fr) minmax(130px, 0.9fr) minmax(160px, 1fr)
+    minmax(180px, 1.2fr) minmax(110px, 0.7fr);
+}
+
+.billing-row strong,
+.billing-row span {
+  overflow-wrap: anywhere;
+}
+
+.billing-error {
+  background: #fff4f4;
+  border-left: 4px solid #b42318;
+  color: var(--torrevie-black);
+  grid-column: 1 / -1;
+  line-height: 1.45;
+  margin: 0;
+  padding: 10px 12px;
+}
+
 .metric-grid {
   display: grid;
   gap: 12px;
