@@ -3683,9 +3683,9 @@ form.member-row {
   border-radius: 8px;
   box-shadow: 0 24px 60px rgb(15 23 42 / 22%);
   display: grid;
-  gap: 16px;
-  inline-size: min(560px, 100%);
-  padding: 18px;
+  gap: 18px;
+  inline-size: min(520px, 100%);
+  padding: 20px;
 }
 
 .tex-install-dialog h2 {
@@ -3699,31 +3699,63 @@ form.member-row {
   margin: 6px 0 0;
 }
 
-.tex-install-steps {
+.tex-install-guide {
   display: grid;
-  gap: 10px;
+  gap: 14px;
 }
 
-.tex-install-steps article {
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
+.tex-install-guide-main {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-accent) 7%, var(--color-bg-surface));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 34%, var(--color-border));
   border-radius: 8px;
   display: grid;
-  gap: 4px;
-  padding: 12px;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 14px;
 }
 
-.tex-install-steps strong {
+.tex-install-guide-main span:not(.tex-install-step-icon) {
+  display: grid;
+  gap: 4px;
+  min-inline-size: 0;
+}
+
+.tex-install-guide-main strong,
+.tex-install-checklist {
   color: var(--color-text-primary);
 }
 
-.tex-install-steps p {
+.tex-install-guide-main p {
   color: var(--color-text-muted);
   margin: 0;
 }
 
-.tex-install-step-primary {
-  border-color: color-mix(in srgb, var(--color-accent) 32%, var(--color-border)) !important;
+.tex-install-checklist {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tex-install-checklist li {
+  align-items: start;
+  color: var(--color-text-muted);
+  display: grid;
+  font-size: 14px;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr);
+  line-height: 1.4;
+}
+
+.tex-install-checklist li::before {
+  background: var(--color-accent);
+  block-size: 8px;
+  border-radius: 999px;
+  content: "";
+  inline-size: 8px;
+  margin-block-start: 6px;
 }
 
 .tex-install-step-icon {
@@ -7251,10 +7283,6 @@ form.member-row {
     display: grid;
     gap: 12px;
     grid-template-columns: 1fr auto;
-  }
-
-  .tex-install-steps article {
-    padding: 14px;
   }
 
   .tex-tutorial-backdrop {

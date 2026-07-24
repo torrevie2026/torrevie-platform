@@ -96,30 +96,28 @@ export function TexInstallPrompt({ className, compact = false }: TexInstallPromp
                 <p className="eyebrow">Install app</p>
                 <h2 id="tex-install-dialog-title">Install Torrevie TEX</h2>
                 <p className="tex-install-intro">
-                  Your browser is not showing the one-tap install prompt, so use the browser menu
-                  instead.
+                  Your browser is not showing the one-tap prompt. You can still install TEX from
+                  the browser menu.
                 </p>
               </div>
               <button type="button" className="tex-secondary-button" onClick={() => setShowHelp(false)}>
                 Close
               </button>
             </div>
-            <div className="tex-install-steps">
-              <article className="tex-install-step-primary">
+            <div className="tex-install-guide">
+              <article className="tex-install-guide-main">
                 <span className="tex-install-step-icon" aria-hidden="true">
                   <help.icon />
                 </span>
-                <strong>{help.title}</strong>
-                <p>{help.description}</p>
+                <span>
+                  <strong>{help.title}</strong>
+                  <p>{help.description}</p>
+                </span>
               </article>
-              <article>
-                <strong>What happens next</strong>
-                <p>Torrevie TEX will appear on your home screen and open like an app.</p>
-              </article>
-              <article>
-                <strong>Already installed?</strong>
-                <p>Open it from the home screen. You can close this message.</p>
-              </article>
+              <ol className="tex-install-checklist" aria-label="Installation outcome">
+                <li>Torrevie TEX will open like a standalone app.</li>
+                <li>If it is already installed, open it from your home screen or app launcher.</li>
+              </ol>
             </div>
           </section>
         </div>
