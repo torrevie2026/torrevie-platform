@@ -27,6 +27,15 @@ type BudgetForm = {
   budgetAmount: string;
 };
 
+type SettingsSection =
+  | "workspace"
+  | "whatsapp"
+  | "duplicates"
+  | "categories"
+  | "spending"
+  | "budgets"
+  | "billing";
+
 const monthNames = [
   "Jan",
   "Feb",
@@ -57,6 +66,8 @@ export function TexSettingsClient({
     year: String(initialSettings?.year ?? now.getUTCFullYear()),
     budgetAmount: ""
   });
+  const [activeSettingsSection, setActiveSettingsSection] =
+    useState<SettingsSection>("workspace");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +85,12 @@ export function TexSettingsClient({
     !isTrialPlan && planContext.billingCancelAtPeriodEnd === true;
   const canUpgradeToLite = planContext.planKey === "trial";
   const canUpgradeToGrowth = planContext.planKey === "trial" || planContext.planKey === "lite";
+
+  useEffect(() => {
+    if (window.location.hash === "#tex-billing") {
+      setActiveSettingsSection("billing");
+    }
+  }, []);
 
   useEffect(() => {
     if (!canManageBilling || checkoutSyncStarted.current) {
@@ -354,8 +371,55 @@ export function TexSettingsClient({
         <p className="tex-notice">Scheduling the Stripe subscription cancellation...</p>
       ) : null}
 
-      <div className="tex-settings-grid">
-        <section className="tex-form-panel tex-settings-wide">
+      <div className="tex-settings-console">
+        <nav className="tex-settings-menu" aria-label="TEX settings sections">
+          <SettingsMenuButton
+            active={activeSettingsSection === "workspace"}
+            title="Workspace"
+            description="Branding and identity"
+            onClick={() => setActiveSettingsSection("workspace")}
+          />
+          <SettingsMenuButton
+            active={activeSettingsSection === "whatsapp"}
+            title="WhatsApp setup"
+            description="Receipt intake channel"
+            onClick={() => setActiveSettingsSection("whatsapp")}
+          />
+          <SettingsMenuButton
+            active={activeSettingsSection === "duplicates"}
+            title="Duplicate review"
+            description="Receipt duplicate handling"
+            onClick={() => setActiveSettingsSection("duplicates")}
+          />
+          <SettingsMenuButton
+            active={activeSettingsSection === "spending"}
+            title="Spending limits"
+            description="Daily and monthly controls"
+            onClick={() => setActiveSettingsSection("spending")}
+          />
+          <SettingsMenuButton
+            active={activeSettingsSection === "categories"}
+            title="Categories"
+            description={`${categoryRows.length} configured`}
+            onClick={() => setActiveSettingsSection("categories")}
+          />
+          <SettingsMenuButton
+            active={activeSettingsSection === "budgets"}
+            title="Monthly budgets"
+            description={`${budgetRows.length} for selected period`}
+            onClick={() => setActiveSettingsSection("budgets")}
+          />
+          <SettingsMenuButton
+            active={activeSettingsSection === "billing"}
+            title="Billing"
+            description={billingPlanLabel(planContext)}
+            onClick={() => setActiveSettingsSection("billing")}
+          />
+        </nav>
+
+        <div className="tex-settings-content">
+        {activeSettingsSection === "workspace" ? (
+        <section className="tex-form-panel tex-settings-section">
           <div className="section-heading-row">
             <div>
               <h3>Workspace branding</h3>
@@ -406,8 +470,36 @@ export function TexSettingsClient({
           </div>
           <p className="tex-field-hint">Use a PNG, JPG, or WebP logo smaller than 2 MB.</p>
         </section>
+        ) : null}
 
-        <section id="tex-billing" className="tex-form-panel tex-settings-wide tex-billing-panel">
+        {activeSettingsSection === "whatsapp" ? (
+        <section className="tex-form-panel tex-settings-section tex-settings-feature-panel">
+          <div className="section-heading-row">
+            <div>
+              <h3>WhatsApp setup</h3>
+              <p>
+                Manage Quick Connect, service status, and provider setup for WhatsApp receipt
+                intake.
+              </p>
+            </div>
+          </div>
+          <div className="tex-settings-callout">
+            <span>
+              <strong>Receipt intake route</strong>
+              <small>
+                Keep WhatsApp setup in its dedicated workspace so pairing, service status, and
+                provider options remain clear.
+              </small>
+            </span>
+            <a className="tex-primary-button" href="./integrations">
+              Open WhatsApp setup
+            </a>
+          </div>
+        </section>
+        ) : null}
+
+        {activeSettingsSection === "billing" ? (
+        <section id="tex-billing" className="tex-form-panel tex-settings-section tex-billing-panel">
           <div className="section-heading-row">
             <div>
               <h3>Billing and payment method</h3>
@@ -515,30 +607,46 @@ export function TexSettingsClient({
           </p>
           <PlanComparison currentPlan={planContext.planKey} />
         </section>
+        ) : null}
 
-        <section className="tex-form-panel">
-          <h3>Receipt processing</h3>
-          <label className="tex-wide-label">
-            Duplicate handling
-            <select
-              value={duplicateHandlingMode}
-              disabled={!canManage || busy === "processing"}
-              onChange={(event) =>
-                saveDuplicateHandlingMode(event.target.value as "manager_review" | "auto_reject")
-              }
-            >
-              <option value="manager_review">Push for manager review</option>
-              <option value="auto_reject">Auto reject likely duplicates</option>
-            </select>
-          </label>
-          <p className="tex-field-hint">
-            TEX always checks for duplicate receipts. Choose whether likely duplicates stay pending
-            for manager approval or are rejected automatically.
-          </p>
+        {activeSettingsSection === "duplicates" ? (
+        <section className="tex-form-panel tex-settings-section">
+          <div className="section-heading-row">
+            <div>
+              <h3>Duplicate review</h3>
+              <p>Choose what TEX does when a receipt looks like a duplicate.</p>
+            </div>
+          </div>
+          <div className="tex-settings-control-card">
+            <label className="tex-wide-label">
+              Duplicate handling
+              <select
+                value={duplicateHandlingMode}
+                disabled={!canManage || busy === "processing"}
+                onChange={(event) =>
+                  saveDuplicateHandlingMode(event.target.value as "manager_review" | "auto_reject")
+                }
+              >
+                <option value="manager_review">Push for manager review</option>
+                <option value="auto_reject">Auto reject likely duplicates</option>
+              </select>
+            </label>
+            <p className="tex-field-hint">
+              TEX checks duplicate receipts across the tenant. Likely duplicates can either stay
+              visible for manager decision or be rejected automatically.
+            </p>
+          </div>
         </section>
+        ) : null}
 
-        <section className="tex-form-panel">
-          <h3>Expense categories</h3>
+        {activeSettingsSection === "categories" ? (
+        <section className="tex-form-panel tex-settings-section">
+          <div className="section-heading-row">
+            <div>
+              <h3>Categories</h3>
+              <p>Maintain the expense categories available across TEX.</p>
+            </div>
+          </div>
           {canManage ? (
             <div className="tex-inline-form">
               <input
@@ -625,9 +733,16 @@ export function TexSettingsClient({
             ))}
           </div>
         </section>
+        ) : null}
 
-        <section className="tex-form-panel">
-          <h3>Spend policies</h3>
+        {activeSettingsSection === "spending" ? (
+        <section className="tex-form-panel tex-settings-section">
+          <div className="section-heading-row">
+            <div>
+              <h3>Spending limits</h3>
+              <p>Set daily, monthly, and notes-required thresholds by expense category.</p>
+            </div>
+          </div>
           <div className="tex-settings-table">
             {policyRows.map((policy) => (
               <PolicyRow
@@ -640,11 +755,13 @@ export function TexSettingsClient({
             ))}
           </div>
         </section>
+        ) : null}
 
-        <section className="tex-form-panel tex-settings-wide">
+        {activeSettingsSection === "budgets" ? (
+        <section className="tex-form-panel tex-settings-section">
           <div className="section-heading-row">
             <div>
-              <h3>Department budgets</h3>
+              <h3>Monthly budgets</h3>
               <p>
                 {monthNames[(settings.month || 1) - 1]} {settings.year}
               </p>
@@ -741,8 +858,33 @@ export function TexSettingsClient({
             })}
           </div>
         </section>
+        ) : null}
+        </div>
       </div>
     </section>
+  );
+}
+
+function SettingsMenuButton({
+  active,
+  title,
+  description,
+  onClick
+}: {
+  active: boolean;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={active ? "tex-settings-menu-item is-active" : "tex-settings-menu-item"}
+      onClick={onClick}
+    >
+      <strong>{title}</strong>
+      <span>{description}</span>
+    </button>
   );
 }
 
@@ -761,35 +903,46 @@ function PolicyRow({
 
   return (
     <article className={draft.isBlocked ? "tex-policy-row tex-muted-row" : "tex-policy-row"}>
-      <strong>{draft.category}</strong>
-      <input
-        aria-label={`${draft.category} daily limit`}
-        inputMode="decimal"
-        placeholder="Daily"
-        value={draft.dailyLimit ?? ""}
-        disabled={!canManage}
-        onChange={(event) => setDraft({ ...draft, dailyLimit: optionalNumber(event.target.value) })}
-      />
-      <input
-        aria-label={`${draft.category} monthly limit`}
-        inputMode="decimal"
-        placeholder="Monthly"
-        value={draft.monthlyLimit ?? ""}
-        disabled={!canManage}
-        onChange={(event) =>
-          setDraft({ ...draft, monthlyLimit: optionalNumber(event.target.value) })
-        }
-      />
-      <input
-        aria-label={`${draft.category} notes threshold`}
-        inputMode="decimal"
-        placeholder="Notes above"
-        value={draft.requiresNotesAbove ?? ""}
-        disabled={!canManage}
-        onChange={(event) =>
-          setDraft({ ...draft, requiresNotesAbove: optionalNumber(event.target.value) })
-        }
-      />
+      <strong className="tex-policy-category">{draft.category}</strong>
+      <label>
+        <span>Daily limit</span>
+        <input
+          aria-label={`${draft.category} daily limit`}
+          inputMode="decimal"
+          placeholder="No limit"
+          value={draft.dailyLimit ?? ""}
+          disabled={!canManage}
+          onChange={(event) =>
+            setDraft({ ...draft, dailyLimit: optionalNumber(event.target.value) })
+          }
+        />
+      </label>
+      <label>
+        <span>Monthly limit</span>
+        <input
+          aria-label={`${draft.category} monthly limit`}
+          inputMode="decimal"
+          placeholder="No limit"
+          value={draft.monthlyLimit ?? ""}
+          disabled={!canManage}
+          onChange={(event) =>
+            setDraft({ ...draft, monthlyLimit: optionalNumber(event.target.value) })
+          }
+        />
+      </label>
+      <label>
+        <span>Require notes above</span>
+        <input
+          aria-label={`${draft.category} notes threshold`}
+          inputMode="decimal"
+          placeholder="Optional"
+          value={draft.requiresNotesAbove ?? ""}
+          disabled={!canManage}
+          onChange={(event) =>
+            setDraft({ ...draft, requiresNotesAbove: optionalNumber(event.target.value) })
+          }
+        />
+      </label>
       <label className="tex-toggle-label">
         <input
           type="checkbox"
@@ -800,7 +953,12 @@ function PolicyRow({
         Block
       </label>
       {canManage ? (
-        <button type="button" disabled={busy} onClick={() => onSave(draft)}>
+        <button
+          type="button"
+          className="tex-secondary-button"
+          disabled={busy}
+          onClick={() => onSave(draft)}
+        >
           Save
         </button>
       ) : null}
