@@ -14,7 +14,6 @@ import {
 import { listTenants } from "../../lib/tenant-lifecycle";
 import {
   getTexTenantSupportDetail,
-  listTexBillingOverview,
   listTexEnterpriseRequests,
   listTexPlanControls,
   listTexTrialOverview,
@@ -23,7 +22,6 @@ import {
   texPlanKeys,
   texPlanStatuses,
   texWhatsappProviderScopes,
-  type TexBillingOverviewRecord,
   type TexTenantSupportDetail
 } from "../../lib/tex-admin";
 import {
@@ -73,8 +71,7 @@ export default async function SubscriptionsPage({
     overrides,
     texControls,
     texTrials,
-    enterpriseRequests,
-    texBillingOverview
+    enterpriseRequests
   ] =
     await Promise.all([
       listTenants(client),
@@ -83,8 +80,7 @@ export default async function SubscriptionsPage({
       listFeatureOverrides(client),
       listTexPlanControls(client),
       listTexTrialOverview(client),
-      listTexEnterpriseRequests(client),
-      listTexBillingOverview(client)
+      listTexEnterpriseRequests(client)
     ]).catch(() => {
       notFound();
     });
@@ -271,17 +267,6 @@ export default async function SubscriptionsPage({
                   </article>
                 ))}
               </div>
-            </section>
-
-            <section className="panel" aria-label="TEX Stripe billing visibility">
-              <div className="panel-heading">
-                <div>
-                  <p className="eyebrow">TEX</p>
-                  <h2>Stripe billing visibility</h2>
-                  <span className="panel-subtitle">Subscription state, invoice references, and webhook updates</span>
-                </div>
-              </div>
-              <BillingOverview rows={texBillingOverview} />
             </section>
 
             <section className="panel" aria-label="TEX trial tenants">
@@ -658,62 +643,6 @@ export default async function SubscriptionsPage({
   );
 }
 
-function BillingOverview({ rows }: { rows: TexBillingOverviewRecord[] }) {
-  const connected = rows.filter((row) => row.stripe_subscription_id).length;
-  const failedEvents = rows.reduce((total, row) => total + row.failed_event_count, 0);
-  const cancelling = rows.filter((row) => row.cancel_at_period_end).length;
-
-  return (
-    <div className="billing-overview">
-      <div className="metric-grid">
-        <Metric label="Stripe tenants" value={String(rows.length)} />
-        <Metric label="Connected subs" value={String(connected)} />
-        <Metric label="Cancelling" value={String(cancelling)} />
-        <Metric label="Failed events" value={String(failedEvents)} />
-      </div>
-      <div className="subscription-list">
-        {rows.length === 0 ? <p className="empty">No TEX Stripe billing activity has been recorded yet.</p> : null}
-        {rows.map((row) => (
-          <article key={row.tenant_id} className="subscription-row billing-row">
-            <div>
-              <strong>{row.tenant_name}</strong>
-              <span>{row.billing_email || "No billing email captured"}</span>
-            </div>
-            <div>
-              <strong>{label(row.stripe_status)}</strong>
-              <span>
-                {row.plan_key ? `${label(row.plan_key)} / ${row.subscription_currency.toUpperCase()}` : "No paid plan"}
-              </span>
-            </div>
-            <div>
-              <strong>{row.current_period_end ? formatDate(row.current_period_end) : "No period end"}</strong>
-              <span>{row.cancel_at_period_end ? "Cancels at period end" : "Auto-renewing or unmanaged"}</span>
-            </div>
-            <div>
-              <strong>{row.latest_invoice_id || "No invoice"}</strong>
-              <span>{row.stripe_subscription_id || "No Stripe subscription"}</span>
-            </div>
-            <div>
-              <strong>{row.latest_event_type ? label(row.latest_event_type) : "No webhook yet"}</strong>
-              <span>
-                {row.latest_event_status ? label(row.latest_event_status) : "Waiting"}
-                {row.latest_event_processed_at ? ` / ${formatDateTime(row.latest_event_processed_at)}` : ""}
-              </span>
-            </div>
-            <div>
-              <strong>{row.failed_event_count} failed</strong>
-              <span>
-                {row.processed_event_count} processed / {row.ignored_event_count} ignored
-              </span>
-            </div>
-            {row.latest_event_error ? <p className="billing-error">{row.latest_event_error}</p> : null}
-          </article>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function ProductSubscriptionGroup({
   productKey,
   subscriptions,
@@ -878,10 +807,6 @@ function label(value: string) {
 
 function formatDate(value: string) {
   return new Date(value).toISOString().slice(0, 10);
-}
-
-function formatDateTime(value: string) {
-  return new Date(value).toISOString().slice(0, 16).replace("T", " ");
 }
 
 function InviteTenantAdminForm({ tenantId, disabled }: { tenantId: string; disabled: boolean }) {
