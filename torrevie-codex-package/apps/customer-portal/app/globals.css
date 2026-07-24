@@ -458,6 +458,7 @@ a {
 }
 
 .tex-main {
+  align-content: start;
   gap: 16px;
   padding-block: 22px;
 }
