@@ -16,6 +16,7 @@ const smoke = {
   voiceChannelId: "20000000-0000-4000-8000-00000004f001",
   intakeId: "20000000-0000-4000-8000-00000005f001",
   callLogId: "20000000-0000-4000-8000-00000006f001",
+  jobId: "20000000-0000-4000-8000-00000007f001",
   email: "fsm.browser.smoke@example.test",
   password: `Torrevie-local-${randomUUID()}`
 };
@@ -23,7 +24,10 @@ const smoke = {
 const routeChecks = [
   { path: "/en/fsm", snippets: ["Command Center", "Facility Management Company", "Channel Hub"] },
   { path: "/ar/fsm", snippets: ['dir="rtl"', "Command Center", "Facility Management Company"] },
-  { path: "/en/fsm?section=jobs", snippets: ["Work Orders", "Open work orders", "Hotline intake"] },
+  {
+    path: "/en/fsm?section=jobs",
+    snippets: ["Work Orders", "Smoke lobby work order", "Update status"]
+  },
   { path: "/en/fsm?section=scheduling", snippets: ["Scheduling", "Schedule board"] },
   { path: "/en/fsm?section=dispatch", snippets: ["Scheduling and Dispatch", "Dispatch board"] },
   { path: "/en/fsm?section=pm", snippets: ["PPM Planner", "Planned maintenance"] },
@@ -393,6 +397,7 @@ async function seedFsmWorkspace() {
       [smoke.tenantId, smoke.userId]
     );
     await seedChannelHub(client);
+    await seedJobs(client);
     await client.query("commit");
   } catch (error) {
     await client.query("rollback");
@@ -486,6 +491,57 @@ async function seedChannelHub(client) {
         updated_by = excluded.updated_by
     `,
     [smoke.callLogId, smoke.tenantId, smoke.voiceChannelId, smoke.intakeId, smoke.userId]
+  );
+}
+
+async function seedJobs(client) {
+  await client.query(
+    `
+      insert into public.fsm_jobs (
+        id,
+        tenant_id,
+        job_number,
+        title,
+        description,
+        status,
+        urgency,
+        site_text,
+        source_channel,
+        intake_request_id,
+        assigned_user_id,
+        scheduled_for,
+        created_by,
+        updated_by
+      )
+      values (
+        $1,
+        $2,
+        'FSM-20260724-0001',
+        'Smoke lobby work order',
+        'Browser smoke seeded work order.',
+        'assigned',
+        'high',
+        'Main lobby',
+        'whatsapp',
+        $3,
+        $4,
+        now() + interval '2 hours',
+        $4,
+        $4
+      )
+      on conflict (tenant_id, job_number) do update set
+        title = excluded.title,
+        description = excluded.description,
+        status = excluded.status,
+        urgency = excluded.urgency,
+        site_text = excluded.site_text,
+        source_channel = excluded.source_channel,
+        intake_request_id = excluded.intake_request_id,
+        assigned_user_id = excluded.assigned_user_id,
+        scheduled_for = excluded.scheduled_for,
+        updated_by = excluded.updated_by
+    `,
+    [smoke.jobId, smoke.tenantId, smoke.intakeId, smoke.userId]
   );
 }
 
