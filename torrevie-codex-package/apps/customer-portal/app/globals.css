@@ -3117,6 +3117,7 @@ form.member-row {
 }
 
 .tex-form-grid {
+  align-items: start;
   display: grid;
   gap: 9px 10px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4686,6 +4687,28 @@ form.member-row {
 
 .tex-checkbox-group .tex-toggle-label input {
   order: 2;
+}
+
+.tex-team-drawer {
+  align-content: start;
+}
+
+.tex-team-form-grid {
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.tex-team-members {
+  gap: 6px;
+  padding: 12px;
+}
+
+.tex-team-members .tex-toggle-label {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-block-size: 40px;
+  padding-inline: 12px;
 }
 
 .tex-budget-admin-row {

@@ -412,7 +412,7 @@ export function TexPeopleClient({
       {isTeamDrawerOpen ? (
         <div className="tex-drawer-backdrop" role="presentation" onMouseDown={closeTeamDrawer}>
           <aside
-            className="tex-drawer"
+            className="tex-drawer tex-team-drawer"
             aria-labelledby="tex-team-form-title"
             aria-modal="true"
             role="dialog"
@@ -430,7 +430,7 @@ export function TexPeopleClient({
               </button>
             </div>
 
-            <div className="tex-form-grid">
+            <div className="tex-form-grid tex-team-form-grid">
               <label>
                 Team name
                 <input
@@ -466,7 +466,7 @@ export function TexPeopleClient({
                   ))}
                 </select>
               </label>
-              <fieldset className="tex-checkbox-group">
+              <fieldset className="tex-checkbox-group tex-team-members">
                 <legend>Members</legend>
                 {activeEmployeeOptions.length ? (
                   activeEmployeeOptions.map((employee) => (
