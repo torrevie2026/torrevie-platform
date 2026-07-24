@@ -14,7 +14,7 @@ import {
 } from "./support-access";
 
 export type VerifiedCustomerSession = {
-  accessToken: string;
+  accessToken: string | null;
   userId: string;
   email: string | null;
   supportAccess?: SupportAccessSession;
@@ -64,27 +64,16 @@ export async function requireVerifiedCustomerSession(): Promise<VerifiedCustomer
     }
   });
   const {
-    data: { session }
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    throw new CustomerSessionError(
-      "Authentication is required for customer portal access.",
-      "unauthorized"
-    );
-  }
-
-  const {
     data: { user },
     error
   } = await supabase.auth.getUser();
 
-  if (error || !user || user.id !== session.user.id) {
+  if (error || !user) {
     throw new CustomerSessionError("Unable to verify the customer portal session.", "unauthorized");
   }
 
   return {
-    accessToken: session.access_token,
+    accessToken: null,
     userId: user.id,
     email: user.email ?? null
   };
@@ -98,7 +87,7 @@ export async function resolveCustomerTenantContext(
     return supportAccessTenantContext(session.supportAccess);
   }
 
-  const claims = getTenantClaimsFromJwt(session.accessToken);
+  const claims = session.accessToken ? getTenantClaimsFromJwt(session.accessToken) : {};
 
   if (claims.tenant_id) {
     return {
@@ -115,7 +104,7 @@ export async function resolveCustomerAccountTenantContext(
   client: TenantQueryClient,
   session: VerifiedCustomerSession
 ): Promise<ResolvedTenantContext> {
-  const claims = getTenantClaimsFromJwt(session.accessToken);
+  const claims = session.accessToken ? getTenantClaimsFromJwt(session.accessToken) : {};
 
   if (claims.tenant_id) {
     return {

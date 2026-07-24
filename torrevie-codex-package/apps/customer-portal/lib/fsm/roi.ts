@@ -1,4 +1,8 @@
-import { withTenantContext, type ResolvedTenantContext, type TenantQueryClient } from "@torrevie/tenant-context";
+import {
+  withTenantContext,
+  type ResolvedTenantContext,
+  type TenantQueryClient
+} from "@torrevie/tenant-context";
 
 export type FsmRoiDashboard = {
   periodLabel: string;
@@ -53,9 +57,8 @@ export async function listFsmRoiDashboard(
   }
 ): Promise<FsmRoiDashboard> {
   return withTenantContext(client, context, async () => {
-    const [aggregates, channelBreakdown] = await Promise.all([
-      client.query<IntakeAggregateRow>(
-        `
+    const aggregates = await client.query<IntakeAggregateRow>(
+      `
           select
             count(*)::int as captured_requests,
             count(*) filter (
@@ -76,9 +79,9 @@ export async function listFsmRoiDashboard(
           where tenant_id = public.current_tenant_id()
             and created_at >= date_trunc('month', now())
         `
-      ),
-      client.query<ChannelBreakdownRow>(
-        `
+    );
+    const channelBreakdown = await client.query<ChannelBreakdownRow>(
+      `
           select channel_type::text, count(*)::int as count
           from public.intake_requests
           where tenant_id = public.current_tenant_id()
@@ -86,18 +89,24 @@ export async function listFsmRoiDashboard(
           group by channel_type
           order by channel_type
         `
-      )
-    ]);
+    );
     const row = aggregates.rows[0];
     const capturedRequestsThisMonth = row?.captured_requests ?? 0;
-    const adminMinutesSavedPerRequest = readPositiveNumber(input.baselineMetrics["adminMinutesSavedPerRequest"], 20);
-    const averageResponseMinutes = row?.average_response_minutes !== null && row?.average_response_minutes !== undefined
-      ? Math.round(row.average_response_minutes)
-      : null;
-    const responseBaselineHours = readOptionalNumber(input.baselineMetrics["averageResponseHoursToday"]);
-    const responseDeltaMinutes = responseBaselineHours !== null && averageResponseMinutes !== null
-      ? Math.round(responseBaselineHours * 60 - averageResponseMinutes)
-      : null;
+    const adminMinutesSavedPerRequest = readPositiveNumber(
+      input.baselineMetrics["adminMinutesSavedPerRequest"],
+      20
+    );
+    const averageResponseMinutes =
+      row?.average_response_minutes !== null && row?.average_response_minutes !== undefined
+        ? Math.round(row.average_response_minutes)
+        : null;
+    const responseBaselineHours = readOptionalNumber(
+      input.baselineMetrics["averageResponseHoursToday"]
+    );
+    const responseDeltaMinutes =
+      responseBaselineHours !== null && averageResponseMinutes !== null
+        ? Math.round(responseBaselineHours * 60 - averageResponseMinutes)
+        : null;
     const dashboard: FsmRoiDashboard = {
       periodLabel: "This month",
       completedRequestsThisWeek: row?.completed_requests_this_week ?? 0,
@@ -111,7 +120,10 @@ export async function listFsmRoiDashboard(
       afterHoursCaptured: row?.after_hours_captured ?? 0,
       adminMinutesSavedPerRequest,
       adminHoursSaved: roundOne((capturedRequestsThisMonth * adminMinutesSavedPerRequest) / 60),
-      channelBreakdown: channelBreakdown.rows.map((item) => ({ channelType: item.channel_type, count: item.count })),
+      channelBreakdown: channelBreakdown.rows.map((item) => ({
+        channelType: item.channel_type,
+        count: item.count
+      })),
       monthlyValueEmail: buildMonthlyValueEmail({
         tenantName: input.tenantName,
         capturedRequestsThisMonth,
@@ -186,7 +198,10 @@ export function buildMonthlyValueEmail(input: {
   afterHoursCaptured: number;
   averageResponseMinutes: number | null;
 }): MonthlyValueEmail {
-  const responseText = input.averageResponseMinutes === null ? "Response time will appear after triage activity." : `Average response time is ${input.averageResponseMinutes} minutes.`;
+  const responseText =
+    input.averageResponseMinutes === null
+      ? "Response time will appear after triage activity."
+      : `Average response time is ${input.averageResponseMinutes} minutes.`;
 
   return {
     subject: `Torrevie FSM monthly value summary for ${input.tenantName}`,
@@ -202,13 +217,18 @@ export function buildMonthlyValueEmail(input: {
   };
 }
 
-export function buildClientReportPackSummary(input: { tenantName: string; enabledFeatures: string[] }): ClientReportPackSummary {
+export function buildClientReportPackSummary(input: {
+  tenantName: string;
+  enabledFeatures: string[];
+}): ClientReportPackSummary {
   const available = input.enabledFeatures.includes("fsm.client_report_packs.enabled");
 
   return {
     title: `${input.tenantName} monthly client report pack`,
     available,
-    footer: fsmDocumentFooter(available && input.enabledFeatures.includes("fsm.white_label.portal.enabled")),
+    footer: fsmDocumentFooter(
+      available && input.enabledFeatures.includes("fsm.white_label.portal.enabled")
+    ),
     sections: ["Jobs and requests", "SLA performance", "Inspection activity", "Photo annex"]
   };
 }
