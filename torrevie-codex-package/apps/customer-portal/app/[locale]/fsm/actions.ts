@@ -4,7 +4,17 @@ import { isLocale } from "@torrevie/localization";
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import { buildOnboardingInput, saveFsmOnboarding } from "../../../lib/fsm";
-import { createManualIntakeRequest, requestVoiceChannelSetup, type ChannelType } from "../../../lib/fsm/channels";
+import {
+  createManualIntakeRequest,
+  requestVoiceChannelSetup,
+  type ChannelType
+} from "../../../lib/fsm/channels";
+import {
+  buildFsmJobInput,
+  buildFsmJobStatusInput,
+  createFsmJob,
+  updateFsmJobStatus
+} from "../../../lib/fsm/jobs";
 import { normalizeBusinessSegment } from "../../../config/fsmSegments";
 import { buildFsmRoiSettingsInput, saveFsmRoiSettings } from "../../../lib/fsm/roi";
 import { normalizeVoiceSetupInput } from "../../../lib/fsm/voice";
@@ -85,6 +95,70 @@ export async function createManualIntakeRequestAction(formData: FormData) {
 
   revalidatePath(`/${locale}/fsm`);
   redirect(`/${locale}/fsm?section=channels&intake=created`);
+}
+
+export async function createFsmJobAction(formData: FormData) {
+  const locale = stringValue(formData, "locale");
+
+  if (!isLocale(locale)) {
+    notFound();
+  }
+
+  const session = await requireVerifiedCustomerSession();
+  const client = new PostgresTenantQueryClient(session.userId);
+  const tenantContext = await resolveCustomerTenantContext(client, session);
+  const requirements = await getCustomerAccessRequirements(client, tenantContext);
+
+  if (requirements.requireProfileCompletion && !requirements.profileComplete) {
+    redirect(`/${locale}/account?profile=required`);
+  }
+
+  await createFsmJob(
+    client,
+    tenantContext,
+    buildFsmJobInput({
+      title: stringValue(formData, "title"),
+      description: stringValue(formData, "description"),
+      urgency: stringValue(formData, "urgency"),
+      accountId: stringValue(formData, "accountId"),
+      siteText: stringValue(formData, "siteText"),
+      assignedUserId: stringValue(formData, "assignedUserId"),
+      scheduledFor: stringValue(formData, "scheduledFor")
+    })
+  );
+
+  revalidatePath(`/${locale}/fsm`);
+  redirect(`/${locale}/fsm?section=jobs&job=created`);
+}
+
+export async function updateFsmJobStatusAction(formData: FormData) {
+  const locale = stringValue(formData, "locale");
+
+  if (!isLocale(locale)) {
+    notFound();
+  }
+
+  const session = await requireVerifiedCustomerSession();
+  const client = new PostgresTenantQueryClient(session.userId);
+  const tenantContext = await resolveCustomerTenantContext(client, session);
+  const requirements = await getCustomerAccessRequirements(client, tenantContext);
+
+  if (requirements.requireProfileCompletion && !requirements.profileComplete) {
+    redirect(`/${locale}/account?profile=required`);
+  }
+
+  await updateFsmJobStatus(
+    client,
+    tenantContext,
+    buildFsmJobStatusInput({
+      jobId: stringValue(formData, "jobId"),
+      status: stringValue(formData, "status"),
+      note: stringValue(formData, "note")
+    })
+  );
+
+  revalidatePath(`/${locale}/fsm`);
+  redirect(`/${locale}/fsm?section=jobs&job=status`);
 }
 
 export async function requestVoiceChannelSetupAction(formData: FormData) {

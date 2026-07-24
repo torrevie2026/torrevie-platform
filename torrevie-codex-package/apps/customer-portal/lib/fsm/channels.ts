@@ -1,5 +1,14 @@
-import { withTenantContext, type ResolvedTenantContext, type TenantQueryClient } from "@torrevie/tenant-context";
-import { buildVoiceProvisioningPlan, summarizeVoiceUsage, type VoiceSetupInput, type VoiceSetupPath } from "./voice";
+import {
+  withTenantContext,
+  type ResolvedTenantContext,
+  type TenantQueryClient
+} from "@torrevie/tenant-context";
+import {
+  buildVoiceProvisioningPlan,
+  summarizeVoiceUsage,
+  type VoiceSetupInput,
+  type VoiceSetupPath
+} from "./voice";
 
 export type ChannelType = "whatsapp" | "voice" | "email" | "portal";
 export type ChannelStatus = "active" | "pending" | "suspended";
@@ -55,7 +64,11 @@ export type WhatsAppProvider = {
   verifyWebhook(payload: unknown): Promise<boolean>;
   parseInbound(payload: unknown): Promise<Record<string, unknown>>;
   sendText(input: { to: string; text: string }): Promise<void>;
-  sendTemplate(input: { to: string; template: string; variables?: Record<string, string> }): Promise<void>;
+  sendTemplate(input: {
+    to: string;
+    template: string;
+    variables?: Record<string, string>;
+  }): Promise<void>;
   sendMedia(input: { to: string; mediaUrl: string; caption?: string }): Promise<void>;
 };
 
@@ -116,43 +129,41 @@ export async function listChannelHubSnapshot(
   context: ResolvedTenantContext
 ): Promise<ChannelHubSnapshot> {
   return withTenantContext(client, context, async () => {
-    const [channels, intakeRequests, callLogs, voiceUsage] = await Promise.all([
-      client.query<ChannelRow>(
-        `
+    const channels = await client.query<ChannelRow>(
+      `
           select id, channel_type, provider, display_name, config, status, created_at
           from public.org_channels
           where tenant_id = public.current_tenant_id()
           order by created_at desc
           limit 20
         `
-      ),
-      client.query<IntakeRow>(
-        `
+    );
+    const intakeRequests = await client.query<IntakeRow>(
+      `
           select id, channel_type, external_ref, contact_name, contact_phone, contact_email, ai_summary, status, created_at
           from public.intake_requests
           where tenant_id = public.current_tenant_id()
           order by created_at desc
           limit 30
         `
-      ),
-      client.query<CallLogRow>(
-        `
+    );
+    const callLogs = await client.query<CallLogRow>(
+      `
           select id, direction, from_number, to_number, duration_seconds, outcome, started_at
           from public.call_logs
           where tenant_id = public.current_tenant_id()
           order by started_at desc
           limit 10
         `
-      ),
-      client.query<VoiceUsageRow>(
-        `
+    );
+    const voiceUsage = await client.query<VoiceUsageRow>(
+      `
           select coalesce(sum(duration_seconds), 0)::int as duration_seconds
           from public.call_logs
           where tenant_id = public.current_tenant_id()
             and started_at >= date_trunc('month', now())
         `
-      )
-    ]);
+    );
     const voiceChannel = channels.rows.find((channel) => channel.channel_type === "voice");
     const monthlyMinuteCap = readNumber(voiceChannel?.config?.["monthlyMinuteCap"], 500);
 
@@ -226,7 +237,10 @@ export async function createManualIntakeRequest(
 export async function requestVoiceChannelSetup(
   client: TenantQueryClient,
   context: ResolvedTenantContext,
-  input: VoiceSetupInput & { tenantName: string; segment: "SOLO" | "TRADE" | "FM" | "COMMUNITY" | "OEM" }
+  input: VoiceSetupInput & {
+    tenantName: string;
+    segment: "SOLO" | "TRADE" | "FM" | "COMMUNITY" | "OEM";
+  }
 ) {
   return withTenantContext(client, context, async () => {
     await assertVoiceEntitled(client);

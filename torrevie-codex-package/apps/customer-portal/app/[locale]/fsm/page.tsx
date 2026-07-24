@@ -1,7 +1,12 @@
 import { dirForLocale, isLocale, type Locale } from "@torrevie/localization";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { businessSegments, fsmPlanTiers, segmentLabels, suggestedPlanForSegment } from "../../../config/fsmSegments";
+import {
+  businessSegments,
+  fsmPlanTiers,
+  segmentLabels,
+  suggestedPlanForSegment
+} from "../../../config/fsmSegments";
 import { term } from "../../../config/terminology";
 import {
   getCustomerAccessRequirements,
@@ -13,9 +18,23 @@ import {
 import { PostgresTenantQueryClient } from "../../../lib/server/tenant-query-client";
 import { resolveFsmWorkspace, type FsmWorkspace } from "../../../lib/fsm";
 import { listChannelHubSnapshot, type ChannelHubSnapshot } from "../../../lib/fsm/channels";
+import {
+  fsmJobStatuses,
+  fsmUrgencyLevels,
+  listFsmJobsWorkspace,
+  type FsmJob,
+  type FsmJobsWorkspace as FsmJobsWorkspaceData
+} from "../../../lib/fsm/jobs";
 import { listFsmRoiDashboard, type FsmRoiDashboard } from "../../../lib/fsm/roi";
 import { CustomerSessionActions } from "../CustomerSessionActions";
-import { createManualIntakeRequestAction, requestVoiceChannelSetupAction, saveFsmOnboardingAction, saveFsmRoiSettingsAction } from "./actions";
+import {
+  createFsmJobAction,
+  createManualIntakeRequestAction,
+  requestVoiceChannelSetupAction,
+  saveFsmOnboardingAction,
+  saveFsmRoiSettingsAction,
+  updateFsmJobStatusAction
+} from "./actions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +58,14 @@ export default async function FsmPage({
   searchParams
 }: {
   params: Promise<{ locale: string }>;
-  searchParams?: Promise<{ section?: string; saved?: string; intake?: string; voice?: string; roi?: string }>;
+  searchParams?: Promise<{
+    section?: string;
+    saved?: string;
+    intake?: string;
+    voice?: string;
+    roi?: string;
+    job?: string;
+  }>;
 }) {
   const { locale: rawLocale } = await params;
   const resolvedSearchParams = await searchParams;
@@ -79,14 +105,27 @@ export default async function FsmPage({
     }
 
     const workspace = await resolveFsmWorkspace(client, tenantContext, locale);
-    const channelHub = section === "channels" ? await listChannelHubSnapshot(client, tenantContext) : null;
-    const roiDashboard = section === "reports" ? await listFsmRoiDashboard(client, tenantContext, workspace) : null;
+    const channelHub =
+      section === "channels" ? await listChannelHubSnapshot(client, tenantContext) : null;
+    const roiDashboard =
+      section === "reports" ? await listFsmRoiDashboard(client, tenantContext, workspace) : null;
+    const jobsWorkspace =
+      section === "jobs" ? await listFsmJobsWorkspace(client, tenantContext) : null;
 
     return (
-      <main className="customer-shell fsm-shell" data-visual-check="fsm-module-shell" lang={locale} dir={dirForLocale(locale)}>
+      <main
+        className="customer-shell fsm-shell"
+        data-visual-check="fsm-module-shell"
+        lang={locale}
+        dir={dirForLocale(locale)}
+      >
         <aside className="customer-sidebar fsm-sidebar" aria-label="Torrevie FSM sections">
           <div className="fsm-sidebar-header">
-            <a className="customer-brand fsm-brand" href={`/${locale}/fsm`} aria-label="Torrevie FSM">
+            <a
+              className="customer-brand fsm-brand"
+              href={`/${locale}/fsm`}
+              aria-label="Torrevie FSM"
+            >
               <img src="/logo/torrevie_logo_color.png" alt="" width="36" height="36" />
               <span>
                 <strong>Torrevie FSM</strong>
@@ -96,11 +135,18 @@ export default async function FsmPage({
           </div>
           <nav className="fsm-nav">
             {workspace.navItems.map((item) => (
-              <a key={item.key} href={`/${locale}${item.href}`} aria-current={isActiveNav(item.href, section) ? "page" : undefined}>
+              <a
+                key={item.key}
+                href={`/${locale}${item.href}`}
+                aria-current={isActiveNav(item.href, section) ? "page" : undefined}
+              >
                 {item.termKey ? term(workspace.segment, locale, item.termKey) : item.label}
               </a>
             ))}
-            <a href={`/${locale}/fsm?section=onboarding`} aria-current={section === "onboarding" ? "page" : undefined}>
+            <a
+              href={`/${locale}/fsm?section=onboarding`}
+              aria-current={section === "onboarding" ? "page" : undefined}
+            >
               Onboarding
             </a>
           </nav>
@@ -112,7 +158,9 @@ export default async function FsmPage({
             <div>
               <p className="eyebrow">Torrevie FSM</p>
               <h1>{sectionTitle(section, workspace, locale)}</h1>
-              <p>{workspace.segmentLabel}. {workspace.planTier} plan.</p>
+              <p>
+                {workspace.segmentLabel}. {workspace.planTier} plan.
+              </p>
             </div>
             <div className="customer-context" aria-label="Session context">
               <span>Segment: {workspace.segment}</span>
@@ -123,15 +171,31 @@ export default async function FsmPage({
             </div>
           </header>
 
-          {resolvedSearchParams?.saved === "1" ? <p className="tex-notice">FSM onboarding settings saved.</p> : null}
-          {resolvedSearchParams?.intake === "created" ? <p className="tex-notice">Intake request created.</p> : null}
-          {resolvedSearchParams?.voice === "requested" ? <p className="tex-notice">Voice setup request created.</p> : null}
-          {resolvedSearchParams?.roi === "saved" ? <p className="tex-notice">ROI settings saved.</p> : null}
+          {resolvedSearchParams?.saved === "1" ? (
+            <p className="tex-notice">FSM onboarding settings saved.</p>
+          ) : null}
+          {resolvedSearchParams?.intake === "created" ? (
+            <p className="tex-notice">Intake request created.</p>
+          ) : null}
+          {resolvedSearchParams?.voice === "requested" ? (
+            <p className="tex-notice">Voice setup request created.</p>
+          ) : null}
+          {resolvedSearchParams?.roi === "saved" ? (
+            <p className="tex-notice">ROI settings saved.</p>
+          ) : null}
+          {resolvedSearchParams?.job === "created" ? (
+            <p className="tex-notice">FSM job created.</p>
+          ) : null}
+          {resolvedSearchParams?.job === "status" ? (
+            <p className="tex-notice">FSM job status updated.</p>
+          ) : null}
 
           {section === "dashboard" ? (
             <FsmDashboard workspace={workspace} locale={locale} />
           ) : section === "onboarding" ? (
             <FsmOnboarding workspace={workspace} locale={locale} />
+          ) : section === "jobs" ? (
+            <FsmJobsWorkspace data={jobsWorkspace} workspace={workspace} locale={locale} />
           ) : section === "channels" ? (
             <ChannelHub snapshot={channelHub} workspace={workspace} locale={locale} />
           ) : section === "reports" ? (
@@ -151,7 +215,15 @@ export default async function FsmPage({
   }
 }
 
-function FsmSectionWorkspace({ section, workspace, locale }: { section: FsmSection; workspace: FsmWorkspace; locale: Locale }) {
+function FsmSectionWorkspace({
+  section,
+  workspace,
+  locale
+}: {
+  section: FsmSection;
+  workspace: FsmWorkspace;
+  locale: Locale;
+}) {
   const content = sectionContent(section, workspace, locale);
 
   return (
@@ -176,26 +248,174 @@ function FsmSectionWorkspace({ section, workspace, locale }: { section: FsmSecti
   );
 }
 
-function RoiDashboard({ dashboard, workspace, locale }: { dashboard: FsmRoiDashboard | null; workspace: FsmWorkspace; locale: Locale }) {
-  const data =
-    dashboard ??
-    {
-      periodLabel: "This month",
-      completedRequestsThisWeek: 0,
-      capturedRequestsThisMonth: 0,
-      averageResponseMinutes: null,
-      responseBaselineHours: null,
-      responseDeltaMinutes: null,
-      firstTimeFixRate: null,
-      slaComplianceRate: null,
-      revenueInvoiced: 0,
-      afterHoursCaptured: 0,
-      adminMinutesSavedPerRequest: 20,
-      adminHoursSaved: 0,
-      channelBreakdown: [],
-      monthlyValueEmail: { subject: "", previewText: "", bodyText: "" },
-      clientReportPack: { title: "", available: false, footer: "", sections: [] }
-    };
+function FsmJobsWorkspace({
+  data,
+  workspace,
+  locale
+}: {
+  data: FsmJobsWorkspaceData | null;
+  workspace: FsmWorkspace;
+  locale: Locale;
+}) {
+  const jobs = data?.jobs ?? [];
+  const jobTerm = term(workspace.segment, locale, "job");
+  const jobsTerm = term(workspace.segment, locale, "jobs");
+  const customerTerm = term(workspace.segment, locale, "customer");
+  const siteTerm = term(workspace.segment, locale, "site");
+  const technicianTerm = term(workspace.segment, locale, "technician");
+
+  return (
+    <section className="fsm-workspace-grid" aria-label={jobsTerm}>
+      <article className="fsm-panel">
+        <div className="section-heading-row">
+          <h2>Open {jobsTerm.toLowerCase()}</h2>
+          <span className="module-status module-status-active">{jobs.length}</span>
+        </div>
+        {jobs.length === 0 ? (
+          <p className="empty">No {jobsTerm.toLowerCase()} are open.</p>
+        ) : (
+          <div className="fsm-intake-list">
+            {jobs.map((job) => (
+              <FsmJobCard key={job.id} job={job} locale={locale} />
+            ))}
+          </div>
+        )}
+      </article>
+
+      <aside className="fsm-panel">
+        <h2>Create {jobTerm.toLowerCase()}</h2>
+        <form action={createFsmJobAction} className="fsm-channel-form">
+          <input type="hidden" name="locale" value={locale} />
+          <label>
+            Title
+            <input name="title" placeholder={`${jobTerm} title`} required maxLength={120} />
+          </label>
+          <label>
+            Description
+            <textarea
+              name="description"
+              placeholder="What needs to be done"
+              rows={3}
+              maxLength={1000}
+            />
+          </label>
+          <label>
+            Urgency
+            <select name="urgency" defaultValue="medium">
+              {fsmUrgencyLevels.map((urgency) => (
+                <option key={urgency} value={urgency}>
+                  {formatLabel(urgency)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {customerTerm}
+            <select name="accountId" defaultValue="">
+              <option value="">No {customerTerm.toLowerCase()} selected</option>
+              {(data?.accounts ?? []).map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {siteTerm}
+            <input name="siteText" placeholder={`${siteTerm} or access note`} maxLength={180} />
+          </label>
+          <label>
+            {technicianTerm}
+            <select name="assignedUserId" defaultValue="">
+              <option value="">Unassigned</option>
+              {(data?.technicians ?? []).map((technician) => (
+                <option key={technician.id} value={technician.id}>
+                  {technician.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Scheduled for
+            <input name="scheduledFor" type="datetime-local" />
+          </label>
+          <button type="submit" className="tex-primary-button">
+            Create {jobTerm.toLowerCase()}
+          </button>
+        </form>
+      </aside>
+    </section>
+  );
+}
+
+function FsmJobCard({ job, locale }: { job: FsmJob; locale: Locale }) {
+  return (
+    <article className="fsm-intake-card">
+      <header>
+        <span>{job.jobNumber}</span>
+        <strong>{job.title}</strong>
+      </header>
+      <p>{job.description || "No description provided."}</p>
+      <footer>
+        <span>Status: {formatLabel(job.status)}</span>
+        <span>Urgency: {formatLabel(job.urgency)}</span>
+        <span>{job.accountName ?? "No customer"}</span>
+        <span>{job.assignedName ?? "Unassigned"}</span>
+        {job.scheduledFor ? (
+          <span>Scheduled: {formatDateTime(job.scheduledFor, locale)}</span>
+        ) : null}
+      </footer>
+      <form action={updateFsmJobStatusAction} className="fsm-channel-form">
+        <input type="hidden" name="locale" value={locale} />
+        <input type="hidden" name="jobId" value={job.id} />
+        <label>
+          New status
+          <select name="status" defaultValue={job.status}>
+            {fsmJobStatuses.map((status) => (
+              <option key={status} value={status}>
+                {formatLabel(status)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Note
+          <input name="note" placeholder="Optional status note" maxLength={500} />
+        </label>
+        <button type="submit" className="tex-secondary-button">
+          Update status
+        </button>
+      </form>
+    </article>
+  );
+}
+
+function RoiDashboard({
+  dashboard,
+  workspace,
+  locale
+}: {
+  dashboard: FsmRoiDashboard | null;
+  workspace: FsmWorkspace;
+  locale: Locale;
+}) {
+  const data = dashboard ?? {
+    periodLabel: "This month",
+    completedRequestsThisWeek: 0,
+    capturedRequestsThisMonth: 0,
+    averageResponseMinutes: null,
+    responseBaselineHours: null,
+    responseDeltaMinutes: null,
+    firstTimeFixRate: null,
+    slaComplianceRate: null,
+    revenueInvoiced: 0,
+    afterHoursCaptured: 0,
+    adminMinutesSavedPerRequest: 20,
+    adminHoursSaved: 0,
+    channelBreakdown: [],
+    monthlyValueEmail: { subject: "", previewText: "", bodyText: "" },
+    clientReportPack: { title: "", available: false, footer: "", sections: [] }
+  };
 
   return (
     <>
@@ -209,28 +429,68 @@ function RoiDashboard({ dashboard, workspace, locale }: { dashboard: FsmRoiDashb
       </section>
 
       <section className="fsm-widget-grid" aria-label="ROI metrics">
-        <RoiMetric label="Requests captured" value={formatNumber(data.capturedRequestsThisMonth, locale)} detail="From all intake channels" />
-        <RoiMetric label="Completed this week" value={formatNumber(data.completedRequestsThisWeek, locale)} detail="Converted or closed requests" />
-        <RoiMetric label="Average response" value={formatMinutes(data.averageResponseMinutes, locale)} detail={responseDetail(data.responseDeltaMinutes, locale)} />
-        <RoiMetric label="After-hours capture" value={formatNumber(data.afterHoursCaptured, locale)} detail="WhatsApp and voice" />
-        <RoiMetric label="Revenue invoiced" value={`AED ${formatNumber(data.revenueInvoiced, locale)}`} detail="Pending FSM invoices" />
-        <RoiMetric label="First-time fix" value={formatPercent(data.firstTimeFixRate, locale)} detail="Pending FSM jobs" />
-        <RoiMetric label="SLA compliance" value={formatPercent(data.slaComplianceRate, locale)} detail="Pending SLA records" />
-        <RoiMetric label="Admin time saved" value={formatHours(data.adminHoursSaved, locale)} detail={`${data.adminMinutesSavedPerRequest} minutes per request`} />
+        <RoiMetric
+          label="Requests captured"
+          value={formatNumber(data.capturedRequestsThisMonth, locale)}
+          detail="From all intake channels"
+        />
+        <RoiMetric
+          label="Completed this week"
+          value={formatNumber(data.completedRequestsThisWeek, locale)}
+          detail="Converted or closed requests"
+        />
+        <RoiMetric
+          label="Average response"
+          value={formatMinutes(data.averageResponseMinutes, locale)}
+          detail={responseDetail(data.responseDeltaMinutes, locale)}
+        />
+        <RoiMetric
+          label="After-hours capture"
+          value={formatNumber(data.afterHoursCaptured, locale)}
+          detail="WhatsApp and voice"
+        />
+        <RoiMetric
+          label="Revenue invoiced"
+          value={`AED ${formatNumber(data.revenueInvoiced, locale)}`}
+          detail="Pending FSM invoices"
+        />
+        <RoiMetric
+          label="First-time fix"
+          value={formatPercent(data.firstTimeFixRate, locale)}
+          detail="Pending FSM jobs"
+        />
+        <RoiMetric
+          label="SLA compliance"
+          value={formatPercent(data.slaComplianceRate, locale)}
+          detail="Pending SLA records"
+        />
+        <RoiMetric
+          label="Admin time saved"
+          value={formatHours(data.adminHoursSaved, locale)}
+          detail={`${data.adminMinutesSavedPerRequest} minutes per request`}
+        />
       </section>
 
       <section className="fsm-workspace-grid" aria-label="ROI supporting data">
         <article className="fsm-panel">
           <div className="section-heading-row">
             <h2>Channel capture</h2>
-            <span className="module-status module-status-active">{data.channelBreakdown.length} channels</span>
+            <span className="module-status module-status-active">
+              {data.channelBreakdown.length} channels
+            </span>
           </div>
           <div className="fsm-roi-bars">
-            {data.channelBreakdown.length === 0 ? <p className="empty">No captured requests yet.</p> : null}
+            {data.channelBreakdown.length === 0 ? (
+              <p className="empty">No captured requests yet.</p>
+            ) : null}
             {data.channelBreakdown.map((item) => (
               <div key={item.channelType}>
                 <span>{item.channelType}</span>
-                <meter min="0" max={Math.max(...data.channelBreakdown.map((channel) => channel.count), 1)} value={item.count} />
+                <meter
+                  min="0"
+                  max={Math.max(...data.channelBreakdown.map((channel) => channel.count), 1)}
+                  value={item.count}
+                />
                 <strong>{formatNumber(item.count, locale)}</strong>
               </div>
             ))}
@@ -243,7 +503,12 @@ function RoiDashboard({ dashboard, workspace, locale }: { dashboard: FsmRoiDashb
             <input type="hidden" name="locale" value={locale} />
             <label>
               Jobs per month baseline
-              <input name="jobsPerMonthToday" type="number" min="0" defaultValue={readString(workspace.baselineMetrics["jobsPerMonthToday"], "")} />
+              <input
+                name="jobsPerMonthToday"
+                type="number"
+                min="0"
+                defaultValue={readString(workspace.baselineMetrics["jobsPerMonthToday"], "")}
+              />
             </label>
             <label>
               Response baseline, hours
@@ -252,14 +517,24 @@ function RoiDashboard({ dashboard, workspace, locale }: { dashboard: FsmRoiDashb
                 type="number"
                 min="0"
                 step="0.5"
-                defaultValue={readString(workspace.baselineMetrics["averageResponseHoursToday"], "")}
+                defaultValue={readString(
+                  workspace.baselineMetrics["averageResponseHoursToday"],
+                  ""
+                )}
               />
             </label>
             <label>
               Minutes saved per request
-              <input name="adminMinutesSavedPerRequest" type="number" min="1" defaultValue={data.adminMinutesSavedPerRequest} />
+              <input
+                name="adminMinutesSavedPerRequest"
+                type="number"
+                min="1"
+                defaultValue={data.adminMinutesSavedPerRequest}
+              />
             </label>
-            <button type="submit" className="tex-primary-button">Save ROI settings</button>
+            <button type="submit" className="tex-primary-button">
+              Save ROI settings
+            </button>
           </form>
         </aside>
       </section>
@@ -276,13 +551,19 @@ function RoiDashboard({ dashboard, workspace, locale }: { dashboard: FsmRoiDashb
 
         <aside className="fsm-panel">
           <h2>Client report pack</h2>
-          <p className="empty">{data.clientReportPack.available ? "Enterprise report pack is available." : "Enterprise report pack is locked."}</p>
+          <p className="empty">
+            {data.clientReportPack.available
+              ? "Enterprise report pack is available."
+              : "Enterprise report pack is locked."}
+          </p>
           <ul className="fsm-flow-list">
             {data.clientReportPack.sections.map((section) => (
               <li key={section}>{section}</li>
             ))}
           </ul>
-          {data.clientReportPack.footer ? <p className="fsm-document-footer">{data.clientReportPack.footer}</p> : null}
+          {data.clientReportPack.footer ? (
+            <p className="fsm-document-footer">{data.clientReportPack.footer}</p>
+          ) : null}
         </aside>
       </section>
     </>
@@ -299,12 +580,25 @@ function RoiMetric({ label, value, detail }: { label: string; value: string; det
   );
 }
 
-function ChannelHub({ snapshot, workspace, locale }: { snapshot: ChannelHubSnapshot | null; workspace: FsmWorkspace; locale: Locale }) {
+function ChannelHub({
+  snapshot,
+  workspace,
+  locale
+}: {
+  snapshot: ChannelHubSnapshot | null;
+  workspace: FsmWorkspace;
+  locale: Locale;
+}) {
   const data = snapshot ?? {
     channels: [],
     intakeRequests: [],
     callLogs: [],
-    voiceUsage: { monthlyMinuteCap: 500, minutesUsed: 0, warningAtMinutes: 400, warningReached: false }
+    voiceUsage: {
+      monthlyMinuteCap: 500,
+      minutesUsed: 0,
+      warningAtMinutes: 400,
+      warningReached: false
+    }
   };
   const voiceChannel = data.channels.find((channel) => channel.channelType === "voice");
   const voiceConfig = voiceChannel?.config ?? {};
@@ -314,20 +608,31 @@ function ChannelHub({ snapshot, workspace, locale }: { snapshot: ChannelHubSnaps
       <article className="fsm-panel">
         <div className="section-heading-row">
           <h2>Unified triage</h2>
-          <span className="module-status module-status-active">{data.intakeRequests.length} requests</span>
+          <span className="module-status module-status-active">
+            {data.intakeRequests.length} requests
+          </span>
         </div>
         <div className="fsm-intake-list">
-          {data.intakeRequests.length === 0 ? <p className="empty">No intake requests yet.</p> : null}
+          {data.intakeRequests.length === 0 ? (
+            <p className="empty">No intake requests yet.</p>
+          ) : null}
           {data.intakeRequests.map((request) => (
             <article key={request.id} className="fsm-intake-card">
               <header>
                 <span className="tex-status tex-status-open">{request.channelType}</span>
-                <strong>{request.contactName || request.contactPhone || request.contactEmail || "Unknown contact"}</strong>
+                <strong>
+                  {request.contactName ||
+                    request.contactPhone ||
+                    request.contactEmail ||
+                    "Unknown contact"}
+                </strong>
               </header>
               <p>{request.aiSummary || "No summary yet."}</p>
               <footer>
                 <span>{request.status}</span>
-                <time dateTime={request.createdAt}>{new Intl.DateTimeFormat(locale).format(new Date(request.createdAt))}</time>
+                <time dateTime={request.createdAt}>
+                  {new Intl.DateTimeFormat(locale).format(new Date(request.createdAt))}
+                </time>
               </footer>
             </article>
           ))}
@@ -339,13 +644,22 @@ function ChannelHub({ snapshot, workspace, locale }: { snapshot: ChannelHubSnaps
         <div className="fsm-channel-summary">
           <div>
             <strong>{voiceChannel ? voiceChannel.status : "Not requested"}</strong>
-            <span>{voiceChannel ? `${voiceChannel.provider} using ${voiceSetupLabel(voiceConfig["setupPath"])}` : "Growth add-on or Enterprise feature"}</span>
+            <span>
+              {voiceChannel
+                ? `${voiceChannel.provider} using ${voiceSetupLabel(voiceConfig["setupPath"])}`
+                : "Growth add-on or Enterprise feature"}
+            </span>
           </div>
           <div>
             <strong>{data.voiceUsage.minutesUsed} minutes used</strong>
-            <span>Monthly cap {data.voiceUsage.monthlyMinuteCap}. Warning at {data.voiceUsage.warningAtMinutes}.</span>
+            <span>
+              Monthly cap {data.voiceUsage.monthlyMinuteCap}. Warning at{" "}
+              {data.voiceUsage.warningAtMinutes}.
+            </span>
           </div>
-          {data.voiceUsage.warningReached ? <p className="empty">Voice usage is above the warning level.</p> : null}
+          {data.voiceUsage.warningReached ? (
+            <p className="empty">Voice usage is above the warning level.</p>
+          ) : null}
         </div>
         <form action={requestVoiceChannelSetupAction} className="fsm-channel-form">
           <input type="hidden" name="locale" value={locale} />
@@ -353,7 +667,10 @@ function ChannelHub({ snapshot, workspace, locale }: { snapshot: ChannelHubSnaps
           <input type="hidden" name="segment" value={workspace.segment} />
           <label>
             Setup path
-            <select name="voiceSetupPath" defaultValue={readString(voiceConfig["setupPath"], "forward_existing_number")}>
+            <select
+              name="voiceSetupPath"
+              defaultValue={readString(voiceConfig["setupPath"], "forward_existing_number")}
+            >
               <option value="forward_existing_number">Forward existing number</option>
               <option value="licensed_sip">Licensed SIP partner</option>
               <option value="missed_call_deflection">Missed-call deflection</option>
@@ -361,12 +678,21 @@ function ChannelHub({ snapshot, workspace, locale }: { snapshot: ChannelHubSnaps
           </label>
           <label>
             Monthly minute cap
-            <input name="monthlyMinuteCap" type="number" min="50" max="100000" defaultValue={data.voiceUsage.monthlyMinuteCap} />
+            <input
+              name="monthlyMinuteCap"
+              type="number"
+              min="50"
+              max="100000"
+              defaultValue={data.voiceUsage.monthlyMinuteCap}
+            />
           </label>
           <p className="empty">
-            UAE telecom regulation restricts unlicensed VoIP origination. Use customer-side call forwarding or a licensed local telephony partner.
+            UAE telecom regulation restricts unlicensed VoIP origination. Use customer-side call
+            forwarding or a licensed local telephony partner.
           </p>
-          <button type="submit" className="tex-primary-button">Request voice setup</button>
+          <button type="submit" className="tex-primary-button">
+            Request voice setup
+          </button>
         </form>
 
         <h2>Create intake request</h2>
@@ -397,7 +723,9 @@ function ChannelHub({ snapshot, workspace, locale }: { snapshot: ChannelHubSnaps
             Summary
             <textarea name="summary" rows={4} required placeholder="Request summary" />
           </label>
-          <button type="submit" className="tex-primary-button">Create request</button>
+          <button type="submit" className="tex-primary-button">
+            Create request
+          </button>
         </form>
 
         <div className="fsm-channel-summary">
@@ -406,7 +734,9 @@ function ChannelHub({ snapshot, workspace, locale }: { snapshot: ChannelHubSnaps
           {data.channels.map((channel) => (
             <div key={channel.id}>
               <strong>{channel.displayName}</strong>
-              <span>{channel.channelType} via {channel.provider}</span>
+              <span>
+                {channel.channelType} via {channel.provider}
+              </span>
             </div>
           ))}
         </div>
@@ -417,7 +747,9 @@ function ChannelHub({ snapshot, workspace, locale }: { snapshot: ChannelHubSnaps
           {data.callLogs.map((call) => (
             <div key={call.id}>
               <strong>{call.outcome}</strong>
-              <span>{call.fromNumber ?? "Unknown"} to {call.toNumber ?? "Unknown"}</span>
+              <span>
+                {call.fromNumber ?? "Unknown"} to {call.toNumber ?? "Unknown"}
+              </span>
             </div>
           ))}
         </div>
@@ -433,7 +765,9 @@ function FsmDashboard({ workspace, locale }: { workspace: FsmWorkspace; locale: 
         <section className="fsm-progress-band" aria-label="Getting started">
           <div>
             <span>Getting started</span>
-            <strong>Finish onboarding to lock the default flow for {workspace.segmentLabel}.</strong>
+            <strong>
+              Finish onboarding to lock the default flow for {workspace.segmentLabel}.
+            </strong>
           </div>
           <a href={`/${locale}/fsm?section=onboarding`}>Open onboarding</a>
         </section>
@@ -490,13 +824,20 @@ function FsmDashboard({ workspace, locale }: { workspace: FsmWorkspace; locale: 
 
 function FsmOnboarding({ workspace, locale }: { workspace: FsmWorkspace; locale: Locale }) {
   return (
-    <form action={saveFsmOnboardingAction} className="fsm-onboarding" aria-label="FSM onboarding wizard">
+    <form
+      action={saveFsmOnboardingAction}
+      className="fsm-onboarding"
+      aria-label="FSM onboarding wizard"
+    >
       <input type="hidden" name="locale" value={locale} />
 
       <section className="fsm-onboarding-step">
         <span>Step 1</span>
         <h2>Company basics</h2>
-        <p>{workspace.tenantName} is ready for FSM setup. Logo, country, currency, and VAT remain in tenant settings.</p>
+        <p>
+          {workspace.tenantName} is ready for FSM setup. Logo, country, currency, and VAT remain in
+          tenant settings.
+        </p>
       </section>
 
       <section className="fsm-onboarding-step">
@@ -505,7 +846,10 @@ function FsmOnboarding({ workspace, locale }: { workspace: FsmWorkspace; locale:
         <div className="fsm-form-grid">
           <label>
             Who do you serve?
-            <select name="serve" defaultValue={readString(workspace.onboardingAnswers["serve"], "contracts")}>
+            <select
+              name="serve"
+              defaultValue={readString(workspace.onboardingAnswers["serve"], "contracts")}
+            >
               <option value="homeowners">Homeowners and walk-in customers</option>
               <option value="contracts">Businesses under maintenance contracts</option>
               <option value="buildings">Buildings and residents we manage</option>
@@ -514,7 +858,10 @@ function FsmOnboarding({ workspace, locale }: { workspace: FsmWorkspace; locale:
           </label>
           <label>
             How do requests reach you today?
-            <select name="intake" defaultValue={readString(workspace.onboardingAnswers["intake"], "shared_inbox")}>
+            <select
+              name="intake"
+              defaultValue={readString(workspace.onboardingAnswers["intake"], "shared_inbox")}
+            >
               <option value="owner_whatsapp">WhatsApp or phone calls to the owner</option>
               <option value="shared_inbox">A team phone line or shared inbox</option>
               <option value="hotline">A hotline or call center</option>
@@ -523,7 +870,10 @@ function FsmOnboarding({ workspace, locale }: { workspace: FsmWorkspace; locale:
           </label>
           <label>
             How many people work in the field?
-            <select name="fieldSize" defaultValue={readString(workspace.onboardingAnswers["fieldSize"], "six_to_50")}>
+            <select
+              name="fieldSize"
+              defaultValue={readString(workspace.onboardingAnswers["fieldSize"], "six_to_50")}
+            >
               <option value="up_to_5">Just me or up to 5</option>
               <option value="six_to_50">6 to 50</option>
               <option value="more_than_50">More than 50</option>
@@ -548,14 +898,27 @@ function FsmOnboarding({ workspace, locale }: { workspace: FsmWorkspace; locale:
         <div className="fsm-plan-grid">
           {fsmPlanTiers.map((tier) => (
             <label key={tier} className="fsm-plan-option">
-              <input type="radio" name="planTier" value={tier} defaultChecked={workspace.planTier === tier} />
+              <input
+                type="radio"
+                name="planTier"
+                value={tier}
+                defaultChecked={workspace.planTier === tier}
+              />
               <strong>{tier}</strong>
-              <small>{tier === suggestedPlanForSegment(workspace.segment) ? "Suggested for this segment" : "Available"}</small>
+              <small>
+                {tier === suggestedPlanForSegment(workspace.segment)
+                  ? "Suggested for this segment"
+                  : "Available"}
+              </small>
             </label>
           ))}
         </div>
         <label className="tex-checkbox-row">
-          <input type="checkbox" name="growthTrial" defaultChecked={workspace.planTier === "entry"} />
+          <input
+            type="checkbox"
+            name="growthTrial"
+            defaultChecked={workspace.planTier === "entry"}
+          />
           Add 14-day Growth trial for Entry signup
         </label>
       </section>
@@ -566,11 +929,22 @@ function FsmOnboarding({ workspace, locale }: { workspace: FsmWorkspace; locale:
         <div className="fsm-form-grid">
           <label>
             Jobs per month today
-            <input name="jobsPerMonthToday" type="number" min="0" defaultValue={readString(workspace.baselineMetrics["jobsPerMonthToday"], "")} />
+            <input
+              name="jobsPerMonthToday"
+              type="number"
+              min="0"
+              defaultValue={readString(workspace.baselineMetrics["jobsPerMonthToday"], "")}
+            />
           </label>
           <label>
             Average response time today (hours)
-            <input name="averageResponseHoursToday" type="number" min="0" step="0.5" defaultValue={readString(workspace.baselineMetrics["averageResponseHoursToday"], "")} />
+            <input
+              name="averageResponseHoursToday"
+              type="number"
+              min="0"
+              step="0.5"
+              defaultValue={readString(workspace.baselineMetrics["averageResponseHoursToday"], "")}
+            />
           </label>
         </div>
         <p>Industry defaults and the segment flow overlay are applied when this form is saved.</p>
@@ -596,7 +970,9 @@ function FsmOnboarding({ workspace, locale }: { workspace: FsmWorkspace; locale:
             <small>Create a provisioning task later.</small>
           </label>
         </div>
-        <button type="submit" className="tex-primary-button">Save FSM onboarding</button>
+        <button type="submit" className="tex-primary-button">
+          Save FSM onboarding
+        </button>
       </section>
     </form>
   );
@@ -618,7 +994,11 @@ function sectionTitle(section: FsmSection, workspace: FsmWorkspace, locale: Loca
   return sectionContent(section, workspace, locale).title;
 }
 
-function sectionContent(section: FsmSection, workspace: FsmWorkspace, locale: Locale): FsmSectionContent {
+function sectionContent(
+  section: FsmSection,
+  workspace: FsmWorkspace,
+  locale: Locale
+): FsmSectionContent {
   const jobs = term(workspace.segment, locale, "jobs");
   const customers = term(workspace.segment, locale, "customers");
   const assets = term(workspace.segment, locale, "assets");
@@ -631,7 +1011,13 @@ function sectionContent(section: FsmSection, workspace: FsmWorkspace, locale: Lo
       primaryTitle: "Onboarding",
       primaryEmpty: "Complete setup to lock the workspace defaults.",
       secondaryTitle: "Setup steps",
-      secondaryItems: ["Company basics", "Segment detection", "Plan selection", "Workspace seeding", "Channel activation"]
+      secondaryItems: [
+        "Company basics",
+        "Segment detection",
+        "Plan selection",
+        "Workspace seeding",
+        "Channel activation"
+      ]
     },
     channels: {
       title: "Channel Hub",
@@ -645,7 +1031,12 @@ function sectionContent(section: FsmSection, workspace: FsmWorkspace, locale: Lo
       primaryTitle: "ROI dashboard",
       primaryEmpty: "ROI metrics will appear after operational activity.",
       secondaryTitle: "Report outputs",
-      secondaryItems: ["Monthly value email", "Channel capture", "Client report pack", "Baseline deltas"]
+      secondaryItems: [
+        "Monthly value email",
+        "Channel capture",
+        "Client report pack",
+        "Baseline deltas"
+      ]
     },
     jobs: {
       title: jobs,
@@ -659,35 +1050,63 @@ function sectionContent(section: FsmSection, workspace: FsmWorkspace, locale: Lo
       primaryTitle: "Schedule board",
       primaryEmpty: "No scheduled work is due.",
       secondaryTitle: "Dispatch checks",
-      secondaryItems: ["Confirm access", "Match skill and zone", "Assign field owner", "Track completion"]
+      secondaryItems: [
+        "Confirm access",
+        "Match skill and zone",
+        "Assign field owner",
+        "Track completion"
+      ]
     },
     dispatch: {
       title: "Scheduling and Dispatch",
       primaryTitle: "Dispatch board",
       primaryEmpty: "No dispatch items are waiting.",
       secondaryTitle: "Dispatch checks",
-      secondaryItems: ["Prioritize SLA risk", "Match skill and zone", "Confirm availability", "Notify the client"]
+      secondaryItems: [
+        "Prioritize SLA risk",
+        "Match skill and zone",
+        "Confirm availability",
+        "Notify the client"
+      ]
     },
     pm: {
-      title: workspace.segment === "FM" || workspace.segment === "COMMUNITY" ? "PPM Planner" : "PM Calendar",
+      title:
+        workspace.segment === "FM" || workspace.segment === "COMMUNITY"
+          ? "PPM Planner"
+          : "PM Calendar",
       primaryTitle: "Planned maintenance",
       primaryEmpty: "No planned maintenance is due.",
       secondaryTitle: "Planning rhythm",
-      secondaryItems: ["Review contracts", "Generate visits", "Balance routes", "Confirm completion"]
+      secondaryItems: [
+        "Review contracts",
+        "Generate visits",
+        "Balance routes",
+        "Confirm completion"
+      ]
     },
     sla: {
       title: "SLA Board",
       primaryTitle: "SLA risk",
       primaryEmpty: "No SLA breaches are active.",
       secondaryTitle: "SLA controls",
-      secondaryItems: ["Classify urgency", "Start clock at intake", "Pause with reason", "Report exceptions"]
+      secondaryItems: [
+        "Classify urgency",
+        "Start clock at intake",
+        "Pause with reason",
+        "Report exceptions"
+      ]
     },
     contracts: {
       title: workspace.segment === "OEM" ? "Warranty and Contracts" : "Contracts",
       primaryTitle: "Active contracts",
       primaryEmpty: "No contract actions are due.",
       secondaryTitle: "Contract flow",
-      secondaryItems: ["Check coverage", "Confirm billing route", "Attach service scope", "Prepare renewal"]
+      secondaryItems: [
+        "Check coverage",
+        "Confirm billing route",
+        "Attach service scope",
+        "Prepare renewal"
+      ]
     },
     customers: {
       title: customers,
@@ -750,17 +1169,24 @@ function sectionContent(section: FsmSection, workspace: FsmWorkspace, locale: Lo
       primaryTitle: "Workspace settings",
       primaryEmpty: "No settings need action.",
       secondaryTitle: "Current defaults",
-      secondaryItems: [`Segment ${workspace.segment}`, `Plan ${workspace.planTier}`, `Terminology ${workspace.terminologyPack}`, `Menu items ${workspace.navItems.length}`]
+      secondaryItems: [
+        `Segment ${workspace.segment}`,
+        `Plan ${workspace.planTier}`,
+        `Terminology ${workspace.terminologyPack}`,
+        `Menu items ${workspace.navItems.length}`
+      ]
     }
   };
 
-  return defaults[section] ?? {
-    title: "Workspace",
-    primaryTitle: "Workspace queue",
-    primaryEmpty: "No items need action.",
-    secondaryTitle: "Operating flow",
-    secondaryItems: workspace.flowSteps
-  };
+  return (
+    defaults[section] ?? {
+      title: "Workspace",
+      primaryTitle: "Workspace queue",
+      primaryEmpty: "No items need action.",
+      secondaryTitle: "Operating flow",
+      secondaryItems: workspace.flowSteps
+    }
+  );
 }
 
 function readSection(value: string | undefined): FsmSection {
@@ -787,6 +1213,20 @@ function formatNumber(value: number, locale: Locale) {
   return new Intl.NumberFormat(locale).format(value);
 }
 
+function formatDateTime(value: string, locale: Locale) {
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(new Date(value));
+}
+
+function formatLabel(value: string) {
+  return value
+    .split("_")
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
 function formatHours(value: number, locale: Locale) {
   return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value)}h`;
 }
@@ -804,7 +1244,9 @@ function formatPercent(value: number | null, locale: Locale) {
     return "Pending";
   }
 
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0, style: "percent" }).format(value);
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0, style: "percent" }).format(
+    value
+  );
 }
 
 function responseDetail(deltaMinutes: number | null, locale: Locale) {
