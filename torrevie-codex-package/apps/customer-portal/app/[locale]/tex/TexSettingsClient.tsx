@@ -137,8 +137,8 @@ export function TexSettingsClient({
         <div className="tex-form-panel">
           <h2 id="tex-settings-unavailable-title">Settings could not load</h2>
           <p>
-            TEX could not load the settings workspace. Refresh the page, and contact support if this
-            continues.
+            TEX could not load the settings workspace. Please try again shortly, and contact support
+            if this continues.
           </p>
         </div>
       </section>
@@ -358,9 +358,6 @@ export function TexSettingsClient({
               : "Review tenant categories, policy limits, and department budgets."}
           </p>
         </div>
-        <button type="button" className="tex-secondary-button" onClick={() => refresh()}>
-          Refresh
-        </button>
       </div>
       {notice ? <p className="tex-notice">{notice}</p> : null}
       {error ? <p className="tex-error">{error}</p> : null}

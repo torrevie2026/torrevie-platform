@@ -102,9 +102,6 @@ export function TexFinanceClient({ initialReview }: TexFinanceClientProps) {
       <section className="tex-form-panel" aria-labelledby="tex-finance-controls-title">
         <div className="section-heading-row">
           <h3 id="tex-finance-controls-title">Finance period</h3>
-          <button type="button" className="tex-secondary-button" disabled={isBusy} onClick={() => refresh()}>
-            Refresh
-          </button>
         </div>
         <div className="tex-form-grid">
           <label>

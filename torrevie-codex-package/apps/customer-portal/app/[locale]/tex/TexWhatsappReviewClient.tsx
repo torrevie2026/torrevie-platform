@@ -146,17 +146,9 @@ export function TexWhatsappReviewClient({
           <h2>WhatsApp review</h2>
           <p>Assign unknown senders to employees or clear submissions that do not belong in TEX.</p>
         </div>
-        <button
-          type="button"
-          className="tex-secondary-button"
-          onClick={() => void refreshQueue()}
-          disabled={busyId !== null || isRefreshing}
-        >
-          {isRefreshing ? "Refreshing..." : "Refresh"}
-        </button>
       </div>
       <p className="tex-refresh-meta" aria-live="polite">
-        Auto-refresh every 15 seconds
+        {isRefreshing ? "Syncing WhatsApp submissions..." : "Synced automatically every 15 seconds"}
         {lastUpdatedAt ? ` - last updated ${formatTime(lastUpdatedAt)}` : ""}
       </p>
 

@@ -67,7 +67,7 @@ const providerGuides: ProviderGuide[] = [
     ],
     testSteps: [
       "Send a test WhatsApp text or receipt image to the connected number.",
-      "Refresh this page and check the active provider details.",
+      "Check the active provider details after the provider confirms delivery.",
       "Open WhatsApp review to confirm the inbound record arrived."
     ]
   },
@@ -204,19 +204,6 @@ export function TexIntegrationsClient({
     return null;
   }
 
-  async function refresh() {
-    setBusy(true);
-    setError(null);
-
-    try {
-      setWorkspace(await texFetch<TexIntegrationWorkspace>("/integrations"));
-    } catch (requestError) {
-      setError(errorMessage(requestError));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const quickConnect = workspace.quickConnect;
   const visibleProviderGuides = isStarterPlan
     ? providerGuides.filter((guide) => guide.key === "quickconnect")
@@ -244,9 +231,6 @@ export function TexIntegrationsClient({
           </p>
         </div>
         <div className="tex-panel-actions">
-          <button type="button" disabled={busy} onClick={refresh}>
-            Refresh
-          </button>
           {!isStarterPlan ? (
             <a className="tex-secondary-link" href={adminIntegrationsHref}>
               Configure managed providers

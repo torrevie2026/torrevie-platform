@@ -691,9 +691,6 @@ export function TexTripsClient({ teams, employees, initialTrips }: TexTripsClien
             <button type="button" className="tex-primary-button" onClick={openNewTripDrawer}>
               New trip
             </button>
-            <button type="button" className="tex-secondary-button" onClick={refreshTrips}>
-              Refresh
-            </button>
           </div>
         </div>
         {tripNotice ? <p className="tex-notice">{tripNotice}</p> : null}
