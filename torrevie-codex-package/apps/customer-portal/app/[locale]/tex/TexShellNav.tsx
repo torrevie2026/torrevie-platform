@@ -8,7 +8,6 @@ import {
   Menu,
   MapPin,
   MessageCircle,
-  Plug,
   Receipt,
   Settings,
   X,
@@ -41,7 +40,6 @@ const texNavItems = [
     label: "WhatsApp receipts",
     minimumPlan: "trial"
   },
-  { href: "/integrations", icon: Plug, label: "WhatsApp setup", minimumPlan: "trial" },
   { href: "/settings", icon: Settings, label: "Settings", minimumPlan: "trial" }
 ] as const;
 
