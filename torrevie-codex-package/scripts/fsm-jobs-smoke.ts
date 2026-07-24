@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import type { QueryResult, QueryValue, TenantQueryClient } from "@torrevie/tenant-context";
+import type { QueryResult, TenantQueryClient } from "@torrevie/tenant-context";
 import {
   buildFsmJobInput,
   buildFsmJobStatusInput,
@@ -14,7 +14,7 @@ const jobId = "30000000-0000-4000-8000-00000002f001";
 class RecordingClient implements TenantQueryClient {
   readonly statements: string[] = [];
 
-  async query<Row>(sql: string, _values: readonly QueryValue[] = []): Promise<QueryResult<Row>> {
+  async query<Row>(sql: string): Promise<QueryResult<Row>> {
     this.statements.push(sql);
 
     if (sql.includes("from public.get_org_entitlements")) {
