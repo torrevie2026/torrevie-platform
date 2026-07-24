@@ -3748,7 +3748,7 @@ form.member-row {
   display: flex;
   inset: 0;
   justify-content: center;
-  padding: 18px;
+  padding: 24px;
   position: fixed;
   z-index: 95;
 }
@@ -3759,11 +3759,12 @@ form.member-row {
   border-radius: 8px;
   box-shadow: 0 26px 70px color-mix(in srgb, var(--color-text-primary) 24%, transparent);
   display: grid;
-  gap: 14px;
-  inline-size: min(820px, 100%);
-  max-block-size: min(84vh, 680px);
+  gap: 16px;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  inline-size: min(1180px, calc(100dvw - 48px));
+  max-block-size: min(92dvh, 860px);
   overflow: auto;
-  padding: 18px;
+  padding: 20px;
 }
 
 .tex-tutorial-header,
@@ -3837,7 +3838,7 @@ form.member-row {
 .tex-tutorial-stage {
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(230px, 0.85fr) minmax(0, 1.15fr);
+  grid-template-columns: minmax(260px, 0.58fr) minmax(0, 1.42fr);
   min-block-size: 0;
 }
 
@@ -3885,6 +3886,7 @@ form.member-row {
 .tex-tour-frame {
   display: grid;
   gap: 8px;
+  grid-template-rows: minmax(0, 1fr) auto;
   margin: 0;
   min-inline-size: 0;
 }
@@ -3900,14 +3902,14 @@ form.member-row {
 }
 
 .tex-tour-media {
-  aspect-ratio: 16 / 9;
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
   border-radius: 8px;
+  block-size: min(62dvh, 620px);
   display: block;
   inline-size: 100%;
-  max-block-size: 360px;
-  object-fit: cover;
+  max-block-size: 100%;
+  object-fit: contain;
 }
 
 .tex-tour-window-bar {
@@ -7114,15 +7116,16 @@ form.member-row {
   }
 
   .tex-tutorial-backdrop {
-    align-items: center;
-    padding: 12px;
+    align-items: stretch;
+    padding: 0;
   }
 
   .tex-tutorial-dialog {
-    border-radius: 8px;
+    border: 0;
+    border-radius: 0;
     inline-size: 100%;
-    max-block-size: calc(100dvh - 24px);
-    padding: 12px;
+    max-block-size: 100dvh;
+    padding: 14px;
   }
 
   .tex-tutorial-header,
@@ -7145,15 +7148,30 @@ form.member-row {
   }
 
   .tex-tutorial-stage {
+    gap: 12px;
     grid-template-columns: 1fr;
   }
 
+  .tex-tutorial-copy {
+    gap: 8px;
+    padding: 12px;
+  }
+
   .tex-tutorial-copy h3 {
-    font-size: 22px;
+    font-size: 20px;
+  }
+
+  .tex-tutorial-copy p,
+  .tex-tutorial-copy strong {
+    font-size: 13px;
   }
 
   .tex-tutorial-snapshot {
     min-block-size: 0;
+  }
+
+  .tex-tour-media {
+    block-size: min(42dvh, 390px);
   }
 
   .tex-tour-screen {
