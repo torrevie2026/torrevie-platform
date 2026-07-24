@@ -26,11 +26,11 @@ export async function getTexFirstRunTutorialState(
 
       return {
         dismissedAt,
-        shouldShow: Boolean(result.rows[0]) && !dismissedAt
+        shouldShow: !dismissedAt
       };
     } catch (error) {
       if (isMissingTutorialColumn(error)) {
-        return { dismissedAt: null, shouldShow: false };
+        return { dismissedAt: null, shouldShow: true };
       }
 
       throw error;

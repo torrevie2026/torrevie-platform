@@ -28,7 +28,7 @@
     "test:customer-portal-shell": "tsx scripts/customer-portal-localization-smoke.ts",
     "test:customer-admin": "tsx apps/customer-portal/lib/customer-administration.test.ts",
     "test:crm": "tsx apps/customer-portal/lib/crm.test.ts && tsx scripts/crm-vertical-smoke.ts",
-    "test:tex": "tsx apps/customer-portal/lib/tex-ai.test.ts && tsx apps/customer-portal/lib/tex.test.ts && tsx apps/customer-portal/lib/tex-api.test.ts && tsx apps/customer-portal/lib/tex-billing.test.ts && tsx apps/customer-portal/lib/tex-cron.test.ts && tsx apps/customer-portal/lib/tex-webhooks.test.ts",
+    "test:tex": "tsx apps/customer-portal/lib/tex-ai.test.ts && tsx apps/customer-portal/lib/tex.test.ts && tsx apps/customer-portal/lib/tex-api.test.ts && tsx apps/customer-portal/lib/tex/tutorial-service.test.ts && tsx apps/customer-portal/lib/tex-billing.test.ts && tsx apps/customer-portal/lib/tex-cron.test.ts && tsx apps/customer-portal/lib/tex-webhooks.test.ts",
     "test:tex:browser": "node scripts/tex-browser-smoke.mjs",
     "test:fsm-phase0": "node scripts/fsm-phase0-smoke.mjs",
     "test:isolation": "node scripts/run-sql-tests.mjs",
