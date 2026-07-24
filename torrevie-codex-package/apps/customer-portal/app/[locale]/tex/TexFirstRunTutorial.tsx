@@ -12,6 +12,8 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { texTutorialMediaAssets } from "./tex-tutorial-media";
+import type { TexTutorialMediaAsset, TexTutorialScene } from "./tex-tutorial-media";
 
 type TexFirstRunTutorialProps = {
   shouldShow: boolean;
@@ -25,7 +27,7 @@ type TutorialStep = {
   caption: string;
   focus: string;
   icon: typeof LayoutDashboard;
-  scene: "dashboard" | "whatsapp" | "review" | "approval" | "people" | "reports";
+  scene: TexTutorialScene;
 };
 
 const tutorialSteps: TutorialStep[] = [
@@ -261,37 +263,75 @@ export function TexFirstRunTutorial({ shouldShow, tenantName }: TexFirstRunTutor
 }
 
 function TutorialSnapshot({ step, tenantName }: { step: TutorialStep; tenantName: string }) {
+  const media = texTutorialMediaAssets[step.scene];
+
   return (
     <figure className={`tex-tour-frame tex-tour-frame-${step.scene}`} aria-label={step.caption}>
-      <div className="tex-tour-screen">
-        <div className="tex-tour-window-bar">
-          <span />
-          <span />
-          <span />
-          <b>app.torrevie.com/en/tex</b>
-        </div>
-        <div className="tex-tour-app">
-          <aside className="tex-tour-rail">
-            <strong>{tenantName}</strong>
-            <span>Dashboard</span>
-            <span>Expenses</span>
-            <span>WhatsApp</span>
-            <span>People</span>
-            <span>Reports</span>
-          </aside>
-          <section className="tex-tour-content">
-            {step.scene === "dashboard" ? <DashboardSnapshot /> : null}
-            {step.scene === "whatsapp" ? <WhatsappSnapshot /> : null}
-            {step.scene === "review" ? <ReviewSnapshot /> : null}
-            {step.scene === "approval" ? <ApprovalSnapshot /> : null}
-            {step.scene === "people" ? <PeopleSnapshot /> : null}
-            {step.scene === "reports" ? <ReportsSnapshot /> : null}
-          </section>
-        </div>
-        <span className="tex-tour-highlight" />
-      </div>
+      {media?.videoSrc || media?.imageSrc ? (
+        <TutorialMedia media={media} />
+      ) : (
+        <GeneratedTutorialFrame step={step} tenantName={tenantName} />
+      )}
       <figcaption>{step.caption}</figcaption>
     </figure>
+  );
+}
+
+function TutorialMedia({ media }: { media: TexTutorialMediaAsset }) {
+  if (media.videoSrc) {
+    return (
+      <video
+        aria-label={media.alt}
+        autoPlay
+        className="tex-tour-media"
+        controls
+        loop
+        muted
+        playsInline
+        poster={media.posterSrc}
+        preload="metadata"
+      >
+        <source src={media.videoSrc} type={media.videoSrc.endsWith(".mp4") ? "video/mp4" : "video/webm"} />
+      </video>
+    );
+  }
+
+  if (media.imageSrc) {
+    return <img alt={media.alt} className="tex-tour-media" loading="lazy" src={media.imageSrc} />;
+  }
+
+  return null;
+}
+
+function GeneratedTutorialFrame({ step, tenantName }: { step: TutorialStep; tenantName: string }) {
+  return (
+    <div className="tex-tour-screen">
+      <div className="tex-tour-window-bar">
+        <span />
+        <span />
+        <span />
+        <b>app.torrevie.com/en/tex</b>
+      </div>
+      <div className="tex-tour-app">
+        <aside className="tex-tour-rail">
+          <strong>{tenantName}</strong>
+          <span>Dashboard</span>
+          <span>Expenses</span>
+          <span>WhatsApp</span>
+          <span>People</span>
+          <span>Reports</span>
+        </aside>
+        <section className="tex-tour-content">
+          {step.scene === "dashboard" ? <DashboardSnapshot /> : null}
+          {step.scene === "whatsapp" ? <WhatsappSnapshot /> : null}
+          {step.scene === "review" ? <ReviewSnapshot /> : null}
+          {step.scene === "approval" ? <ApprovalSnapshot /> : null}
+          {step.scene === "people" ? <PeopleSnapshot /> : null}
+          {step.scene === "reports" ? <ReportsSnapshot /> : null}
+        </section>
+      </div>
+      <span className="tex-tour-highlight" />
+    </div>
   );
 }
 
