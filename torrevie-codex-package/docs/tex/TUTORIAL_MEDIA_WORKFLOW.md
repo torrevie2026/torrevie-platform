@@ -14,24 +14,18 @@ Use one folder for all TEX tutorial media so cache review, replacement, and visu
 
 ## Recommended Files
 
-Use short looping clips when possible, with a WebP poster fallback:
+Use short looping clips when possible, with a WebP poster fallback. For the current first captured asset set, sanitized JPG screenshots are used:
 
 ```text
-dashboard.webm
-dashboard.webp
-whatsapp.webm
-whatsapp.webp
-review.webm
-review.webp
-approval.webm
-approval.webp
-people.webm
-people.webp
-reports.webm
-reports.webp
+dashboard.jpg
+whatsapp.jpg
+review.jpg
+approval.jpg
+people.jpg
+reports.jpg
 ```
 
-MP4 is also supported, but WebM is preferred for smaller browser-delivered files.
+MP4/WebM clips are also supported by the tutorial manifest. WebM is preferred for smaller browser-delivered files when video captures are produced.
 
 ## Capture Rules
 
@@ -48,7 +42,7 @@ MP4 is also supported, but WebM is preferred for smaller browser-delivered files
 - Video: WebM VP9 or MP4 H.264.
 - Poster: WebP or PNG.
 - Max video size: 2 MB per scene.
-- Max poster size: 350 KB per scene.
+- Max poster or screenshot size: 350 KB per scene for WebP, 500 KB per scene for PNG/JPG.
 - Aspect ratio: 16:9.
 - No audio track unless a narrated tutorial is explicitly approved.
 
@@ -65,8 +59,7 @@ Example:
 ```ts
 dashboard: {
   alt: "TEX dashboard showing total spend, pending approvals, and reporting shortcuts",
-  videoSrc: "/tex/tutorial/dashboard.webm",
-  posterSrc: "/tex/tutorial/dashboard.webp"
+  imageSrc: "/tex/tutorial/dashboard.jpg"
 }
 ```
 
