@@ -3744,7 +3744,7 @@ form.member-row {
 
 .tex-tutorial-backdrop {
   align-items: center;
-  background: color-mix(in srgb, var(--color-text-primary) 46%, transparent);
+  background: rgba(12, 20, 38, 0.72);
   display: flex;
   inset: 0;
   justify-content: center;
@@ -3754,14 +3754,14 @@ form.member-row {
 }
 
 .tex-tutorial-dialog {
-  background: var(--color-bg-card);
+  background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   box-shadow: 0 26px 70px color-mix(in srgb, var(--color-text-primary) 24%, transparent);
   display: grid;
-  gap: 16px;
-  inline-size: min(920px, 100%);
-  max-block-size: min(88vh, 760px);
+  gap: 14px;
+  inline-size: min(820px, 100%);
+  max-block-size: min(84vh, 680px);
   overflow: auto;
   padding: 18px;
 }
@@ -3836,8 +3836,9 @@ form.member-row {
 
 .tex-tutorial-stage {
   display: grid;
-  gap: 18px;
-  grid-template-columns: minmax(230px, 0.8fr) minmax(0, 1.4fr);
+  gap: 14px;
+  grid-template-columns: minmax(230px, 0.85fr) minmax(0, 1.15fr);
+  min-block-size: 0;
 }
 
 .tex-tutorial-copy {
@@ -3859,9 +3860,9 @@ form.member-row {
 }
 
 .tex-tutorial-copy h3 {
-  font-size: 26px;
+  font-size: 22px;
   letter-spacing: 0;
-  line-height: 1.12;
+  line-height: 1.16;
   margin: 0;
 }
 
@@ -3877,10 +3878,11 @@ form.member-row {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   display: grid;
-  gap: 14px;
-  min-block-size: 330px;
+  gap: 10px;
+  grid-auto-rows: min-content;
+  min-block-size: 0;
   overflow: hidden;
-  padding: 16px;
+  padding: 12px;
   position: relative;
 }
 
@@ -3889,8 +3891,8 @@ form.member-row {
   border-block-end: 1px solid var(--color-border);
   display: flex;
   gap: 6px;
-  margin: -16px -16px 0;
-  padding: 10px 14px;
+  margin: -12px -12px 2px;
+  padding: 8px 12px;
 }
 
 .tex-tutorial-window-bar span {
@@ -3903,7 +3905,7 @@ form.member-row {
 .tex-tutorial-kpi-row,
 .tex-tutorial-review-grid {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -3918,8 +3920,10 @@ form.member-row {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   color: var(--color-text-primary);
+  font-size: 13px;
   font-weight: 800;
-  padding: 12px;
+  line-height: 1.25;
+  padding: 10px;
 }
 
 .tex-tutorial-chart-line {
@@ -3931,16 +3935,18 @@ form.member-row {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   display: flex;
-  gap: 18px;
-  min-block-size: 160px;
-  padding: 16px;
+  gap: 14px;
+  min-block-size: 132px;
+  overflow: hidden;
+  padding: 14px;
 }
 
 .tex-tutorial-chart-line i {
   background: var(--color-accent);
   border-radius: 999px 999px 0 0;
   display: block;
-  inline-size: 24%;
+  inline-size: 22%;
+  transform-origin: bottom;
 }
 
 .tex-tutorial-chart-line i:first-child {
@@ -3975,7 +3981,7 @@ form.member-row {
   align-content: end;
   display: grid;
   gap: 10px;
-  min-block-size: 210px;
+  min-block-size: 150px;
 }
 
 .tex-tutorial-chat p {
@@ -4047,7 +4053,7 @@ form.member-row {
   align-items: end;
   display: flex;
   gap: 14px;
-  min-block-size: 160px;
+  min-block-size: 132px;
 }
 
 .tex-tutorial-report-bars span {
@@ -4078,8 +4084,8 @@ form.member-row {
   background: conic-gradient(var(--color-accent) 0 74%, #f59e0b 74% 88%, #ef4444 88% 100%);
   border-radius: 999px;
   display: block;
-  inline-size: 118px;
-  min-block-size: 118px;
+  inline-size: 92px;
+  min-block-size: 92px;
   position: relative;
 }
 
@@ -4087,7 +4093,7 @@ form.member-row {
   background: var(--color-bg-card);
   border-radius: inherit;
   content: "";
-  inset: 26px;
+  inset: 22px;
   position: absolute;
 }
 
@@ -6693,16 +6699,15 @@ form.member-row {
   }
 
   .tex-tutorial-backdrop {
-    align-items: flex-end;
+    align-items: center;
     padding: 12px;
-    padding-block-end: max(12px, env(safe-area-inset-bottom));
   }
 
   .tex-tutorial-dialog {
-    border-radius: 8px 8px 0 0;
+    border-radius: 8px;
     inline-size: 100%;
-    max-block-size: min(88vh, 740px);
-    padding: 14px;
+    max-block-size: calc(100dvh - 24px);
+    padding: 12px;
   }
 
   .tex-tutorial-header,
@@ -6733,7 +6738,7 @@ form.member-row {
   }
 
   .tex-tutorial-snapshot {
-    min-block-size: 260px;
+    min-block-size: 0;
   }
 
   .tex-tutorial-kpi-row {
