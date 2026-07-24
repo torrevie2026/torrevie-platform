@@ -772,18 +772,10 @@ export function TexExpensesClient({
             <button type="button" className="tex-primary-button" onClick={openNewExpenseDrawer}>
               New expense
             </button>
-            <button
-              type="button"
-              className="tex-secondary-button"
-              disabled={isRefreshing}
-              onClick={() => void refreshExpenses()}
-            >
-              {isRefreshing ? "Refreshing..." : "Refresh"}
-            </button>
           </div>
         </div>
         <p className="tex-refresh-meta" aria-live="polite">
-          Auto-refresh every 25 seconds
+          {isRefreshing ? "Syncing updates..." : "Synced automatically every 25 seconds"}
           {lastUpdatedAt ? ` - last updated ${formatTime(lastUpdatedAt)}` : ""}
         </p>
         <div className="tex-expense-toolbar">
