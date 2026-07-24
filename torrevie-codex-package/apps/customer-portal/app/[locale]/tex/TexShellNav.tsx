@@ -4,6 +4,7 @@ import {
   BarChart3,
   ClipboardCheck,
   LayoutGrid,
+  LogOut,
   Menu,
   MapPin,
   MessageCircle,
@@ -61,6 +62,7 @@ export function TexShellNav({
 }: TexShellNavProps) {
   const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [navigatingHref, setNavigatingHref] = useState<string | null>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const basePath = `/${locale}/tex`;
@@ -107,6 +109,13 @@ export function TexShellNav({
     }
 
     setNavigatingHref(href);
+  };
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    await fetch("/api/session/signout", { method: "POST" }).catch(() => null);
+    router.replace("/login");
+    router.refresh();
   };
 
   return (
@@ -172,6 +181,15 @@ export function TexShellNav({
             <strong>{email ?? "Customer user"}</strong>
             <small>{roles.join(", ") || "TEX user"}</small>
           </span>
+          <button
+            className="tex-signout-button"
+            disabled={isSigningOut}
+            type="button"
+            onClick={handleSignOut}
+          >
+            <LogOut aria-hidden="true" />
+            <span>{isSigningOut ? "Signing out" : "Sign out"}</span>
+          </button>
         </div>
       </aside>
 
@@ -261,6 +279,15 @@ export function TexShellNav({
                 );
               })}
             </div>
+            <button
+              className="tex-mobile-signout-button"
+              disabled={isSigningOut}
+              type="button"
+              onClick={handleSignOut}
+            >
+              <LogOut aria-hidden="true" />
+              <span>{isSigningOut ? "Signing out" : "Sign out"}</span>
+            </button>
           </section>
         </div>
       ) : null}

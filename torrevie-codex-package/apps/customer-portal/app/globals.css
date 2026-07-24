@@ -389,6 +389,31 @@ a {
   grid-column: 1 / -1;
 }
 
+.tex-signout-button {
+  align-items: center;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-status-error);
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 800;
+  gap: 8px;
+  grid-column: 1 / -1;
+  justify-content: center;
+  min-block-size: 38px;
+}
+
+.tex-signout-button:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
+
+.tex-signout-button svg {
+  block-size: 16px;
+  inline-size: 16px;
+}
+
 .tex-sidebar-user span:last-child {
   display: grid;
   gap: 2px;
@@ -5669,6 +5694,28 @@ form.member-row {
   min-height: 44px;
 }
 
+.login-reset-panel {
+  border-block-start: 1px solid var(--color-border);
+  margin-block-start: 20px;
+  padding-block-start: 16px;
+}
+
+.login-reset-panel summary {
+  color: var(--color-accent);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.login-reset-panel p {
+  color: var(--color-text-muted);
+  line-height: 1.45;
+  margin-block: 10px 14px;
+}
+
+.login-reset-panel button {
+  background: var(--color-accent);
+}
+
 .error {
   background: var(--color-bg-surface);
   border-inline-start: 4px solid var(--color-status-error);
@@ -6753,6 +6800,29 @@ form.member-row {
   .tex-mobile-more-links a[aria-current="page"] {
     background: var(--color-bg-surface);
     border-color: color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  }
+
+  .tex-mobile-signout-button {
+    align-items: center;
+    background: color-mix(in srgb, var(--color-status-error) 8%, var(--color-bg-primary));
+    border: 1px solid color-mix(in srgb, var(--color-status-error) 22%, var(--color-border));
+    border-radius: 6px;
+    color: var(--color-status-error);
+    display: flex;
+    font-weight: 900;
+    gap: 10px;
+    justify-content: center;
+    min-block-size: 46px;
+  }
+
+  .tex-mobile-signout-button:disabled {
+    cursor: progress;
+    opacity: 0.65;
+  }
+
+  .tex-mobile-signout-button svg {
+    block-size: 18px;
+    inline-size: 18px;
   }
 
   .tex-drawer-backdrop {
